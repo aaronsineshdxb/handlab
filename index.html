@@ -19,23 +19,23 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-family:'Space Grotesk',system-ui,sans-serif}
 #scene{position:fixed;inset:0;display:block}
-.hud-top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;pointer-events:none;z-index:10}
+.hud-top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;pointer-events:none;z-index:10;gap:18px}
 .brand h1{font-size:20px;letter-spacing:.14em;font-weight:700}
 .brand h1 span{color:var(--accent)}
 .brand p{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:.04em}
-.status-cards{display:flex;gap:10px;pointer-events:auto}
+.status-cards{display:flex;gap:10px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end}
 .stat{background:rgba(16,18,24,.82);border:1px solid var(--border);border-radius:12px;padding:8px 12px;min-width:108px;backdrop-filter:blur(10px)}
 .stat label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
 .stat b{display:block;font-family:'IBM Plex Mono',monospace;font-size:14px;margin-top:2px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .dot.on{background:var(--good);box-shadow:0 0 8px var(--good)}
 .dot.off{background:var(--bad)}
-.toolbar{position:fixed;left:20px;top:50%;transform:translateY(-50%);z-index:10;display:flex;flex-direction:column;gap:8px;background:rgba(16,18,24,.85);border:1px solid var(--border);border-radius:16px;padding:12px;backdrop-filter:blur(12px);width:172px}
+.toolbar{position:fixed;left:20px;top:92px;bottom:92px;z-index:10;display:flex;flex-direction:column;gap:8px;background:rgba(16,18,24,.88);border:1px solid var(--border);border-radius:16px;padding:12px;backdrop-filter:blur(12px);width:172px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .toolbar h2{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.12em;margin:2px 0 4px}
 .shape-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.shape-btn{background:var(--surface2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:10px 4px;font-size:12px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;font-family:inherit}
+.shape-btn{background:var(--surface2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:10px 4px;font-size:12px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s,background .15s;font-family:inherit;min-height:56px}
 .shape-btn:hover{transform:translateY(-2px);border-color:var(--accent)}
-.shape-btn.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 6px 20px rgba(77,163,255,.25)}
+.shape-btn.active{border-color:var(--accent);background:rgba(77,163,255,.16);box-shadow:0 0 0 1px var(--accent),0 6px 20px rgba(77,163,255,.25)}
 .shape-btn .g{font-size:20px;display:block}
 .swatches{display:flex;gap:8px;margin-top:4px}
 .sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer}
@@ -43,25 +43,43 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
 .tool-row{display:flex;gap:8px;margin-top:8px}
 .mini{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--fg);border-radius:10px;padding:8px;font-size:11px;cursor:pointer;font-family:'IBM Plex Mono',monospace}
 .mini:hover{border-color:var(--warn)}
-.hint{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:10;width:228px;background:rgba(16,18,24,.85);border:1px solid var(--border);border-radius:16px;padding:14px;backdrop-filter:blur(12px);font-size:12px;line-height:1.65}
+.hint{position:fixed;right:20px;top:92px;bottom:300px;z-index:10;width:228px;background:rgba(16,18,24,.88);border:1px solid var(--border);border-radius:16px;padding:14px;backdrop-filter:blur(12px);font-size:12px;line-height:1.65;overflow-y:auto;transition:opacity .2s,transform .2s,visibility .2s}
+.hint.is-collapsed{opacity:0;transform:translateX(18px);visibility:hidden;pointer-events:none}
+.hint .hint-close{float:right;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:15px;line-height:1}
+.hint .hint-close:hover{color:var(--fg);border-color:var(--accent)}
 .hint h2{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
 .hint kbd{font-family:'IBM Plex Mono',monospace;background:#000;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:11px}
-.video-dock{position:fixed;right:20px;bottom:20px;z-index:10;width:248px;background:rgba(16,18,24,.9);border:1px solid var(--border);border-radius:16px;overflow:hidden;backdrop-filter:blur(12px)}
+.video-dock{position:fixed;right:20px;bottom:92px;z-index:10;width:248px;background:rgba(16,18,24,.9);border:1px solid var(--border);border-radius:16px;overflow:hidden;backdrop-filter:blur(12px);transition:opacity .2s,transform .2s,visibility .2s}
+.video-dock.is-collapsed{opacity:0;transform:translateY(12px);visibility:hidden;pointer-events:none}
 .video-dock .bar{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em}
 #cam{width:100%;height:140px;object-fit:cover;transform:scaleX(-1);background:#000;display:block}
 #skel{position:absolute;left:0;top:29px;width:100%;height:140px;pointer-events:none}
-.controls{position:fixed;left:20px;bottom:20px;z-index:10;display:flex;gap:8px;align-items:center;background:rgba(16,18,24,.85);border:1px solid var(--border);padding:10px 12px;border-radius:14px;backdrop-filter:blur(12px)}
-.btn{background:var(--accent);border:none;color:#04122b;font-weight:700;border-radius:10px;padding:10px 16px;cursor:pointer;font-family:inherit;font-size:13px}
+.controls{position:fixed;left:212px;right:20px;bottom:20px;z-index:10;display:flex;gap:8px;align-items:center;background:rgba(16,18,24,.9);border:1px solid var(--border);padding:10px 12px;border-radius:14px;backdrop-filter:blur(12px);overflow-x:auto}
+.controls .btn{flex:1 0 auto;white-space:nowrap}
+.btn{background:var(--accent);border:none;color:#04122b;font-weight:700;border-radius:10px;padding:10px 16px;cursor:pointer;font-family:inherit;font-size:13px;min-height:40px}
 .btn.ghost{background:var(--surface2);color:var(--fg);border:1px solid var(--border);font-weight:500}
-.btn:hover{filter:brightness(1.1)}
+.btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
 .btn:active{transform:scale(.97)}
-.btn:focus-visible,.shape-btn:focus-visible,.mini:focus-visible,.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn:focus-visible,.shape-btn:focus-visible,.mini:focus-visible,.sw:focus-visible,.hint-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#0e1420;border:1px solid var(--accent);color:var(--fg);padding:10px 18px;border-radius:999px;font-family:'IBM Plex Mono',monospace;font-size:12px;z-index:20;opacity:0;transition:opacity .25s;pointer-events:none}
 #cursor2d{position:fixed;width:22px;height:22px;border:2px solid var(--accent);border-radius:50%;pointer-events:none;z-index:30;transform:translate(-50%,-50%);box-shadow:0 0 14px rgba(77,163,255,.7);display:none}
-#depthbar{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:10;width:280px;background:rgba(16,18,24,.85);border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);backdrop-filter:blur(12px)}
+#depthbar{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:10;width:280px;background:rgba(16,18,24,.85);border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);backdrop-filter:blur(12px);pointer-events:none}
 #depthfill{height:6px;background:#222;border-radius:99px;overflow:hidden;margin-top:6px}
 #depthfill i{display:block;height:100%;width:50%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:99px}
-@media(max-width:900px){.hint{display:none}.toolbar{width:150px}.video-dock{width:180px}}
+@media(max-width:900px){.hint{width:204px;top:auto;bottom:300px;max-height:38vh;font-size:11px}.toolbar{width:150px}.video-dock{width:180px}.status-cards .stat:nth-child(2){display:none}.controls{left:182px}}
+@media(max-width:700px){
+  .hud-top{padding:12px;align-items:flex-start}
+  .brand p{display:none}.brand h1{font-size:17px}
+  .status-cards{gap:6px;max-width:250px}.stat{min-width:0;padding:6px 8px}.stat label{font-size:9px}.stat b{font-size:11px}
+  .toolbar{left:10px;right:10px;top:auto;bottom:76px;width:auto;max-height:132px;padding:8px;border-radius:14px;display:block;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
+  .toolbar h2{display:none}.shape-grid{display:inline-flex;gap:6px;vertical-align:middle}.shape-btn{width:66px;min-height:58px;padding:6px 3px}.shape-btn .g{font-size:16px}
+  .toolbar>.swatches,.toolbar>.tool-row{display:none}
+  .toolbar .shape-grid+.shape-grid{margin-left:6px}
+  .controls{left:10px;right:10px;bottom:10px;padding:8px;overflow-x:auto}.controls .btn{flex:1 0 auto;white-space:nowrap;padding:9px 10px;font-size:11px}
+  #depthbar{bottom:340px;width:180px}
+  .video-dock{right:10px;bottom:160px;width:170px}
+  .hint{right:10px;left:10px;width:auto;top:auto;bottom:360px;max-height:30vh}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 <script type="importmap">
@@ -82,7 +100,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
   </div>
   <div class="status-cards">
     <div class="stat"><label>Hand</label><b><span id="d-hand" class="dot off"></span><span id="t-hand">none</span></b></div>
-    <div class="stat"><label>Pinch</label><b id="t-pinch">open</b></div>
+    <div class="stat"><label>Gesture</label><b id="t-pinch">waiting</b></div>
     <div class="stat"><label>Cursor XYZ</label><b id="t-xyz">0, 0, 0</b></div>
     <div class="stat"><label>Objects</label><b id="t-count">0</b></div>
   </div>
@@ -91,16 +109,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
 <nav class="toolbar" aria-label="Shape palette">
   <h2>SPAWN SHAPE [1–0]</h2>
   <div class="shape-grid">
-    <button class="shape-btn active" data-shape="cube"><span class="g">◼</span>cube</button>
-    <button class="shape-btn" data-shape="sphere"><span class="g">●</span>sphere</button>
-    <button class="shape-btn" data-shape="cone"><span class="g">▲</span>cone</button>
-    <button class="shape-btn" data-shape="torus"><span class="g">◎</span>torus</button>
-    <button class="shape-btn" data-shape="cylinder"><span class="g">⬢</span>cyl</button>
-    <button class="shape-btn" data-shape="icosa"><span class="g">⬣</span>gem</button>
-    <button class="shape-btn" data-shape="knot"><span class="g">🌀</span>knot</button>
-    <button class="shape-btn" data-shape="tetra"><span class="g">🔻</span>tetra</button>
-    <button class="shape-btn" data-shape="octa"><span class="g">🔷</span>octa</button>
-    <button class="shape-btn" data-shape="capsule"><span class="g">💊</span>capsule</button>
+    <button class="shape-btn active" data-shape="cube" aria-pressed="true"><span class="g">◼</span>cube</button>
+    <button class="shape-btn" data-shape="sphere" aria-pressed="false"><span class="g">●</span>sphere</button>
+    <button class="shape-btn" data-shape="cone" aria-pressed="false"><span class="g">▲</span>cone</button>
+    <button class="shape-btn" data-shape="torus" aria-pressed="false"><span class="g">◎</span>torus</button>
+    <button class="shape-btn" data-shape="cylinder" aria-pressed="false"><span class="g">⬢</span>cyl</button>
+    <button class="shape-btn" data-shape="icosa" aria-pressed="false"><span class="g">⬣</span>gem</button>
+    <button class="shape-btn" data-shape="knot" aria-pressed="false"><span class="g">🌀</span>knot</button>
+    <button class="shape-btn" data-shape="tetra" aria-pressed="false"><span class="g">🔻</span>tetra</button>
+    <button class="shape-btn" data-shape="octa" aria-pressed="false"><span class="g">🔷</span>octa</button>
+    <button class="shape-btn" data-shape="capsule" aria-pressed="false"><span class="g">💊</span>capsule</button>
   </div>
   <h2>COLOR</h2>
   <div class="swatches">
@@ -112,7 +130,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
   </div>
   <h2>LINE / MEASURE [L]</h2>
   <div class="shape-grid">
-    <button class="shape-btn" id="btn-line" style="grid-column:1/-1"><span class="g">📏</span>line mode</button>
+    <button class="shape-btn" id="btn-line" style="grid-column:1/-1" aria-pressed="false"><span class="g">📏</span>line mode</button>
   </div>
   <div class="tool-row">
     <button class="mini" id="btn-snap">snap: on</button>
@@ -124,7 +142,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
   </div>
 </nav>
 
-<aside class="hint">
+<aside class="hint is-collapsed" id="hint-panel" aria-label="Gesture map" aria-hidden="true">
+  <button class="hint-close" id="btn-close-help" aria-label="Close gesture map">×</button>
   <h2>GESTURE MAP</h2>
   <div><kbd>move index</kbd> cursor follows your view: right / up on screen</div>
   <div><kbd>push hand in-out</kbd> in / out of the screen (camera depth)</div>
@@ -139,8 +158,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
   <div style="margin-top:8px;color:var(--muted)">No webcam? Mouse moves on your view plane, wheel = in/out, click = place, drag = move. R recenters hand control.</div>
 </aside>
 
-<div class="video-dock">
-  <div class="bar"><span id="t-model">hand model: loading…</span><span id="t-fps">— fps</span></div>
+<div class="video-dock is-collapsed" id="video-dock" aria-hidden="true">
+  <div class="bar"><span id="t-model">mouse fallback active</span><span id="t-fps">— fps</span></div>
   <div style="position:relative"><video id="cam" playsinline muted></video><canvas id="skel" width="248" height="140"></canvas></div>
 </div>
 
@@ -149,6 +168,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
   <button class="btn ghost" id="btn-recenter" title="Re-anchor hand control to the current cursor spot (R)">recenter</button>
   <button class="btn ghost" id="btn-spin">auto-rotate: on</button>
   <button class="btn ghost" id="btn-grid">grid: on</button>
+  <button class="btn ghost" id="btn-help" aria-expanded="false" aria-controls="hint-panel">gestures: hidden</button>
+  <button class="btn ghost" id="btn-preview" aria-expanded="false" aria-controls="video-dock">camera: hidden</button>
 </div>
 
 <div id="depthbar">DEPTH (Z) <span id="t-z">0.0</span><div id="depthfill"><i id="depthi"></i></div></div>
@@ -505,7 +526,9 @@ window.__lab={ get polylines(){return polylines;}, get lineMode(){return lineMod
 
 function setLineMode(on){
   lineMode=on;
-  document.getElementById('btn-line').classList.toggle('active',on);
+  const lineButton=document.getElementById('btn-line');
+  lineButton.classList.toggle('active',on);
+  lineButton.setAttribute('aria-pressed',String(on));
   if(!on){ activeLine=null; previewLine.visible=false; snapMarker.visible=false; }
   else toast('line mode — tap to drop points, tap last point to finish');
 }
@@ -516,10 +539,25 @@ document.getElementById('btn-clearlines').onclick=()=>{
   polylines.length=0; activeLine=null; rebuildJunctions(); shadowsDirty=true; toast('lines cleared');
 };
 
+/* ---------- workspace panels ---------- */
+const hintPanel=document.getElementById('hint-panel');
+const videoDock=document.getElementById('video-dock');
+const helpButton=document.getElementById('btn-help');
+const previewButton=document.getElementById('btn-preview');
+function togglePanel(panel,button,label,on){
+  panel.classList.toggle('is-collapsed',!on);
+  panel.setAttribute('aria-hidden',String(!on));
+  button.setAttribute('aria-expanded',String(on));
+  button.textContent=label+': '+(on?'shown':'hidden');
+}
+helpButton.onclick=()=>togglePanel(hintPanel,helpButton,'gestures',hintPanel.classList.contains('is-collapsed'));
+document.getElementById('btn-close-help').onclick=()=>togglePanel(hintPanel,helpButton,'gestures',false);
+previewButton.onclick=()=>togglePanel(videoDock,previewButton,'camera',videoDock.classList.contains('is-collapsed'));
+
 /* ---------- toolbar wiring ---------- */
 document.querySelectorAll('.shape-btn[data-shape]').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.shape-btn[data-shape]').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); shape=b.dataset.shape;
+  document.querySelectorAll('.shape-btn[data-shape]').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');});
+  b.classList.add('active'); b.setAttribute('aria-pressed','true'); shape=b.dataset.shape;
 });
 document.querySelectorAll('.sw').forEach(s=>{
   const f=()=>{document.querySelectorAll('.sw').forEach(x=>x.classList.remove('active'));s.classList.add('active');color=s.dataset.c;};
@@ -558,22 +596,52 @@ const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,(a.z-b.z)*.6);
 const D=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function extended(lm,tip,pip){ return D(lm[tip],lm[0]) > D(lm[pip],lm[0])*1.15; }
 
+let loopStarted=false, camStarting=false, camLive=false, camRequest=0;
 document.getElementById('btn-cam').onclick = async e => {
   const btn=e.target;
+  if(camStarting) return;
+  camStarting=true; btn.disabled=true;
+  const req=++camRequest;
+  const stale=()=>req!==camRequest;
   try{
     btn.textContent='Loading model…';
+    videoDock.classList.remove('is-collapsed');
+    videoDock.setAttribute('aria-hidden','false');
+    previewButton.setAttribute('aria-expanded','true');
+    previewButton.textContent='camera: shown';
+    document.getElementById('t-model').textContent='hand model: loading…';
     const {FilesetResolver, HandLandmarker} = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/+esm');
+    if(stale()) return;
     const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm');
-    landmarker = await HandLandmarker.createFromOptions(files, {
+    if(stale()) return;
+    const nextLandmarker = await HandLandmarker.createFromOptions(files, {
       baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate:'GPU'},
       runningMode:'VIDEO', numHands:2, minHandDetectionConfidence:.5, minTrackingConfidence:.5
     });
+    if(stale()){ try{nextLandmarker.close&&nextLandmarker.close();}catch(_){} return; }
     const stream = await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}});
+    if(stale()){ stream.getTracks().forEach(track=>track.stop()); try{nextLandmarker.close&&nextLandmarker.close();}catch(_){} return; }
+    try{landmarker&&landmarker.close&&landmarker.close();}catch(_){}
+    if(video.srcObject) video.srcObject.getTracks().forEach(track=>track.stop());
+    landmarker=nextLandmarker;
     video.srcObject=stream; await video.play();
+    camLive=true;
     document.getElementById('t-model').textContent='hand model: live';
-    btn.textContent='Restart webcam'; toast('webcam live — move your index finger');
-    requestAnimationFrame(loop);
-  }catch(err){ btn.textContent='Enable webcam'; toast('camera/model failed: '+err.message); console.error(err); }
+    toast('webcam live — move your index finger');
+    if(!loopStarted){ loopStarted=true; requestAnimationFrame(loop); }
+  }catch(err){
+    if(stale()) return;
+    console.error(err);
+    if(!camLive){
+      handActive=false; pinchState=false; pinchHeld=false;
+      grabbed=null; grabbedHandle=null; uiDownEl=null; fistSince=0; anchor=null;
+      document.getElementById('t-model').textContent='camera unavailable — mouse fallback';
+      toast('camera/model failed: '+err.message);
+    } else toast('webcam restart failed, keeping previous stream: '+err.message);
+  }finally{
+    if(!stale()){ btn.textContent=camLive?'Restart webcam':'Enable webcam'; btn.disabled=false; }
+    if(req===camRequest) camStarting=false;
+  }
 };
 
 let frames=0, fT=performance.now();
@@ -602,7 +670,11 @@ function drawSkel(all){
 function setHandUI(on,n=0){
   document.getElementById('d-hand').className='dot '+(on?'on':'off');
   document.getElementById('t-hand').textContent=on?`${n} hand${n>1?'s':''}`:'none';
-  if(!on){ handActive=false; cursor2d.style.display='none'; }
+  if(!on){
+    handActive=false; pinchState=false; pinchHeld=false;
+    grabbed=null; grabbedHandle=null; uiDownEl=null; fistSince=0; anchor=null;
+    cursor2d.style.display='none'; setText('t-pinch','waiting');
+  }
 }
 
 function drive(hands){
