@@ -36,6 +36,8 @@ export default function HandLab() {
   const [ui, setUi] = useState<UiState>(initialUiState);
   const [fatal, setFatal] = useState<string | null>(null);
   const [math, setMath] = useState<Measurement[]>([]);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const engineRef = useRef<HandLabEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -93,6 +95,7 @@ export default function HandLab() {
         hud,
         emit: setUi,
         onMath: setMath,
+        onCamLive: () => setPreviewOpen(true),
       });
     } catch (err) {
       // ponytail: environmental failure (no WebGL, no GPU) shows a message, never the red error overlay
@@ -205,6 +208,7 @@ export default function HandLab() {
                 "shape-btn" + (ui.shape === s ? " active" : "")
               }
               data-shape={s}
+              aria-pressed={ui.shape === s}
               onClick={() => eng()?.setShape(s)}
             >
               <span className="g">{SHAPE_GLYPHS[s].g}</span>
@@ -238,6 +242,7 @@ export default function HandLab() {
           <button
             className={"shape-btn" + (ui.lineMode ? " active" : "")}
             id="btn-line"
+            aria-pressed={ui.lineMode}
             style={{ gridColumn: "1/-1" }}
             onClick={() => eng()?.setLineMode(!ui.lineMode)}
           >
@@ -308,7 +313,18 @@ export default function HandLab() {
         )}
       </section>
 
-      <aside className="hint">
+      <aside
+        id="hint-panel"
+        className={"hint" + (helpOpen ? "" : " is-collapsed")}
+        aria-hidden={!helpOpen}
+      >
+        <button
+          className="hint-close"
+          aria-label="Hide gesture help"
+          onClick={() => setHelpOpen(false)}
+        >
+          ×
+        </button>
         <h2>GESTURE MAP</h2>
         <div>
           <kbd>move index</kbd> cursor follows your view: right / up on screen
@@ -346,7 +362,11 @@ export default function HandLab() {
         </div>
       </aside>
 
-      <div className="video-dock">
+      <div
+        id="video-dock"
+        className={"video-dock" + (previewOpen ? "" : " is-collapsed")}
+        aria-hidden={!previewOpen}
+      >
         <div className="bar">
           <span id="t-model" ref={tModelRef}>
             hand model: loading…
@@ -385,6 +405,22 @@ export default function HandLab() {
         </button>
         <button className="btn ghost" onClick={() => eng()?.toggleGrid()}>
           grid: {ui.grid ? "on" : "off"}
+        </button>
+        <button
+          className="btn ghost"
+          aria-expanded={helpOpen}
+          aria-controls="hint-panel"
+          onClick={() => setHelpOpen(!helpOpen)}
+        >
+          gestures: {helpOpen ? "shown" : "hidden"}
+        </button>
+        <button
+          className="btn ghost"
+          aria-expanded={previewOpen}
+          aria-controls="video-dock"
+          onClick={() => setPreviewOpen(!previewOpen)}
+        >
+          camera: {previewOpen ? "shown" : "hidden"}
         </button>
       </div>
 

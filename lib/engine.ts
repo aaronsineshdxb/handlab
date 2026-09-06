@@ -88,6 +88,7 @@ export interface EngineOpts {
   hud: HudNodes;
   emit: (s: UiState) => void;
   onMath?: (m: Measurement[]) => void;
+  onCamLive?: () => void;
 }
 
 /* ---------- module-level helpers (no DOM access at import time) ---------- */
@@ -354,6 +355,11 @@ export class HandLabEngine {
   private fistFrames = 0;
   private zoomSm = 0;
   private mathTick = 0;
+  // webcam lifecycle guards: single detect loop, stale-request protection
+  private camStarting = false;
+  private camRequest = 0;
+  private camLive = false;
+  private loopStarted = false;
 
   // frame / HUD
   private hudCache: Record<string, string> = {};
@@ -577,6 +583,7 @@ export class HandLabEngine {
 
   dispose(): void {
     this.disposed = true;
+    this.camRequest++; // invalidate any in-flight enableWebcam()
     cancelAnimationFrame(this.tickRaf);
     cancelAnimationFrame(this.handRaf);
     window.removeEventListener("pointermove", this.onPointerMove);
@@ -674,13 +681,19 @@ export class HandLabEngine {
   }
 
   async enableWebcam(): Promise<void> {
+    if (this.camStarting) return;
+    this.camStarting = true;
+    const req = ++this.camRequest;
+    const stale = (): boolean => req !== this.camRequest;
     this.emitCam("loading");
     try {
       const { FilesetResolver, HandLandmarker } = await import(
         "@mediapipe/tasks-vision"
       );
+      if (stale() || this.disposed) return;
       const files = await FilesetResolver.forVisionTasks(WASM_URL);
-      this.landmarker = await withTimeout(
+      if (stale() || this.disposed) return;
+      const nextLandmarker = await withTimeout(
         HandLandmarker.createFromOptions(files, {
           baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
           runningMode: "VIDEO",
@@ -691,6 +704,14 @@ export class HandLabEngine {
         30000,
         "model load",
       );
+      if (stale() || this.disposed) {
+        try {
+          nextLandmarker.close();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
       const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: "user" },
@@ -698,19 +719,62 @@ export class HandLabEngine {
         30000,
         "camera",
       );
+      if (stale() || this.disposed) {
+        stream.getTracks().forEach((t) => t.stop());
+        try {
+          nextLandmarker.close();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
+      // swap: tear down the previous pipeline before going live on the new one
+      try {
+        this.landmarker?.close();
+      } catch {
+        /* noop */
+      }
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.landmarker = nextLandmarker;
       this.stream = stream;
       const video = this.opts.video;
       video.srcObject = stream;
       await video.play();
+      if (stale() || this.disposed) return;
+      this.camLive = true;
       this.setText("t-model", "hand model: live");
       this.emitCam("live");
       this.toast("webcam live — move your index finger");
-      this.handLoop(performance.now());
+      this.opts.onCamLive?.();
+      if (!this.loopStarted) {
+        this.loopStarted = true;
+        this.handLoop(performance.now());
+      }
     } catch (err) {
-      this.emitCam("idle");
-      const msg = err instanceof Error ? err.message : String(err);
-      this.toast("camera/model failed: " + msg);
+      if (stale()) return;
       console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!this.camLive) {
+        // first start failed: reset input state, fall back to mouse
+        this.handActive = false;
+        this.pinchState = false;
+        this.pinchHeld = false;
+        this.grabbed = null;
+        this.grabbedHandle = null;
+        this.uiDownEl = null;
+        this.fistSince = 0;
+        this.fistFrames = 0;
+        this.anchor = null;
+        this.smoothZ = 0;
+        this.setText("t-model", "camera unavailable — mouse fallback");
+        this.emitCam("idle");
+        this.toast("camera/model failed: " + msg);
+      } else {
+        this.toast("webcam restart failed, keeping previous stream: " + msg);
+        this.emitCam("live");
+      }
+    } finally {
+      if (req === this.camRequest) this.camStarting = false;
     }
   }
 
@@ -1471,8 +1535,22 @@ export class HandLabEngine {
       ? `${n} hand${n > 1 ? "s" : ""}`
       : "none";
     if (!on) {
+      // tracking lost: release all gesture state so nothing sticks,
+      // and report waiting instead of a stale pinch state
       this.handActive = false;
+      this.pinchState = false;
+      this.pinchHeld = false;
+      this.grabbed = null;
+      if (this.grabbedHandle) {
+        this.grabbedHandle = null;
+        this.rebuildJunctions();
+      }
+      this.uiDownEl = null;
+      this.fistSince = 0;
+      this.fistFrames = 0;
+      this.anchor = null;
       this.opts.cursor2d.style.display = "none";
+      this.setText("t-pinch", "waiting");
     }
   }
 

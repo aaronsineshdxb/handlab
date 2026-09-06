@@ -16,6 +16,10 @@ npm run dev
 Requires internet access (MediaPipe model + fonts load from CDNs) and a webcam
 for hand tracking. Everything also works with mouse + keyboard.
 
+The app starts in a lightweight mouse-first workspace. Use `gestures` to open
+the help drawer and `camera` to show the tracking preview when you need it;
+the preview opens automatically after webcam permission succeeds.
+
 ## Structure
 
 | Path | What |
@@ -53,14 +57,16 @@ the preview opens automatically after webcam permission succeeds.
 | `Esc` / `Enter` | Finish line chain / exit line mode |
 | `Delete` | Delete hovered object |
 
-The bottom controls stay clear of the shape palette, and the workspace adapts to
-smaller screens with a compact horizontal shape rail. When no hand is detected,
-the gesture status reads `waiting` instead of reporting a stale pinch state.
+The bottom controls stay clear of the shape palette, and the workspace adapts
+to smaller screens with a compact scrollable toolbar. When no hand is
+detected, the gesture status reads `waiting` instead of reporting a stale
+pinch state.
 
-The gesture help and camera preview are stacked in the right rail so they no
-longer overlap each other or the depth indicator. Losing hand tracking releases
-any active pinch/grab state, and webcam restarts are guarded so a failed retry
-keeps the previous stream (or mouse fallback) instead of leaving input dead.
+The gesture help and camera preview start hidden in the bottom bar so they no
+longer overlap each other or the depth indicator. Losing hand tracking
+releases any active pinch/grab state, and webcam restarts are guarded so a
+failed retry keeps the previous stream (or mouse fallback) instead of leaving
+input dead.
 
 ## Line / measure mode
 
