@@ -383,11 +383,21 @@ export class HandLabEngine {
         canvas: opts.canvas,
         antialias: true,
       });
-    } catch (err) {
-      throw new Error(
-        "WebGL is unavailable in this browser (context creation failed) — HANDLAB needs GPU canvas access.",
-        { cause: err },
-      );
+    } catch {
+      // second chance: minimal context (no AA) for locked-down GPUs
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: opts.canvas,
+          antialias: false,
+          stencil: false,
+          depth: true,
+        });
+      } catch (err) {
+        throw new Error(
+          "WebGL is unavailable in this browser (context creation failed) — HANDLAB needs GPU canvas access.",
+          { cause: err },
+        );
+      }
     }
     this.renderer.setPixelRatio(Math.min(dpr, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);

@@ -128,6 +128,26 @@ export default function HandLab() {
             Try a browser with hardware acceleration enabled (Chrome / Edge /
             Safari), or enable software WebGL in your browser flags.
           </p>
+          <p style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
+            <button
+              className="btn"
+              style={{ cursor: "pointer" }}
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+            <button
+              className="btn ghost"
+              style={{ cursor: "pointer" }}
+              onClick={() =>
+                navigator.clipboard?.writeText(
+                  `HANDLAB WebGL failure\nUA: ${navigator.userAgent}\nwebgl2: ${!!document.createElement("canvas").getContext("webgl2")}\nerror: ${fatal}`,
+                )
+              }
+            >
+              Copy diagnostics
+            </button>
+          </p>
         </div>
       </div>
     );
