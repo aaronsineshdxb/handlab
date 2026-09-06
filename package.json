@@ -1,0 +1,26 @@
+{
+  "name": "handlab",
+  "version": "2.0.0",
+  "private": true,
+  "description": "HANDLAB — 3D hand-tracked cursor (Next.js + React + TypeScript + Three.js)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.12",
+    "next": "15.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "three": "0.160.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "@types/three": "0.160.0",
+    "typescript": "5.9.2"
+  }
+}

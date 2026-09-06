@@ -1,21 +1,35 @@
 # HANDLAB — 3D Hand Cursor
 
-A single-file Three.js site that turns your webcam into a floating 3D pointer.
-Move your index finger to fly a cursor through 3D space, pinch to click, grab,
-and place objects — all relative to your camera, so gestures always match the screen.
-
-No build step. Just serve the folder and open it.
+A Next.js + React + TypeScript + Three.js site that turns your webcam into a
+floating 3D pointer. Move your index finger to fly a cursor through 3D space,
+pinch to click, grab, and place objects — all relative to your camera, so
+gestures always match the screen.
 
 ## Run
 
 ```bash
-cd handlab
-python3 -m http.server 8000
-# open http://localhost:8000/index.html
+npm install
+npm run dev
+# open http://localhost:3000
 ```
 
-Requires internet access (Three.js, MediaPipe, and fonts load from CDNs)
-and a webcam for hand tracking. Everything also works with mouse + keyboard.
+Requires internet access (MediaPipe model + fonts load from CDNs) and a webcam
+for hand tracking. Everything also works with mouse + keyboard.
+
+## Structure
+
+| Path | What |
+|---|---|
+| `app/page.tsx` | Route entry, renders the lab |
+| `app/layout.tsx` | Metadata, fonts, favicon |
+| `app/globals.css` | All HUD styling |
+| `components/HandLab.tsx` | React HUD (palette, status cards, controls) + engine lifecycle |
+| `lib/engine.ts` | `HandLabEngine`: Three.js scene, gestures, MediaPipe tracking, measurement |
+
+The 3D engine is imperative and lives in `HandLabEngine` (created in a
+`useEffect`, destroyed on unmount). React owns the HUD state; the engine pushes
+updates through an `emit` callback and writes high-frequency readouts (XYZ,
+fps, depth) straight to DOM nodes via refs.
 
 The app starts in a lightweight mouse-first workspace. Use `gestures` to open the
 help drawer and `camera: hidden` to show the tracking preview when you need it;
@@ -54,11 +68,16 @@ Press `L`, then tap to drop points. Every segment shows its length, every
 joint shows its angle, and connecting two lines shows the junction angle in pink.
 Endpoints auto-snap when close (green ring, toggleable). White dots can be
 dragged anytime with live measurement updates.
+Tap near the FIRST point (3+ pts) to close a loop: the centroid badge and the
+MEASURE panel show perimeter + area (Newell 3D), centroid, plane normal, and
+per-vertex angles. `copy JSON` exports every chain for real math elsewhere.
 
 ## Notes
 
 - Hand tracking: MediaPipe HandLandmarker (GPU delegate), loaded on demand
-  when you click Enable webcam. `window.__lab` exposes internals for debugging.
+  when you click Enable webcam. Tip/size EMA filter with motion-adaptive
+  response, palm-normalized pinch thresholds, 4-frame loss hysteresis,
+  handedness-aware control hand, and stabilized fist/zoom.
 - Rendering is optimized: allocation-free hot paths, in-place line updates,
   on-demand shadow maps, shared geometries/materials, throttled HUD,
   and adaptive pixel ratio.
