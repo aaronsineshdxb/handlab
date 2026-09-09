@@ -687,11 +687,17 @@ export class HandLabEngine {
     const stale = (): boolean => req !== this.camRequest;
     this.emitCam("loading");
     try {
-      const { FilesetResolver, HandLandmarker } = await import(
-        "@mediapipe/tasks-vision"
+      const { FilesetResolver, HandLandmarker } = await withTimeout(
+        import("@mediapipe/tasks-vision"),
+        30000,
+        "vision module",
       );
       if (stale() || this.disposed) return;
-      const files = await FilesetResolver.forVisionTasks(WASM_URL);
+      const files = await withTimeout(
+        FilesetResolver.forVisionTasks(WASM_URL),
+        30000,
+        "wasm backend",
+      );
       if (stale() || this.disposed) return;
       const nextLandmarker = await withTimeout(
         HandLandmarker.createFromOptions(files, {
@@ -775,6 +781,19 @@ export class HandLabEngine {
       }
     } finally {
       if (req === this.camRequest) this.camStarting = false;
+    }
+  }
+
+  cancelWebcamLoad(): void {
+    if (!this.camStarting) return;
+    this.camRequest++;
+    this.camStarting = false;
+    if (!this.camLive) {
+      this.setText("t-model", "camera unavailable — mouse fallback");
+      this.emitCam("idle");
+      this.toast("model load cancelled");
+    } else {
+      this.emitCam("live");
     }
   }
 

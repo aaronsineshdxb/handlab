@@ -384,13 +384,16 @@ export default function HandLab() {
       <div className="controls">
         <button
           className="btn"
-          onClick={() => eng()?.enableWebcam()}
-          disabled={ui.cam === "loading"}
+          onClick={() =>
+            ui.cam === "loading"
+              ? eng()?.cancelWebcamLoad()
+              : eng()?.enableWebcam()
+          }
         >
           {ui.cam === "live"
             ? "Restart webcam"
             : ui.cam === "loading"
-              ? "Loading model…"
+              ? "Cancel load"
               : "Enable webcam"}
         </button>
         <button
