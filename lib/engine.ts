@@ -89,6 +89,7 @@ export interface EngineOpts {
   emit: (s: UiState) => void;
   onMath?: (m: Measurement[]) => void;
   onCamLive?: () => void;
+  onFatal?: (msg: string) => void;
 }
 
 /* ---------- module-level helpers (no DOM access at import time) ---------- */
@@ -554,6 +555,7 @@ export class HandLabEngine {
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    opts.canvas.addEventListener("webglcontextlost", this.onCtxLost);
 
     this.sctx = opts.skel.getContext("2d");
 
@@ -581,6 +583,15 @@ export class HandLabEngine {
     this.tick();
   }
 
+  private onCtxLost = (e: Event): void => {
+    // preventDefault leaves restore possible, but three.js can't safely
+    // resume mid-session — route to the fatal screen (Retry = fresh context)
+    e.preventDefault();
+    this.opts.onFatal?.(
+      "The GPU (WebGL) context was lost — press Retry below to reload with a fresh context.",
+    );
+  };
+
   dispose(): void {
     this.disposed = true;
     this.camRequest++; // invalidate any in-flight enableWebcam()
@@ -595,6 +606,7 @@ export class HandLabEngine {
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    this.opts.canvas.removeEventListener("webglcontextlost", this.onCtxLost);
     if (this.toastT) clearTimeout(this.toastT);
     this.landmarker?.close();
     this.landmarker = null;

@@ -96,6 +96,7 @@ export default function HandLab() {
         emit: setUi,
         onMath: setMath,
         onCamLive: () => setPreviewOpen(true),
+        onFatal: (msg) => setFatal(msg),
       });
     } catch (err) {
       // ponytail: environmental failure (no WebGL, no GPU) shows a message, never the red error overlay
