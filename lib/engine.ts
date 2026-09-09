@@ -79,6 +79,27 @@ export interface Measurement {
   maxAngle: number | null;
 }
 
+export interface SceneObjectData {
+  s: ShapeName;
+  c: string;
+  p: [number, number, number];
+  r: [number, number, number];
+}
+
+export interface SceneData {
+  version: 1;
+  objects: SceneObjectData[];
+  chains: [number, number, number][][];
+}
+
+function isNum3(a: unknown): a is [number, number, number] {
+  return (
+    Array.isArray(a) &&
+    a.length === 3 &&
+    a.every((v) => typeof v === "number" && Number.isFinite(v))
+  );
+}
+
 export interface EngineOpts {
   canvas: HTMLCanvasElement;
   video: HTMLVideoElement;
@@ -682,6 +703,133 @@ export class HandLabEngine {
     this.toast("recentered — hold hand still, move from here");
   }
 
+  /* ---------- scene persistence + export ---------- */
+
+  private shapeOf(m: THREE.Mesh): ShapeName {
+    for (const s of SHAPES) if (this.geoFor(s) === m.geometry) return s;
+    return "cube";
+  }
+
+  exportScene(): SceneData {
+    return {
+      version: 1,
+      objects: this.spawnables.map((m) => ({
+        s: this.shapeOf(m),
+        c: `#${(m.material as THREE.MeshStandardMaterial).color.getHexString()}`,
+        p: [m.position.x, m.position.y, m.position.z],
+        r: [m.rotation.x, m.rotation.y, m.rotation.z],
+      })),
+      chains: this.polylines.map((L) =>
+        L.pts.map((p) => [p.x, p.y, p.z] as [number, number, number]),
+      ),
+    };
+  }
+
+  importScene(data: SceneData): boolean {
+    const bad = (): boolean => {
+      this.toast("scene data invalid — nothing loaded");
+      return false;
+    };
+    if (!data || data.version !== 1) return bad();
+    if (
+      !Array.isArray(data.objects) ||
+      !Array.isArray(data.chains) ||
+      data.objects.length > 500 ||
+      data.chains.length > 100
+    )
+      return bad();
+    for (const o of data.objects) {
+      if (
+        !o ||
+        !SHAPES.includes(o.s) ||
+        typeof o.c !== "string" ||
+        !/^#[0-9a-fA-F]{6}$/.test(o.c) ||
+        !isNum3(o.p) ||
+        !isNum3(o.r)
+      )
+        return bad();
+    }
+    for (const ch of data.chains) {
+      if (!Array.isArray(ch) || ch.length > 200 || !ch.every(isNum3))
+        return bad();
+    }
+    this.clearAll();
+    this.clearLines();
+    for (const o of data.objects) {
+      this.placeAt(
+        new THREE.Vector3(o.p[0], o.p[1], o.p[2]),
+        o.s,
+        o.c,
+        o.r,
+      );
+    }
+    for (const ch of data.chains) {
+      if (ch.length === 0) continue;
+      const L = this.newLine(new THREE.Vector3(ch[0][0], ch[0][1], ch[0][2]));
+      for (let i = 1; i < ch.length; i++)
+        L.pts.push(new THREE.Vector3(ch[i][0], ch[i][1], ch[i][2]));
+      this.buildLineStructure(L);
+    }
+    this.activeLine = null;
+    this.rebuildJunctions();
+    this.emitMath();
+    this.toast(
+      `scene loaded — ${data.objects.length} objects, ${data.chains.length} chains`,
+    );
+    return true;
+  }
+
+  importSceneJson(text: string): boolean {
+    try {
+      return this.importScene(JSON.parse(text) as SceneData);
+    } catch {
+      this.toast("scene file is not valid JSON");
+      return false;
+    }
+  }
+
+  private static STORE_KEY = "handlab.scene.v1";
+
+  saveToStorage(): void {
+    try {
+      localStorage.setItem(
+        HandLabEngine.STORE_KEY,
+        JSON.stringify(this.exportScene()),
+      );
+      this.toast("scene saved in this browser");
+    } catch {
+      this.toast("scene save failed (storage full?)");
+    }
+  }
+
+  loadFromStorage(): void {
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(HandLabEngine.STORE_KEY);
+    } catch {
+      this.toast("saved scene unreadable");
+      return;
+    }
+    if (!raw) {
+      this.toast("no saved scene yet");
+      return;
+    }
+    this.importSceneJson(raw);
+  }
+
+  exportPNG(): string | null {
+    try {
+      // render synchronously first so capture works without preserveDrawingBuffer
+      this.renderer.render(this.scene, this.camera);
+      const url = this.renderer.domElement.toDataURL("image/png");
+      this.toast("photo captured");
+      return url;
+    } catch {
+      this.toast("photo capture failed");
+      return null;
+    }
+  }
+
   toggleSpin(): void {
     this.controls.autoRotate = !this.controls.autoRotate;
     this.emit();
@@ -921,11 +1069,13 @@ export class HandLabEngine {
     p: THREE.Vector3,
     s: ShapeName = this.shape,
     c: string = this.color,
+    rot?: [number, number, number],
   ): THREE.Mesh {
     const m = new THREE.Mesh(this.geoFor(s), this.matFor(c));
     m.position.copy(p).clamp(this.PLACE_MIN, this.PLACE_MAX);
     m.castShadow = true;
-    m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
+    if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
+    else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
     m.userData.hr = this.hrFor(s);
     this.scene.add(m);
     this.spawnables.push(m);

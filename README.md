@@ -78,6 +78,17 @@ Tap near the FIRST point (3+ pts) to close a loop: the centroid badge and the
 MEASURE panel show perimeter + area (Newell 3D), centroid, plane normal, and
 per-vertex angles. `copy JSON` exports every chain for real math elsewhere.
 
+## Scene save / load / export
+
+The toolbar's SCENE section:
+
+- `save` / `load` — persist the full scene (objects + line chains) to
+  localStorage in this browser. Invalid or missing saves toast and change nothing.
+- `photo` — capture the viewport as a PNG download.
+- `file ↓` / `file ↑` — download the scene as JSON, or load one back from disk.
+  Bad files toast (`scene data invalid`, `not valid JSON`) and leave the live
+  scene untouched.
+
 ## Notes
 
 - Hand tracking: MediaPipe HandLandmarker (GPU delegate), loaded on demand

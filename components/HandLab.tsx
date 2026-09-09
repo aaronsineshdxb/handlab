@@ -41,6 +41,7 @@ export default function HandLab() {
   const engineRef = useRef<HandLabEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const skelRef = useRef<HTMLCanvasElement>(null);
   const cursor2dRef = useRef<HTMLDivElement>(null);
@@ -111,6 +112,33 @@ export default function HandLab() {
   }, []);
 
   const eng = () => engineRef.current;
+
+  const download = (name: string, url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+  };
+
+  const onPhoto = () => {
+    const url = eng()?.exportPNG();
+    if (url) download(`handlab-${Date.now()}.png`, url);
+  };
+
+  const onExportFile = () => {
+    const data = eng()?.exportScene();
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    download(`handlab-scene-${Date.now()}.json`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const onImportFile = async (f: File) => {
+    eng()?.importSceneJson(await f.text());
+  };
 
   if (fatal)
     return (
@@ -266,6 +294,43 @@ export default function HandLab() {
             clear
           </button>
         </div>
+        <h2>SCENE</h2>
+        <div className="tool-row">
+          <button className="mini" onClick={() => eng()?.saveToStorage()}>
+            save
+          </button>
+          <button className="mini" onClick={() => eng()?.loadFromStorage()}>
+            load
+          </button>
+        </div>
+        <div className="tool-row">
+          <button className="mini" onClick={onPhoto}>
+            photo
+          </button>
+          <button className="mini" onClick={onExportFile}>
+            file ↓
+          </button>
+        </div>
+        <div className="tool-row">
+          <button
+            className="mini"
+            style={{ width: "100%" }}
+            onClick={() => fileRef.current?.click()}
+          >
+            file ↑
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onImportFile(f);
+            e.target.value = "";
+          }}
+        />
       </nav>
 
       <section className="measure" aria-label="Measurements">
