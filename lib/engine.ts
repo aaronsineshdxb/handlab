@@ -250,7 +250,7 @@ interface Anchor {
   base: THREE.Vector3;
 }
 
-const TASKS_VISION_VERSION = "0.10.12";
+const TASKS_VISION_VERSION = "1.0.1";
 const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VISION_VERSION}/wasm`;
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";

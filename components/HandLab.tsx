@@ -10,6 +10,7 @@ import {
   type ShapeName,
   type UiState,
 } from "../lib/engine";
+import { HandLabFallbackEngine } from "../lib/fallback2d";
 
 const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -38,7 +39,8 @@ export default function HandLab() {
   const [math, setMath] = useState<Measurement[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const engineRef = useRef<HandLabEngine | null>(null);
+  const [is2D, setIs2D] = useState(false);
+  const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -85,7 +87,7 @@ export default function HandLab() {
       "t-z": tZRef.current,
       depthi: depthiRef.current,
     };
-    let engine: HandLabEngine | null = null;
+    let engine: HandLabEngine | HandLabFallbackEngine | null = null;
     try {
       engine = new HandLabEngine({
         canvas: canvasRef.current,
@@ -99,10 +101,30 @@ export default function HandLab() {
         onCamLive: () => setPreviewOpen(true),
         onFatal: (msg) => setFatal(msg),
       });
-    } catch (err) {
-      // ponytail: environmental failure (no WebGL, no GPU) shows a message, never the red error overlay
-      setFatal(err instanceof Error ? err.message : String(err));
-      return;
+    } catch (webglErr) {
+      // WebGL unavailable (blocklisted GPU, headless, remote desktop):
+      // fall back to the 2D canvas engine instead of a fatal screen.
+      try {
+        engine = new HandLabFallbackEngine({
+          canvas: canvasRef.current,
+          video: videoRef.current,
+          skel: skelRef.current,
+          cursor2d: cursor2dRef.current,
+          toast: toastRef.current,
+          hud,
+          emit: setUi,
+          onMath: setMath,
+          onCamLive: () => setPreviewOpen(true),
+          onFatal: (msg) => setFatal(msg),
+        });
+        setIs2D(true);
+      } catch (err2) {
+        // ponytail: environmental failure (no WebGL AND no 2D) shows a
+        // message, never the red error overlay
+        console.error(webglErr);
+        setFatal(err2 instanceof Error ? err2.message : String(err2));
+        return;
+      }
     }
     engineRef.current = engine;
     return () => {
@@ -188,6 +210,26 @@ export default function HandLab() {
     <>
       <canvas id="scene" ref={canvasRef}></canvas>
       <div id="cursor2d" ref={cursor2dRef}></div>
+      {is2D && (
+        <div
+          style={{
+            position: "fixed",
+            top: 8,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 50,
+            background: "rgba(255,178,36,.14)",
+            border: "1px solid rgba(255,178,36,.5)",
+            color: "#ffd76a",
+            fontSize: 12,
+            padding: "6px 12px",
+            borderRadius: 8,
+          }}
+        >
+          2D fallback mode — WebGL unavailable, full 3D disabled. Shapes,
+          lines, webcam + save/load still work.
+        </div>
+      )}
 
       <header className="hud-top">
         <div className="brand">
