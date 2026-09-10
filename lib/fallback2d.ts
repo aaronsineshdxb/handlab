@@ -666,8 +666,14 @@ export class HandLabFallbackEngine {
   private onResize = (): void => {
     const cv = this.opts.canvas;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = cv.clientWidth || window.innerWidth;
-    const h = cv.clientHeight || window.innerHeight;
+    // NOTE: #scene is position:fixed;inset:0, but a canvas is a *replaced*
+    // element, so inset alone keeps its 300x150 intrinsic box. The WebGL
+    // engine avoids this via renderer.setSize (which sets style w/h).
+    // Mirror that here or the 2D scene collapses into the top-left corner.
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    cv.style.width = `${w}px`;
+    cv.style.height = `${h}px`;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
   };
@@ -920,8 +926,12 @@ export class HandLabFallbackEngine {
     const cv = this.opts.canvas;
     const g = this.ctx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = cv.clientWidth || window.innerWidth;
-    const h = cv.clientHeight || window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (cv.style.width !== `${w}px` || cv.style.height !== `${h}px`) {
+      cv.style.width = `${w}px`;
+      cv.style.height = `${h}px`;
+    }
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
       cv.width = Math.round(w * dpr);
       cv.height = Math.round(h * dpr);
