@@ -5,6 +5,9 @@ floating 3D pointer. Move your index finger to fly a cursor through 3D space,
 pinch to click, grab, and place objects — all relative to your camera, so
 gestures always match the screen.
 
+Demo online
+https://handlab-nine.vercel.app/
+
 ## Run
 
 ```bash
