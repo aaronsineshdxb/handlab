@@ -109,7 +109,7 @@ export class HandLabFallbackEngine {
   private color: string = initialUiState.color;
   private lineMode = false;
   private snapOn = true;
-  private spin = true;
+  private spin = false;
   private grid = true;
   private _cam: CamState = "idle";
 
@@ -165,18 +165,7 @@ export class HandLabFallbackEngine {
     window.addEventListener("resize", this.onResize);
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
 
-    const starters: ShapeName[] = ["cube", "sphere", "torus", "cone", "icosa"];
-    const colors = ["#4da3ff", "#7c5cff", "#3ddc84", "#ffb224", "#ff5d7a"];
-    for (let i = 0; i < 5; i++) {
-      this.objs.push({
-        id: this.idSeq++,
-        s: starters[i],
-        c: colors[i],
-        x: (i - 2) * 1.3,
-        y: Math.sin(i) * 0.6,
-        rot: 0,
-      });
-    }
+    // Start with an empty scene — user places shapes.
     this.setCount();
     this.emit();
     this.lastT = performance.now();

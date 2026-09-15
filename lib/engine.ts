@@ -34,7 +34,7 @@ export const initialUiState: UiState = {
   color: "#4da3ff",
   lineMode: false,
   snapOn: true,
-  spin: true,
+  spin: false,
   grid: true,
   cam: "idle",
 };
@@ -446,7 +446,7 @@ export class HandLabEngine {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.autoRotate = true;
+    this.controls.autoRotate = false;
     this.controls.autoRotateSpeed = 0.7;
     this.controls.maxDistance = 16;
     this.controls.minDistance = 3;
@@ -580,16 +580,7 @@ export class HandLabEngine {
 
     this.sctx = opts.skel.getContext("2d");
 
-    /* ---------- starter objects ---------- */
-    const starterShapes: ShapeName[] = ["cube", "sphere", "torus", "cone", "icosa"];
-    const starterColors = ["#4da3ff", "#7c5cff", "#3ddc84", "#ffb224", "#ff5d7a"];
-    for (let i = 0; i < 5; i++) {
-      this.placeAt(
-        new THREE.Vector3((i - 2) * 1.3, Math.sin(i) * 0.6, -1 + (i % 2)),
-        starterShapes[i],
-        starterColors[i],
-      );
-    }
+    /* ---------- start with an empty scene — user places shapes ---------- */
 
     const self = this;
     (window as unknown as Record<string, unknown>).__lab = {

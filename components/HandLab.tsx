@@ -263,7 +263,7 @@ export default function HandLab() {
           <div className="stat">
             <label>Objects</label>
             <b id="t-count" ref={tCountRef}>
-              5
+              0
             </b>
           </div>
         </div>
