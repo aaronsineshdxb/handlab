@@ -459,7 +459,7 @@ export default function HandLab() {
           <kbd>drag dots</kbd> move vertices, lengths + angles update
         </div>
         <div>
-          <kbd>snap</kbd> endpoints auto-snap when close (green ring)
+          <kbd>snap</kbd> tap near a point or line to snap + connect (green ring)
         </div>
         <div>
           <kbd>2-hand spread</kbd> camera zoom

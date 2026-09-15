@@ -638,18 +638,63 @@ export class HandLabFallbackEngine {
     return best;
   }
 
-  private snapPt(p: { x: number; y: number }): { x: number; y: number } {
-    if (!this.snapOn) return p;
+  private static SNAP_R = 0.3;
+
+  private findSnap(p: { x: number; y: number }): {
+    x: number;
+    y: number;
+    chain: Chain2D | null;
+    seg: number;
+  } | null {
+    if (!this.snapOn) return null;
+    let best: { x: number; y: number; chain: Chain2D | null; seg: number } | null =
+      null;
+    let bd = HandLabFallbackEngine.SNAP_R;
+    // pass 1: existing vertices (preferred — chains share the exact point)
     for (const L of this.chains) {
       for (const q of L.pts) {
-        if (Math.hypot(q.x - p.x, q.y - p.y) < 0.3) return { ...q };
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bd) {
+          bd = d;
+          best = { x: q.x, y: q.y, chain: L, seg: -1 };
+        }
       }
     }
-    for (const o of this.objs) {
-      if (Math.hypot(o.x - p.x, o.y - p.y) < 0.3)
-        return { x: o.x, y: o.y };
+    // pass 2: shape centers
+    if (!best) {
+      for (const o of this.objs) {
+        const d = Math.hypot(o.x - p.x, o.y - p.y);
+        if (d < bd) {
+          bd = d;
+          best = { x: o.x, y: o.y, chain: null, seg: -1 };
+        }
+      }
     }
-    return p;
+    // pass 3: anywhere along another chain's segments, so tapping mid-line
+    // connects to it (the caller drops a vertex there for a true junction)
+    for (const L of this.chains) {
+      if (L === this.activeLine || L.pts.length < 2) continue;
+      const n = L.pts.length;
+      const segs = L.closed ? n : n - 1;
+      for (let i = 0; i < segs; i++) {
+        const a = L.pts[i];
+        const b = L.pts[(i + 1) % n];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const len2 = abx * abx + aby * aby;
+        if (len2 < 1e-9) continue;
+        let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const cx = a.x + abx * t;
+        const cy = a.y + aby * t;
+        const d = Math.hypot(p.x - cx, p.y - cy);
+        if (d < bd) {
+          bd = d;
+          best = { x: cx, y: cy, chain: L, seg: i };
+        }
+      }
+    }
+    return best;
   }
 
   private onResize = (): void => {
@@ -736,7 +781,15 @@ export class HandLabFallbackEngine {
   };
 
   private placeLinePoint(raw: { x: number; y: number }): void {
-    const p = this.snapPt(raw);
+    const s = this.findSnap(raw);
+    // Tapping mid-way along another chain connects to it: drop a real vertex
+    // into that chain at the tap point so both share the point.
+    let connected = false;
+    if (s && s.chain && s.seg >= 0 && s.chain !== this.activeLine) {
+      s.chain.pts.splice(s.seg + 1, 0, { x: s.x, y: s.y });
+      connected = true;
+    }
+    const p = s ? { x: s.x, y: s.y } : raw;
     if (!this.activeLine) {
       this.activeLine = { id: this.idSeq++, pts: [p], closed: false };
       this.chains.push(this.activeLine);
@@ -752,6 +805,7 @@ export class HandLabFallbackEngine {
         this.activeLine.pts.push(p);
       }
     }
+    if (connected) this.toast("connected to line");
     this.emitMath();
   }
 
@@ -1007,6 +1061,18 @@ export class HandLabFallbackEngine {
     g.moveTo(c.x, c.y - 16);
     g.lineTo(c.x, c.y + 16);
     g.stroke();
+    // snap ring: shows what a tap would snap/connect to in line mode
+    if (this.lineMode && !this.pinchHeld) {
+      const sn = this.findSnap(this.cursor);
+      if (sn) {
+        const sp = this.toScreen(sn.x, sn.y);
+        g.strokeStyle = "#3ddc84";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(sp.x, sp.y, 12, 0, 7);
+        g.stroke();
+      }
+    }
   }
 
   private paintShape(

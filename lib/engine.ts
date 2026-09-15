@@ -241,6 +241,8 @@ interface SnapTarget {
   pos: THREE.Vector3;
   L: Polyline;
   idx: number;
+  // vertex snap => segIndex null; mid-segment snap => segment start index
+  segIndex: number | null;
 }
 
 interface Anchor {
@@ -1164,7 +1166,11 @@ export class HandLabEngine {
     if (this.grabbed)
       this.grabbed.position.copy(this.cursor.position).add(this.grabOffset);
     if (this.grabbedHandle) {
-      const s = this.findSnapTarget(this.cursor.position, this.grabbedHandle);
+      const s = this.findSnapTarget(
+        this.cursor.position,
+        this.grabbedHandle,
+        this.grabbedHandle.L,
+      );
       this._v1
         .copy(this.cursor.position)
         .add(this.handleOffset)
@@ -1505,20 +1511,50 @@ export class HandLabEngine {
   private findSnapTarget(
     p: THREE.Vector3,
     exclude: GrabbedHandle | null = null,
+    excludeLine: Polyline | null = null,
   ): SnapTarget | null {
     if (!this.snapOn) return null;
     let best: SnapTarget | null = null;
     let bd = this.SNAP_R;
+    // pass 1: existing vertices (preferred — chains share the exact point)
     this.polylines.forEach((L) =>
       L.pts.forEach((q, i) => {
         if (exclude && exclude.L === L && exclude.idx === i) return;
         const d = p.distanceTo(q);
         if (d < bd) {
           bd = d;
-          best = { pos: q.clone(), L, idx: i };
+          best = { pos: q.clone(), L, idx: i, segIndex: null };
         }
       }),
     );
+    // pass 2: anywhere along a line's segments, so tapping mid-line
+    // connects to it (the caller drops a vertex there for a true junction)
+    this.polylines.forEach((L) => {
+      if (L === excludeLine) return;
+      for (let i = 0; i + 1 < L.pts.length; i++) {
+        const a = L.pts[i];
+        const b = L.pts[i + 1];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const abz = b.z - a.z;
+        const len2 = abx * abx + aby * aby + abz * abz;
+        if (len2 < 1e-9) continue;
+        let t =
+          ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const cx = a.x + abx * t;
+        const cy = a.y + aby * t;
+        const cz = a.z + abz * t;
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        const dz = p.z - cz;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d < bd) {
+          bd = d;
+          best = { pos: new THREE.Vector3(cx, cy, cz), L, idx: -1, segIndex: i };
+        }
+      }
+    });
     return best;
   }
 
@@ -1538,7 +1574,15 @@ export class HandLabEngine {
   }
 
   private placeLinePoint(p: THREE.Vector3): void {
-    const s = this.findSnapTarget(p);
+    const s = this.findSnapTarget(p, null, this.activeLine);
+    // Tapping mid-way along another line connects to it: drop a real vertex
+    // into that line at the tap point so both chains share the point.
+    let connected = false;
+    if (s && s.segIndex !== null && s.L !== this.activeLine) {
+      s.L.pts.splice(s.segIndex + 1, 0, s.pos.clone());
+      this.buildLineStructure(s.L);
+      connected = true;
+    }
     const pt = s ? s.pos.clone() : p.clone().clamp(this.LIM_MIN, this.LIM_MAX);
     if (!this.activeLine) {
       this.newLine(pt);
@@ -1575,7 +1619,13 @@ export class HandLabEngine {
     if (this.activeLine) this.buildLineStructure(this.activeLine);
     this.rebuildJunctions();
     this.shadowsDirty = true;
-    this.toast(s ? "snapped + point added" : "point added");
+    this.toast(
+      s
+        ? connected
+          ? "connected + point added"
+          : "snapped + point added"
+        : "point added",
+    );
     this.emitMath();
   }
 
@@ -1900,15 +1950,18 @@ export class HandLabEngine {
     (this.ring.material as THREE.MeshBasicMaterial).color.setHex(cc);
     this.glow.color.setHex(cc);
 
-    // line-mode previews: rubber band + snap ring
+    // line-mode previews: rubber band + snap ring. The ring shows whenever
+    // the cursor is near a snappable point or line — even before the chain
+    // starts — so you can see what a tap would connect to.
     const chaining =
       this.lineMode && this.activeLine && this.activeLine.pts.length > 0;
     this.previewLine.visible = !!chaining;
+    const s =
+      this.lineMode && !this.pinchHeld
+        ? this.findSnapTarget(this.cursor.position, null, this.activeLine)
+        : null;
     if (chaining && this.activeLine) {
       const a = this.activeLine.pts[this.activeLine.pts.length - 1];
-      const s = !this.pinchHeld
-        ? this.findSnapTarget(this.cursor.position)
-        : null;
       const pp = this.previewLine.geometry.attributes
         .position as THREE.BufferAttribute;
       pp.setXYZ(0, a.x, a.y, a.z);
@@ -1916,13 +1969,11 @@ export class HandLabEngine {
       pp.setXYZ(1, e.x, e.y, e.z);
       pp.needsUpdate = true;
       this.previewLine.computeLineDistances();
-      this.snapMarker.visible = !!s;
-      if (s) {
-        this.snapMarker.position.copy(s.pos);
-        this.snapMarker.lookAt(this.camera.position);
-      }
-    } else {
-      this.snapMarker.visible = false;
+    }
+    this.snapMarker.visible = !!s;
+    if (s) {
+      this.snapMarker.position.copy(s.pos);
+      this.snapMarker.lookAt(this.camera.position);
     }
 
     this.setHover(
