@@ -6,7 +6,6 @@ import {
   SHAPES,
   initialUiState,
   type HudNodes,
-  type Measurement,
   type ShapeName,
   type UiState,
 } from "../lib/engine";
@@ -36,7 +35,6 @@ const SWATCHES = [
 export default function HandLab() {
   const [ui, setUi] = useState<UiState>(initialUiState);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [math, setMath] = useState<Measurement[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
@@ -97,7 +95,6 @@ export default function HandLab() {
         toast: toastRef.current,
         hud,
         emit: setUi,
-        onMath: setMath,
         onCamLive: () => setPreviewOpen(true),
         onFatal: (msg) => setFatal(msg),
       });
@@ -113,7 +110,6 @@ export default function HandLab() {
           toast: toastRef.current,
           hud,
           emit: setUi,
-          onMath: setMath,
           onCamLive: () => setPreviewOpen(true),
           onFatal: (msg) => setFatal(msg),
         });
@@ -375,51 +371,6 @@ export default function HandLab() {
         />
       </nav>
 
-      <section className="measure" aria-label="Measurements">
-        <h2>MEASURE {math.length ? `(${math.length})` : ""}</h2>
-        {math.length === 0 ? (
-          <p className="m-empty">
-            Press L, tap points. Tap near P0 to close a loop for area.
-          </p>
-        ) : (
-          <ul className="m-list">
-            {math.map((m) => (
-              <li key={m.id} className={m.closed ? "m-row closed" : "m-row"}>
-                <b>
-                  #{m.id + 1} {m.closed ? "loop" : `chain · ${m.segs} seg`}
-                </b>
-                <span>
-                  L {m.total.toFixed(2)}m
-                  {m.closed
-                    ? ` · P ${m.perimeter.toFixed(2)}m · A ${m.area.toFixed(2)}m²`
-                    : ""}
-                </span>
-                {m.angles.length > 0 && (
-                  <span>
-                    ∠ {m.minAngle!.toFixed(0)}–{m.maxAngle!.toFixed(0)}° (
-                    {m.angles.length})
-                  </span>
-                )}
-                <span className="m-sub">
-                  C ({m.centroid.map((v) => v.toFixed(1)).join(", ")})
-                  {m.closed &&
-                    ` · n (${m.normal.map((v) => v.toFixed(2)).join(", ")})`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {math.length > 0 && (
-          <button
-            className="mini"
-            onClick={() =>
-              navigator.clipboard?.writeText(JSON.stringify(math, null, 2))
-            }
-          >
-            copy JSON
-          </button>
-        )}
-      </section>
 
       <aside
         id="hint-panel"
