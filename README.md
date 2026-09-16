@@ -56,7 +56,7 @@ the preview opens automatically after webcam permission succeeds.
 | Two-hand spread | Camera zoom |
 | Mouse move / wheel | Move on view plane / dolly in-out |
 | `1–0` | Select shape (10 shapes) |
-| `L` | Line / measure mode |
+| `L` | Line mode |
 | `R` | Recenter hand control |
 | `Esc` / `Enter` | Finish line chain / exit line mode |
 | `Delete` | Delete hovered object |
@@ -72,15 +72,11 @@ releases any active pinch/grab state, and webcam restarts are guarded so a
 failed retry keeps the previous stream (or mouse fallback) instead of leaving
 input dead.
 
-## Line / measure mode
+## Line mode
 
-Press `L`, then tap to drop points. Every segment shows its length, every
-joint shows its angle, and connecting two lines shows the junction angle in pink.
-Endpoints auto-snap when close (green ring, toggleable). White dots can be
-dragged anytime with live measurement updates.
-Tap near the FIRST point (3+ pts) to close a loop: the centroid badge and the
-MEASURE panel show perimeter + area (Newell 3D), centroid, plane normal, and
-per-vertex angles. `copy JSON` exports every chain for real math elsewhere.
+Press `L`, then tap to drop points. Endpoints auto-snap when close (green ring,
+toggleable), and white dots can be dragged anytime. Press `Esc` or `Enter` to
+finish the current chain.
 
 ## Scene save / load / export
 
