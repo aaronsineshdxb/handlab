@@ -304,7 +304,7 @@ export default function HandLab() {
             ></div>
           ))}
         </div>
-        <h2>LINE / MEASURE [L]</h2>
+        <h2>LINE [L]</h2>
         <div className="shape-grid">
           <button
             className={"shape-btn" + (ui.lineMode ? " active" : "")}
