@@ -7,9 +7,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "next": "^15.5.25",
     "react": "^19.2.8",
@@ -21,6 +23,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/three": "^0.185.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
   }
 }

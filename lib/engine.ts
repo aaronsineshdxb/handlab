@@ -4,6 +4,9 @@ import type {
   HandLandmarker,
   NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
+import { fuseDepth } from "./depth/fusion";
+import { DepthAnythingV2Provider } from "./depth/monocular";
+import { PalmDepthProvider } from "./depth/palm";
 
 export type ShapeName =
   | "cube"
@@ -27,6 +30,8 @@ export interface UiState {
   spin: boolean;
   grid: boolean;
   cam: CamState;
+  depthOn: boolean;
+  depth: string;
 }
 
 export const initialUiState: UiState = {
@@ -37,6 +42,8 @@ export const initialUiState: UiState = {
   spin: false,
   grid: true,
   cam: "idle",
+  depthOn: true,
+  depth: "waiting for camera — enable webcam to start depth AI",
 };
 
 export const SHAPES: ShapeName[] = [
@@ -385,6 +392,12 @@ export class HandLabEngine {
   private camLive = false;
   private loopStarted = false;
 
+  // depth providers: palm-size baseline (always) + Depth Anything V2 (on by default)
+  private palm = new PalmDepthProvider();
+  private mono = new DepthAnythingV2Provider();
+  private depthOn = true;
+  private depthStatus = "waiting for camera — enable webcam to start depth AI";
+
   // frame / HUD
   private hudCache: Record<string, string> = {};
   private hudTick = 0;
@@ -597,6 +610,51 @@ export class HandLabEngine {
     this.tick();
   }
 
+  /* ---------- Depth Anything V2 (opt-in monocular depth) ---------- */
+
+  private depthListenerAttached = false;
+
+  private attachDepthListener(): void {
+    if (this.depthListenerAttached) return;
+    this.depthListenerAttached = true;
+    this.mono.setStatusListener((s, detail) => {
+      if (this.disposed) return;
+      this.depthStatus =
+        s === "live"
+          ? `live${this.mono.fps > 0 ? ` · ${this.mono.fps.toFixed(1)}fps` : ""}`
+          : s === "loading"
+            ? detail || "loading…"
+            : s === "error"
+              ? `error — ${detail}`
+              : "off";
+      if (s === "live") this.toast("depth AI live — push hand in/out");
+      else if (s === "error") this.toast("depth AI failed: " + detail);
+      this.emit();
+    });
+  }
+
+  /** Toggle the Depth Anything V2 monocular provider. Safe before webcam. */
+  async setDepthEnabled(on: boolean): Promise<void> {
+    this.attachDepthListener();
+    this.depthOn = on;
+    if (!on) {
+      this.mono.stop();
+      this.depthStatus = "off";
+      this.emit();
+      return;
+    }
+    const video = this.opts.video;
+    if (this.camLive && video.readyState >= 2) {
+      this.depthStatus = "loading depth model…";
+      this.emit();
+      await this.mono.start(video);
+    } else {
+      this.depthStatus = "waiting for camera — enable webcam first";
+      this.emit();
+      this.toast("depth AI armed — enable webcam to start it");
+    }
+  }
+
   private onCtxLost = (e: Event): void => {
     // preventDefault leaves restore possible, but three.js can't safely
     // resume mid-session — route to the fatal screen (Retry = fresh context)
@@ -624,6 +682,7 @@ export class HandLabEngine {
     if (this.toastT) clearTimeout(this.toastT);
     this.landmarker?.close();
     this.landmarker = null;
+    this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.controls.dispose();
@@ -693,6 +752,8 @@ export class HandLabEngine {
   recenter(): void {
     this.anchor = null;
     this.smoothZ = 0;
+    this.palm.reset();
+    this.mono.resetAnchor();
     this.toast("recentered — hold hand still, move from here");
   }
 
@@ -909,6 +970,13 @@ export class HandLabEngine {
         this.loopStarted = true;
         this.handLoop(performance.now());
       }
+      // Depth AI armed before the camera went live: start it now.
+      if (this.depthOn && !this.disposed && req === this.camRequest) {
+        this.attachDepthListener();
+        this.depthStatus = "loading depth model…";
+        this.emit();
+        void this.mono.start(video);
+      }
     } catch (err) {
       if (stale()) return;
       console.error(err);
@@ -961,6 +1029,8 @@ export class HandLabEngine {
       spin: this.controls.autoRotate,
       grid: this.grid.visible,
       cam: this.camState(),
+      depthOn: this.depthOn,
+      depth: this.depthStatus,
     });
   }
 
@@ -1842,7 +1912,13 @@ export class HandLabEngine {
     this.camera.getWorldDirection(this._camF); // into the screen
     const dx = (this.anchor.hx - tipX) * 14; // mirrored feed: smaller x = hand moved right
     const dy = (this.anchor.hy - tipY) * 10;
-    const dzRaw = (size - this.anchor.hs) * 45;
+    // depth: palm-size baseline fused with Depth Anything V2 when enabled.
+    // The neural sample is ignored while stale/low-confidence, so the cursor
+    // never depends on it — worst case is pure palm baseline.
+    this.palm.observe(size);
+    const palmS = this.palm.sample();
+    let dzRaw = palmS ? palmS.dzMeters : 0;
+    if (this.depthOn) dzRaw = fuseDepth(dzRaw, this.mono.sample(tipX, tipY));
     // rate-limit depth so a lurch toward the camera can't teleport the cursor
     const dzDelta = THREE.MathUtils.clamp(dzRaw - this.smoothZ, -0.6, 0.6);
     this.smoothZ += dzDelta * 0.35;

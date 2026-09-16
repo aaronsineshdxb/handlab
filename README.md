@@ -91,6 +91,14 @@ The toolbar's SCENE section:
 
 ## Notes
 
+- Depth AI (on by default): Depth Anything V2 (`onnx-community/depth-anything-v2-small`,
+  via `@huggingface/transformers`) runs monocular depth estimation at ~2.5fps
+  on a 256px crop in a background loop — WebGPU/fp16 when available, WASM
+  fallback otherwise. The fingertip z-score delta vs its anchor is fused 70/30
+  with the palm-size baseline; stale/low-confidence neural samples are ignored,
+  so worst case is pure palm baseline. Starts automatically with the webcam
+  (downloads ~100MB once, cached after); disable via `depth v2` in the toolbar.
+  Unavailable in 2D fallback mode.
 - Hand tracking: MediaPipe HandLandmarker (GPU delegate), loaded on demand
   when you click Enable webcam. Tip/size EMA filter with motion-adaptive
   response, palm-normalized pinch thresholds, 4-frame loss hysteresis,

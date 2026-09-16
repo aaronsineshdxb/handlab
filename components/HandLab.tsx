@@ -332,6 +332,20 @@ export default function HandLab() {
             clear
           </button>
         </div>
+        <h2>DEPTH AI (V2)</h2>
+        <div className="tool-row">
+          <button
+            className="mini"
+            style={{ width: "100%" }}
+            title="Monocular depth from Depth Anything V2, fused with the palm-size baseline"
+            onClick={() => void eng()?.setDepthEnabled(!ui.depthOn)}
+          >
+            depth v2: {ui.depthOn ? "on" : "off"}
+          </button>
+        </div>
+        <div className="m-sub" style={{ marginBottom: 4 }}>
+          {ui.depth}
+        </div>
         <h2>SCENE</h2>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.saveToStorage()}>

@@ -247,6 +247,11 @@ export class HandLabFallbackEngine {
     this.grid = !this.grid;
     this.emit();
   }
+  /** Depth AI needs the WebGL engine — no-op here, kept for API parity. */
+  async setDepthEnabled(on: boolean): Promise<void> {
+    void on;
+    this.toast("depth AI needs WebGL mode — unavailable in 2D fallback");
+  }
 
   exportScene(): SceneData {
     return {
@@ -490,6 +495,8 @@ export class HandLabFallbackEngine {
       spin: this.spin,
       grid: this.grid,
       cam: this._cam,
+      depthOn: false,
+      depth: "2D fallback — unavailable",
     });
   }
 
