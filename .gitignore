@@ -5,3 +5,7 @@ out/
 *.log
 tsconfig.tsbuildinfo
 dogfood-output/
+# Audit §3.2: never commit local secrets / env files.
+.env
+.env.*
+!.env.example

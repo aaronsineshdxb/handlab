@@ -99,11 +99,21 @@ export interface SceneData {
   chains: [number, number, number][][];
 }
 
+// Audit §3.1: reject absurd coordinates (e.g. 1e300) that could cause
+// Three.js matrix singularities or render stalls. 100 is far outside the
+// placeable bounds (±4) but leaves headroom for file-format evolution.
+const SCENE_COORD_LIMIT = 100;
+
 function isNum3(a: unknown): a is [number, number, number] {
   return (
     Array.isArray(a) &&
     a.length === 3 &&
-    a.every((v) => typeof v === "number" && Number.isFinite(v))
+    a.every(
+      (v) =>
+        typeof v === "number" &&
+        Number.isFinite(v) &&
+        Math.abs(v) <= SCENE_COORD_LIMIT,
+    )
   );
 }
 
@@ -260,9 +270,14 @@ interface Anchor {
 }
 
 const TASKS_VISION_VERSION = "1.0.1";
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VISION_VERSION}/wasm`;
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+// Supply-chain hardening (audit §2.1): WASM runtime + hand-landmarker model
+// are vendored under /public so no third-party CDN executes WASM at runtime.
+//   public/wasm/  <- copy of node_modules/@mediapipe/tasks-vision@1.0.1/wasm/
+//   public/models/hand_landmarker.task <- float16/1 from GCS, md5 15318430ea3851670fe9914116a9cfad
+// Re-vendor with: cp node_modules/@mediapipe/tasks-vision/wasm/* public/wasm/
+// and re-download the .task URL below, verifying the md5 against x-goog-hash.
+const WASM_URL = "/wasm";
+const MODEL_URL = "/models/hand_landmarker.task";
 
 // ponytail: rejects if the model/camera promises stall, so the UI can't hang on "Loading model…" forever
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
