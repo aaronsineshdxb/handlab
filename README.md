@@ -106,3 +106,20 @@ The toolbar's SCENE section:
 - Rendering is optimized: allocation-free hot paths, in-place line updates,
   on-demand shadow maps, shared geometries/materials, throttled HUD,
   and adaptive pixel ratio.
+
+## VR (`/vr` route)
+
+Isolated WebXR page — the desktop `/` lab is untouched. Open `/vr`:
+
+- `Enter VR` requests an `immersive-vr` session (`local-floor` + `hand-tracking`
+  optional features) via `lib/xr/session.ts`. Requires HTTPS (Vercel OK) and a
+  WebXR browser (Quest Browser, or desktop Chrome + Immersive Web Emulator).
+- Controllers: trigger tap = place / line point, grip hold = grab + drag,
+  right stick = ray depth, left stick = rig height. Bare hands: XR joint pinch
+  (`thumb-tip` vs `index-finger-tip`, hysteresis in `lib/xr/input.ts`) maps to
+  the same tap/hold semantics.
+- `lib/vr-engine.ts` is a standalone engine (no MediaPipe / depth AI): same v1
+  scene JSON as desktop, shared `localStorage` key `handlab.scene.v1`, so
+  `save`/`load`/`file ↓↑` transfer scenes between `/` and `/vr`.
+- Desktop fallback: orbit preview + click-to-place, so the page is usable
+  without a headset.
