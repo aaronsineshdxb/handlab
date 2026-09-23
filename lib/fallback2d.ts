@@ -48,9 +48,10 @@ export function isWebGLAvailable(): boolean {
 }
 
 const TASKS_VISION_VERSION = "1.0.1";
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VISION_VERSION}/wasm`;
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+// Supply-chain hardening (audit §2.1): same vendored assets as lib/engine.ts.
+// See the comment there for re-vendoring + checksum verification steps.
+const WASM_URL = "/wasm";
+const MODEL_URL = "/models/hand_landmarker.task";
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
@@ -85,11 +86,19 @@ interface Chain2D {
   closed: boolean;
 }
 
+// Audit §3.1: see lib/engine.ts — same bound for the 2D fallback importer.
+const SCENE_COORD_LIMIT = 100;
+
 function isNum3(a: unknown): a is [number, number, number] {
   return (
     Array.isArray(a) &&
     a.length === 3 &&
-    a.every((v) => typeof v === "number" && Number.isFinite(v))
+    a.every(
+      (v) =>
+        typeof v === "number" &&
+        Number.isFinite(v) &&
+        Math.abs(v) <= SCENE_COORD_LIMIT,
+    )
   );
 }
 

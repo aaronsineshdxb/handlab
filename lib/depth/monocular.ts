@@ -22,6 +22,11 @@ import type { DepthProvider, DepthSample } from "./types";
  */
 
 export const DA_V2_MODEL_ID = "onnx-community/depth-anything-v2-small";
+// Supply-chain note (audit §2.1): this model is fetched from the Hugging Face
+// Hub at runtime (~100MB, cached by Transformers.js after first load) — too
+// large to vendor. The ID above is an exact pinned repo; do not change it to
+// a range or alias. Transformers.js validates the repo manifest on download,
+// and the app treats all depth output as untrusted (clamped in fusion.ts).
 const INFER_W = 256;
 const INFER_MS = 400;
 

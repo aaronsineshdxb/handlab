@@ -75,11 +75,19 @@ export interface VrEngineOpts {
   onFatal?: (msg: string) => void;
 }
 
+// Audit §3.1: see lib/engine.ts — same bound for the VR scene importer.
+const SCENE_COORD_LIMIT = 100;
+
 function isNum3(a: unknown): a is [number, number, number] {
   return (
     Array.isArray(a) &&
     a.length === 3 &&
-    a.every((v) => typeof v === "number" && Number.isFinite(v))
+    a.every(
+      (v) =>
+        typeof v === "number" &&
+        Number.isFinite(v) &&
+        Math.abs(v) <= SCENE_COORD_LIMIT,
+    )
   );
 }
 
