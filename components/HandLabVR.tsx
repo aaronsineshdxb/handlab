@@ -124,7 +124,19 @@ export default function HandLabVR() {
 
   return (
     <>
-      <canvas id="scene" ref={canvasRef}></canvas>
+      <canvas
+        id="scene"
+        ref={canvasRef}
+        role="img"
+        aria-label="Interactive 3D hand-lab VR workspace"
+        aria-describedby="scene-description"
+      >
+        Interactive 3D hand-lab VR scene. Use the VR palette and HUD controls to create and edit
+        objects.
+      </canvas>
+      <p id="scene-description" className="sr-only">
+        Interactive 3D VR workspace. The object count and current mode are available in the HUD.
+      </p>
 
       <header className="hud-top">
         <div className="brand">
@@ -145,7 +157,9 @@ export default function HandLabVR() {
           </div>
           <div className="stat">
             <label>Objects</label>
-            <b>{ui.count}</b>
+            <b aria-live="polite" aria-atomic="true">
+              {ui.count}
+            </b>
           </div>
           <div className="stat">
             <label>Mode</label>
@@ -204,6 +218,7 @@ export default function HandLabVR() {
               tabIndex={0}
               role="button"
               aria-label={s.name}
+              aria-pressed={ui.color === s.c}
               onClick={() => eng()?.setColor(s.c)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -219,9 +234,11 @@ export default function HandLabVR() {
           className={"shape-btn" + (ui.lineMode ? " active" : "")}
           style={{ gridColumn: "1/-1" }}
           aria-pressed={ui.lineMode}
+          aria-live="polite"
+          aria-atomic="true"
           onClick={() => eng()?.setLineMode(!ui.lineMode)}
         >
-          <span className="g">📏</span>line mode
+          <span className="g">📏</span>line mode: {ui.lineMode ? "on" : "off"}
         </button>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.finishLine()}>
@@ -286,7 +303,13 @@ export default function HandLabVR() {
         {ui.hint && <div className="m-sub" style={{ marginTop: 8 }}>{ui.hint}</div>}
       </aside>
 
-      <div id="toast" ref={toastRef}></div>
+      <div
+        id="toast"
+        ref={toastRef}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      ></div>
     </>
   );
 }
