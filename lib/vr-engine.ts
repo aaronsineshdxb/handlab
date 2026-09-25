@@ -534,6 +534,8 @@ export class VRHandLabEngine {
 
   finishLine(): void {
     this.activeChain = null;
+    this.lineMode = false;
+    this.toast("chain finished");
     this.emit();
   }
 

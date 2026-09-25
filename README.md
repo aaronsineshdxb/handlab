@@ -24,6 +24,19 @@ The app starts in a lightweight mouse-first workspace. Use `gestures` to open
 the help drawer and `camera` to show the tracking preview when you need it;
 the preview opens automatically after webcam permission succeeds.
 
+## Teaching mode
+
+Use the `Lessons` panel, choose a difficulty, and select a lesson to work
+through its objectives and steps. Checks are modeled for place-count, closed
+chains, area thresholds, and quizzes. The current MVP UI provides quiz
+feedback; scene-check evaluation is not yet wired into lesson progression.
+Progress is stored locally in this browser under the `handlab.progress.v1`
+key.
+
+Teachers can author lesson JSON matching `lib/lessons/types.ts`, export an
+active lesson with `lesson ↓` as a starting point, then import validated custom
+lessons with `lesson ↑`; lesson IDs must be unique.
+
 ## Structure
 
 | Path | What |

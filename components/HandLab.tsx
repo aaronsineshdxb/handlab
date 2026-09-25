@@ -10,6 +10,12 @@ import {
   type UiState,
 } from "../lib/engine";
 import { HandLabFallbackEngine } from "../lib/fallback2d";
+import LessonPanel from "./LessonPanel";
+import { LESSONS } from "../lib/lessons/lessons.geometry";
+import { loadProgress, saveStep } from "../lib/lessons/store";
+import type { SceneSnap } from "../lib/lessons/checks";
+import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
+import { addImportedLesson } from "../lib/lessons/validation";
 
 const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -38,14 +44,21 @@ export default function HandLab() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
+  const [lessons, setLessons] = useState<Lesson[]>(LESSONS);
+  const lessonsRef = useRef<Lesson[]>(LESSONS);
+  const [lessonId, setLessonId] = useState<string | null>(null);
+  const [lessonStepIdx, setLessonStepIdx] = useState(0);
+  const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
   const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lessonFileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const skelRef = useRef<HTMLCanvasElement>(null);
   const cursor2dRef = useRef<HTMLDivElement>(null);
   const toastRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dHandRef = useRef<HTMLSpanElement>(null);
   const tHandRef = useRef<HTMLSpanElement>(null);
   const tPinchRef = useRef<HTMLElement>(null);
@@ -55,6 +68,17 @@ export default function HandLab() {
   const tFpsRef = useRef<HTMLSpanElement>(null);
   const tZRef = useRef<HTMLSpanElement>(null);
   const depthiRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setProgressMap(loadProgress());
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (
@@ -131,6 +155,26 @@ export default function HandLab() {
 
   const eng = () => engineRef.current;
 
+  const showToast = (message: string) => {
+    const toast = toastRef.current;
+    if (!toast) return;
+    toast.textContent = message;
+    toast.style.opacity = "1";
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      toast.style.opacity = "0";
+    }, 1400);
+  };
+
+  const buildSnap = (): SceneSnap => {
+    const scene = eng()?.exportScene();
+    return {
+      objects: scene?.objects.map(({ s }) => ({ s })) ?? [],
+      chains: scene?.chains ?? [],
+      quizAnswers: {},
+    };
+  };
+
   const download = (name: string, url: string) => {
     const a = document.createElement("a");
     a.href = url;
@@ -156,6 +200,100 @@ export default function HandLab() {
 
   const onImportFile = async (f: File) => {
     eng()?.importSceneJson(await f.text());
+  };
+
+  const onExportLesson = () => {
+    const lesson = lessons.find(({ id }) => id === lessonId);
+    if (!lesson) {
+      showToast("no active lesson to export");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(lesson, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    download(`handlab-lesson-${lesson.id}.json`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const onImportLessonFile = async (f: File) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await f.text()) as unknown;
+    } catch {
+      showToast("lesson file is not valid JSON");
+      return;
+    }
+    const currentLessons = lessonsRef.current;
+    const nextLessons = addImportedLesson(currentLessons, parsed);
+    if (nextLessons === currentLessons) {
+      showToast("lesson data invalid — nothing loaded");
+      return;
+    }
+    lessonsRef.current = nextLessons;
+    setLessons(nextLessons);
+    showToast("lesson imported");
+  };
+
+  const selectLesson = (nextLessonId: string) => {
+    if (lessonId === nextLessonId) {
+      eng()?.setLineMode(false);
+      setLessonId(null);
+      setLessonStepIdx(0);
+      return;
+    }
+
+    const engine = eng();
+    engine?.clearAll();
+    engine?.clearLines();
+    engine?.setLineMode(false);
+    setHelpOpen(false);
+    setLessonId(nextLessonId);
+    const lastStepIdx = Math.max(
+      (lessons.find(({ id }) => id === nextLessonId)?.steps.length ?? 1) - 1,
+      0,
+    );
+    const storedStepIdx = progressMap[nextLessonId]?.stepIdx ?? 0;
+    setLessonStepIdx(Math.min(Math.max(Math.floor(storedStepIdx), 0), lastStepIdx));
+  };
+
+  const nextLessonStep = (nextStepIdx: number) => {
+    const lesson = lessons.find(({ id }) => id === lessonId);
+    if (
+      !lesson ||
+      !Number.isInteger(nextStepIdx) ||
+      nextStepIdx <= lessonStepIdx ||
+      nextStepIdx >= lesson.steps.length
+    )
+      return;
+    setLessonStepIdx(nextStepIdx);
+  };
+
+  const previousLessonStep = (previousStepIdx: number) => {
+    if (
+      !lessonId ||
+      !Number.isInteger(previousStepIdx) ||
+      previousStepIdx >= lessonStepIdx ||
+      previousStepIdx < 0
+    )
+      return;
+    setLessonStepIdx(previousStepIdx);
+  };
+
+  const handleQuizAnswer = (check: QuizCheck, answerIndex: number) => {
+    if (answerIndex !== check.answer || !lessonId) return;
+    const nextProgress: Progress = {
+      lessonId,
+      stepIdx: lessonStepIdx,
+      done: true,
+      score: 1,
+      updatedAt: Date.now(),
+    };
+    saveStep(nextProgress);
+    setProgressMap((current) => ({
+      ...current,
+      [lessonId]: nextProgress,
+    }));
   };
 
   if (fatal)
@@ -204,7 +342,19 @@ export default function HandLab() {
 
   return (
     <>
-      <canvas id="scene" ref={canvasRef}></canvas>
+      <canvas
+        id="scene"
+        ref={canvasRef}
+        role="img"
+        aria-label="Interactive 3D hand-lab workspace"
+        aria-describedby="scene-description"
+      >
+        Interactive 3D hand-lab scene. Use the toolbar and HUD controls to create and edit objects.
+      </canvas>
+      <p id="scene-description" className="sr-only">
+        Interactive 3D workspace. The object count and current mode are available in the HUD, and
+        the gesture map can be opened or closed without moving keyboard focus.
+      </p>
       <div id="cursor2d" ref={cursor2dRef}></div>
       {is2D && (
         <div
@@ -258,7 +408,12 @@ export default function HandLab() {
           </div>
           <div className="stat">
             <label>Objects</label>
-            <b id="t-count" ref={tCountRef}>
+            <b
+              id="t-count"
+              ref={tCountRef}
+              aria-live="polite"
+              aria-atomic="true"
+            >
               0
             </b>
           </div>
@@ -294,6 +449,7 @@ export default function HandLab() {
               tabIndex={0}
               role="button"
               aria-label={s.name}
+              aria-pressed={ui.color === s.c}
               onClick={() => eng()?.setColor(s.c)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -310,10 +466,12 @@ export default function HandLab() {
             className={"shape-btn" + (ui.lineMode ? " active" : "")}
             id="btn-line"
             aria-pressed={ui.lineMode}
+            aria-live="polite"
+            aria-atomic="true"
             style={{ gridColumn: "1/-1" }}
             onClick={() => eng()?.setLineMode(!ui.lineMode)}
           >
-            <span className="g">📏</span>line mode
+            <span className="g">📏</span>line mode: {ui.lineMode ? "on" : "off"}
           </button>
         </div>
         <div className="tool-row">
@@ -372,6 +530,14 @@ export default function HandLab() {
             file ↑
           </button>
         </div>
+        <div className="tool-row">
+          <button className="mini" onClick={onExportLesson}>
+            lesson ↓
+          </button>
+          <button className="mini" onClick={() => lessonFileRef.current?.click()}>
+            lesson ↑
+          </button>
+        </div>
         <input
           ref={fileRef}
           type="file"
@@ -383,12 +549,33 @@ export default function HandLab() {
             e.target.value = "";
           }}
         />
+        <input
+          ref={lessonFileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onImportLessonFile(f);
+            e.target.value = "";
+          }}
+        />
       </nav>
 
+      <LessonPanel
+        lessons={lessons}
+        active={lessonId}
+        stepIdx={lessonStepIdx}
+        onSelect={selectLesson}
+        onNext={nextLessonStep}
+        onBack={previousLessonStep}
+        progress={lessonId ? progressMap[lessonId] : undefined}
+        onQuizAnswer={handleQuizAnswer}
+      />
 
       <aside
         id="hint-panel"
-        className={"hint" + (helpOpen ? "" : " is-collapsed")}
+        className={"gesture-help hint" + (helpOpen ? "" : " is-collapsed")}
         aria-hidden={!helpOpen}
       >
         <button
@@ -437,8 +624,8 @@ export default function HandLab() {
 
       <div
         id="video-dock"
-        className={"video-dock" + (previewOpen ? "" : " is-collapsed")}
-        aria-hidden={!previewOpen}
+        className={"video-dock" + (previewOpen ? "" : " is-collapsed") + (lessonId ? " lesson-mode-hidden" : "")}
+        aria-hidden={!previewOpen || !!lessonId}
       >
         <div className="bar">
           <span id="t-model" ref={tModelRef}>
@@ -492,15 +679,16 @@ export default function HandLab() {
         </button>
         <button
           className="btn ghost"
-          aria-expanded={previewOpen}
+          disabled={!!lessonId}
+          aria-expanded={previewOpen && !lessonId}
           aria-controls="video-dock"
           onClick={() => setPreviewOpen(!previewOpen)}
         >
-          camera: {previewOpen ? "shown" : "hidden"}
+          camera: {previewOpen && !lessonId ? "shown" : "hidden"}
         </button>
       </div>
 
-      <div id="depthbar">
+      <div id="depthbar" className={lessonId ? "lesson-mode-hidden" : ""}>
         DEPTH (Z){" "}
         <span id="t-z" ref={tZRef}>
           0.0
@@ -509,7 +697,13 @@ export default function HandLab() {
           <i id="depthi" ref={depthiRef}></i>
         </div>
       </div>
-      <div id="toast" ref={toastRef}></div>
+      <div
+        id="toast"
+        ref={toastRef}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      ></div>
     </>
   );
 }
