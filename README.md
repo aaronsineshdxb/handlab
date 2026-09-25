@@ -6,7 +6,7 @@ pinch to click, grab, and place objects — all relative to your camera, so
 gestures always match the screen.
 
 ```Demo online
-https://handlab-nine.vercel.app/
+https://handlab.runs-on.dev/
 ```
 
 ## Run
