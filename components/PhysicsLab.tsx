@@ -5,6 +5,8 @@ import DomainSwitcher from "./DomainSwitcher";
 import PhysicsToolbar, { type PhysicsToolId } from "./PhysicsToolbar";
 import SimulationBar, { type SimState } from "./SimulationBar";
 import LessonPanel from "./LessonPanel";
+import ExperimentViewer from "./ExperimentViewer";
+import { PHYSICS_EXPERIMENTS } from "../lib/experiments/physics";
 import { PHYSICS_LESSONS } from "../lib/lessons/lessons.physics";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import { useEffect, useRef } from "react";
@@ -13,6 +15,8 @@ import { addImportedLesson } from "../lib/lessons/validation";
 
 export default function PhysicsLab() {
   const [tool, setTool] = useState<PhysicsToolId | null>(null);
+  const [expId, setExpId] = useState(PHYSICS_EXPERIMENTS[0].id);
+  const experiment = PHYSICS_EXPERIMENTS.find((e) => e.id === expId) ?? PHYSICS_EXPERIMENTS[0];
   const [sim, setSim] = useState<SimState>({
     playing: false,
     speed: 1,
@@ -83,16 +87,31 @@ export default function PhysicsLab() {
 
       <PhysicsToolbar active={tool} onSelect={setTool} />
 
-      <div className="domain-stage" role="img" aria-label="Physics 3D viewport (placeholder)">
-        <div className="domain-stage-card">
-          <p className="domain-kicker">PHYSICS WORKSPACE · PREVIEW</p>
-          <h2>{tool ? `Tool staged: ${tool}` : "Pick a tool on the left"}</h2>
-          <p className="m-sub">
-            3D rigid-body viewport mounts here in Sprint 1
-            (lib/physics/rapier.ts + lib/clock.ts). Simulation clock state:{" "}
-            {sim.playing ? `running @ ${sim.speed}x` : "paused"}
-            {sim.stepCount > 0 ? ` · stepped ${sim.stepCount}` : ""}.
-          </p>
+      <div className="domain-stage" role="img" aria-label="Physics lab manual">
+        <div className="domain-stage-card exp-card">
+          <label className="exp-picker-label" htmlFor="phy-exp-select">
+            LAB MANUAL · {tool ? `TOOL STAGED: ${tool} · ` : ""}8 EXPERIMENTS + 6 ACTIVITIES
+          </label>
+          <select
+            id="phy-exp-select"
+            className="exp-picker"
+            value={expId}
+            onChange={(e) => setExpId(e.target.value)}
+          >
+            {PHYSICS_EXPERIMENTS.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.kind === "activity" ? "Activity" : "Experiment"}: {e.title.replace(/^Experiment \d+: /, "")}
+              </option>
+            ))}
+          </select>
+          <div className="exp-scroll">
+            <ExperimentViewer experiment={experiment} />
+          </div>
+          <div className="sim-bar">
+            <button type="button" className="mini" onClick={() => selectLesson(experiment.id)}>
+              ▶ Start guided steps
+            </button>
+          </div>
           <SimulationBar
             sim={sim}
             onChange={setSim}

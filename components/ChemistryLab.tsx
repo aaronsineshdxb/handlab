@@ -8,6 +8,8 @@ import ChemistryToolbar, {
 } from "./ChemistryToolbar";
 import SimulationBar, { type SimState } from "./SimulationBar";
 import LessonPanel from "./LessonPanel";
+import ExperimentViewer from "./ExperimentViewer";
+import { CHEMISTRY_EXPERIMENTS } from "../lib/experiments/chemistry";
 import { CHEMISTRY_LESSONS } from "../lib/lessons/lessons.chemistry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
@@ -16,6 +18,8 @@ import { addImportedLesson } from "../lib/lessons/validation";
 export default function ChemistryLab() {
   const [atom, setAtom] = useState<AtomId | null>(null);
   const [glass, setGlass] = useState<GlasswareId | null>(null);
+  const [expId, setExpId] = useState(CHEMISTRY_EXPERIMENTS[0].id);
+  const experiment = CHEMISTRY_EXPERIMENTS.find((e) => e.id === expId) ?? CHEMISTRY_EXPERIMENTS[0];
   const [sim, setSim] = useState<SimState>({
     playing: false,
     speed: 1,
@@ -99,15 +103,31 @@ export default function ChemistryLab() {
         }}
       />
 
-      <div className="domain-stage" role="img" aria-label="Chemistry 3D viewport (placeholder)">
-        <div className="domain-stage-card">
-          <p className="domain-kicker">CHEMISTRY WORKSPACE · PREVIEW</p>
-          <h2>{staged ? `Staged: ${staged}` : "Pick an atom or glassware"}</h2>
-          <p className="m-sub">
-            3D molecular builder + wet lab mount here in Sprints 2–3
-            (lib/chemistry/molecular-graph.ts, glassware.ts, reactions.ts).
-            Clock: {sim.playing ? `running @ ${sim.speed}x` : "paused"}.
-          </p>
+      <div className="domain-stage" role="img" aria-label="Chemistry lab manual">
+        <div className="domain-stage-card exp-card">
+          <label className="exp-picker-label" htmlFor="chm-exp-select">
+            LAB MANUAL · {staged ? `STAGED: ${staged} · ` : ""}SALT ANALYSIS + TITRATIONS
+          </label>
+          <select
+            id="chm-exp-select"
+            className="exp-picker"
+            value={expId}
+            onChange={(e) => setExpId(e.target.value)}
+          >
+            {CHEMISTRY_EXPERIMENTS.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.title}
+              </option>
+            ))}
+          </select>
+          <div className="exp-scroll">
+            <ExperimentViewer experiment={experiment} />
+          </div>
+          <div className="sim-bar">
+            <button type="button" className="mini" onClick={() => selectLesson(experiment.id)}>
+              ▶ Start guided steps
+            </button>
+          </div>
           <SimulationBar
             sim={sim}
             onChange={setSim}
