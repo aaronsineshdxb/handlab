@@ -11,6 +11,7 @@ import {
 } from "../lib/engine";
 import { HandLabFallbackEngine } from "../lib/fallback2d";
 import LessonPanel from "./LessonPanel";
+import DomainSwitcher from "./DomainSwitcher";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import type { SceneSnap } from "../lib/lessons/checks";
@@ -383,6 +384,7 @@ export default function HandLab() {
             HAND<span>LAB</span>
           </h1>
           <p>webcam hand tracking &rarr; floating 3D cursor (x / y / z)</p>
+          <DomainSwitcher active="geometry" />
         </div>
         <div className="status-cards">
           <div className="stat">

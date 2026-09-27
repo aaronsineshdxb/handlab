@@ -1,5 +1,7 @@
 export type Level = "intro" | "advanced";
 
+export type SubjectDomain = "physics" | "chemistry" | "geometry";
+
 export type CheckKind =
   | { kind: "place-count"; shape: string; count: number }
   | { kind: "chain-closed"; minPoints: number }
@@ -21,6 +23,8 @@ export interface Lesson {
   id: string;
   title: string;
   level: Level;
+  domain?: SubjectDomain;
+  topic?: string;
   objectives: string[];
   steps: LessonStep[];
 }

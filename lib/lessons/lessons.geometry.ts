@@ -5,6 +5,8 @@ export const LESSONS: Lesson[] = [
     id: "shapes-101",
     title: "Shapes 101",
     level: "intro",
+    domain: "geometry",
+    topic: "shapes",
     objectives: ["Identify cube/sphere/cone"],
     steps: [
       {
@@ -34,6 +36,8 @@ export const LESSONS: Lesson[] = [
     id: "measure-lines",
     title: "Measure & Close",
     level: "intro",
+    domain: "geometry",
+    topic: "measurement",
     objectives: ["Close a loop, read area"],
     steps: [
       {
@@ -50,6 +54,8 @@ export const LESSONS: Lesson[] = [
     id: "volume-adv",
     title: "Volume Thinking",
     level: "advanced",
+    domain: "geometry",
+    topic: "volume",
     objectives: ["Estimate volume"],
     steps: [
       {

@@ -100,3 +100,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-
 .vr-fatal p{margin-top:12px;color:var(--muted)}
 .vr-fatal a{color:var(--accent)}
 .shape-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+/* ---------- domain routes: /physics /chemistry ---------- */
+.domain-switch{display:flex;gap:8px;margin-top:10px;pointer-events:auto;flex-wrap:wrap}
+.domain-btn{background:var(--surface2);border:1px solid var(--border);color:var(--fg);border-radius:999px;padding:7px 14px;font-size:12px;font-family:inherit;cursor:pointer;text-decoration:none;white-space:nowrap}
+.domain-btn:hover{border-color:var(--accent)}
+.domain-btn.active{border-color:var(--accent);background:rgba(77,163,255,.16);box-shadow:0 0 0 1px var(--accent)}
+.domain-btn.ghost{opacity:.85}
+.domain-toolbar{top:190px}
+.domain-stage{position:fixed;inset:0;display:grid;place-items:center;padding:24px;pointer-events:none;z-index:1}
+.domain-stage-card{pointer-events:auto;max-width:560px;text-align:center;background:rgba(16,18,24,.88);border:1px solid var(--border);border-radius:20px;padding:36px 32px;backdrop-filter:blur(12px)}
+.domain-stage-card h2{font-size:22px;margin:10px 0}
+.domain-kicker{font-family:var(--font-plex),'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--accent)}
+.sim-bar{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;justify-content:center}
+.sim-bar .mini{flex:1 1 auto;min-width:110px}
