@@ -83,7 +83,7 @@ export default function ChemistryLab() {
       <header className="hud-top">
         <div className="brand">
           <h1>
-            HAND<span>LAB</span> ⚗ CHEMISTRY
+            HAND<span>LAB</span> · CHEMISTRY
           </h1>
           <p>molecules · glassware · titration · precipitation</p>
         </div>
@@ -125,7 +125,7 @@ export default function ChemistryLab() {
           </div>
           <div className="sim-bar">
             <button type="button" className="mini" onClick={() => selectLesson(experiment.id)}>
-              ▶ Start guided steps
+              Start guided steps →
             </button>
           </div>
           <SimulationBar

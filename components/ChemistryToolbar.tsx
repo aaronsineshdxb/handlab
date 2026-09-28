@@ -15,12 +15,12 @@ const ATOMS = [
 ] as const;
 
 const GLASSWARE = [
-  { id: "beaker", icon: "🥛", label: "Beaker" },
-  { id: "flask", icon: "⚗", label: "Flask" },
-  { id: "cylinder", icon: "🧪", label: "Cylinder" },
-  { id: "tube", icon: "🧫", label: "Tube" },
-  { id: "burette", icon: "💧", label: "Burette" },
-  { id: "burner", icon: "🔥", label: "Burner" },
+  { id: "beaker", icon: "BKR", label: "Beaker" },
+  { id: "flask", icon: "FLS", label: "Flask" },
+  { id: "cylinder", icon: "CYL", label: "Cylinder" },
+  { id: "tube", icon: "TBE", label: "Tube" },
+  { id: "burette", icon: "BUR", label: "Burette" },
+  { id: "burner", icon: "BRN", label: "Burner" },
 ] as const;
 
 export type AtomId = (typeof ATOMS)[number]["id"];

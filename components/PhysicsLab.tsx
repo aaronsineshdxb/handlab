@@ -78,7 +78,7 @@ export default function PhysicsLab() {
       <header className="hud-top">
         <div className="brand">
           <h1>
-            HAND<span>LAB</span> ⚛ PHYSICS
+            HAND<span>LAB</span> · PHYSICS
           </h1>
           <p>ramp · projectile · springs · charges · optics — Rapier sim</p>
         </div>
@@ -109,7 +109,7 @@ export default function PhysicsLab() {
           </div>
           <div className="sim-bar">
             <button type="button" className="mini" onClick={() => selectLesson(experiment.id)}>
-              ▶ Start guided steps
+              Start guided steps →
             </button>
           </div>
           <SimulationBar

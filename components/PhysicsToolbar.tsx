@@ -7,14 +7,14 @@
  * can be verified before the Rapier WASM integration lands.
  */
 const TOOLS = [
-  { id: "ramp", icon: "📐", label: "Ramp" },
-  { id: "cart", icon: "🛒", label: "Cart" },
-  { id: "projectile", icon: "🎯", label: "Cannon" },
-  { id: "spring", icon: "🌀", label: "Spring" },
-  { id: "charge", icon: "⚡", label: "Charge" },
-  { id: "laser", icon: "🔆", label: "Laser" },
-  { id: "prism", icon: "🔺", label: "Prism" },
-  { id: "mass", icon: "⚖", label: "Mass" },
+  { id: "ramp", icon: "RMP", label: "Ramp" },
+  { id: "cart", icon: "CRT", label: "Cart" },
+  { id: "projectile", icon: "CN", label: "Cannon" },
+  { id: "spring", icon: "SPR", label: "Spring" },
+  { id: "charge", icon: "CHG", label: "Charge" },
+  { id: "laser", icon: "LSR", label: "Laser" },
+  { id: "prism", icon: "PRS", label: "Prism" },
+  { id: "mass", icon: "MAS", label: "Mass" },
 ] as const;
 
 export type PhysicsToolId = (typeof TOOLS)[number]["id"];

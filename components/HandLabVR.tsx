@@ -17,10 +17,10 @@ const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   torus: { g: "◎", label: "torus" },
   cylinder: { g: "⬢", label: "cyl" },
   icosa: { g: "⬣", label: "gem" },
-  knot: { g: "🌀", label: "knot" },
-  tetra: { g: "🔻", label: "tetra" },
-  octa: { g: "🔷", label: "octa" },
-  capsule: { g: "💊", label: "capsule" },
+  knot: { g: "∿", label: "knot" },
+  tetra: { g: "△", label: "tetra" },
+  octa: { g: "◇", label: "octa" },
+  capsule: { g: "⬯", label: "capsule" },
 };
 
 const SWATCHES = [
@@ -177,7 +177,7 @@ export default function HandLabVR() {
           title={supported === false ? supportHint() : "Request immersive-vr session"}
           onClick={() => void onEnterVR()}
         >
-          <span className="g">🥽</span>
+          <span className="g">VR</span>
           {ui.xr === "presenting"
             ? "in headset"
             : entering
@@ -238,7 +238,7 @@ export default function HandLabVR() {
           aria-atomic="true"
           onClick={() => eng()?.setLineMode(!ui.lineMode)}
         >
-          <span className="g">📏</span>line mode: {ui.lineMode ? "on" : "off"}
+          <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
         </button>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.finishLine()}>
