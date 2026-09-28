@@ -11,6 +11,7 @@ import {
 } from "../lib/engine";
 import { HandLabFallbackEngine } from "../lib/fallback2d";
 import LessonPanel from "./LessonPanel";
+import DomainSwitcher from "./DomainSwitcher";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import type { SceneSnap } from "../lib/lessons/checks";
@@ -24,10 +25,10 @@ const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   torus: { g: "◎", label: "torus" },
   cylinder: { g: "⬢", label: "cyl" },
   icosa: { g: "⬣", label: "gem" },
-  knot: { g: "🌀", label: "knot" },
-  tetra: { g: "🔻", label: "tetra" },
-  octa: { g: "🔷", label: "octa" },
-  capsule: { g: "💊", label: "capsule" },
+  knot: { g: "∿", label: "knot" },
+  tetra: { g: "△", label: "tetra" },
+  octa: { g: "◇", label: "octa" },
+  capsule: { g: "⬯", label: "capsule" },
 };
 
 const SWATCHES = [
@@ -364,9 +365,9 @@ export default function HandLab() {
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 50,
-            background: "rgba(255,178,36,.14)",
-            border: "1px solid rgba(255,178,36,.5)",
-            color: "#ffd76a",
+            background: "color-mix(in oklch, var(--color-warn) 14%, transparent)",
+            border: "1px solid color-mix(in oklch, var(--color-warn) 50%, transparent)",
+            color: "var(--color-warn)",
             fontSize: 12,
             padding: "6px 12px",
             borderRadius: 8,
@@ -383,6 +384,7 @@ export default function HandLab() {
             HAND<span>LAB</span>
           </h1>
           <p>webcam hand tracking &rarr; floating 3D cursor (x / y / z)</p>
+          <DomainSwitcher active="geometry" />
         </div>
         <div className="status-cards">
           <div className="stat">
@@ -471,7 +473,7 @@ export default function HandLab() {
             style={{ gridColumn: "1/-1" }}
             onClick={() => eng()?.setLineMode(!ui.lineMode)}
           >
-            <span className="g">📏</span>line mode: {ui.lineMode ? "on" : "off"}
+            <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
           </button>
         </div>
         <div className="tool-row">
@@ -636,8 +638,8 @@ export default function HandLab() {
           </span>
         </div>
         <div style={{ position: "relative" }}>
-          <video id="cam" ref={videoRef} playsInline muted></video>
-          <canvas id="skel" ref={skelRef} width={248} height={140}></canvas>
+          <video id="cam" ref={videoRef} playsInline muted aria-label="Webcam preview"></video>
+          <canvas id="skel" ref={skelRef} width={248} height={140} aria-hidden="true"></canvas>
         </div>
       </div>
 

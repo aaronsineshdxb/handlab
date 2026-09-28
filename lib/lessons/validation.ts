@@ -67,6 +67,13 @@ export const isLesson = (value: unknown): value is Lesson => {
     !isText(value.id, MAX_ID_LENGTH) ||
     !isText(value.title, MAX_TITLE_LENGTH) ||
     (value.level !== "intro" && value.level !== "advanced") ||
+    (
+      value.domain !== undefined &&
+      value.domain !== "physics" &&
+      value.domain !== "chemistry" &&
+      value.domain !== "geometry"
+    ) ||
+    (value.topic !== undefined && !isText(value.topic as string, MAX_ID_LENGTH)) ||
     !Array.isArray(value.objectives) ||
     value.objectives.length > MAX_OBJECTIVES ||
     !value.objectives.every((objective) => isText(objective, MAX_TEXT_LENGTH)) ||

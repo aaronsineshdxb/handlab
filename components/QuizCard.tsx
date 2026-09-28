@@ -96,8 +96,8 @@ export default function QuizCard({
             marginTop: 10,
             padding: "7px 9px",
             borderRadius: 8,
-            background: "rgba(61,220,132,.14)",
-            color: "var(--good)",
+            background: "color-mix(in oklch, var(--color-good) 14%, transparent)",
+            color: "var(--color-good)",
           }}
         >
           Correct! Great job.
@@ -106,7 +106,7 @@ export default function QuizCard({
       {!correct && selected !== null && (
         <div
           role="alert"
-          style={{ marginTop: 10, color: "var(--bad)" }}
+          style={{ marginTop: 10, color: "var(--color-bad)" }}
         >
           Not quite. Try again.
           {hint && <div style={{ marginTop: 6 }}>Hint: {hint}</div>}

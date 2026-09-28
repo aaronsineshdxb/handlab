@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import "../tokens.css";
 import "./globals.css";
 
 const space = Space_Grotesk({
@@ -13,6 +14,12 @@ const plex = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-plex",
+});
+
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex-sans",
 });
 
 const ICON_SVG =
@@ -29,7 +36,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${space.variable} ${plex.variable}`}>
+    <html lang="en" className={`${space.variable} ${plex.variable} ${plexSans.variable}`}>
       <body>
         {children}
         <Analytics />
