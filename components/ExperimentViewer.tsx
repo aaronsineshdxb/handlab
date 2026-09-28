@@ -14,6 +14,13 @@ export default function ExperimentViewer({
         {experiment.kind === "activity" ? "ACTIVITY" : "EXPERIMENT"} · {experiment.topic}
       </p>
       <h2>{experiment.title}</h2>
+      {experiment.sourcePdf && (
+        <p className="exp-source">
+          <a href={experiment.sourcePdf} target="_blank" rel="noreferrer">
+            View source manual (PDF)
+          </a>
+        </p>
+      )}
       <section>
         <h3>Aim</h3>
         <p>{experiment.aim}</p>
