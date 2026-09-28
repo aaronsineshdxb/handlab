@@ -92,14 +92,15 @@ describe("LessonPanel level modes", () => {
   it("shows an accessible pressed state for each level mode", () => {
     const markup = renderPanel();
     const levelModeGroup = markup.match(
-      /<div class="tool-row" role="group" aria-label="Lesson level mode"[^>]*>([\s\S]*?)<\/div>/,
+      /<div[^>]*role="group" aria-label="Lesson level mode"[^>]*>([\s\S]*?)<\/div>/,
     )?.[1];
 
     expect(levelModeGroup).toBeDefined();
     expect(levelModeGroup?.match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(levelModeGroup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Easy<\/button>/);
-    expect(levelModeGroup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Advanced<\/button>/);
-    expect(levelModeGroup).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Both<\/button>/);
+    expect(levelModeGroup?.match(/aria-pressed="false"/g)).toHaveLength(2);
+    expect(levelModeGroup).toMatch(/aria-pressed="false"[\s\S]*?Easy/);
+    expect(levelModeGroup).toMatch(/aria-pressed="false"[\s\S]*?Advanced/);
+    expect(levelModeGroup).toMatch(/aria-pressed="true"[\s\S]*?Both/);
   });
 });
 

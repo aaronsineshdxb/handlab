@@ -1,5 +1,7 @@
 "use client";
 
+import Magnet from "./bits/Magnet";
+
 /**
  * Chemistry palette (blueprint §6.2).
  * Sprint 2–3 will wire atoms to lib/chemistry/elements.ts +
@@ -42,35 +44,37 @@ export default function ChemistryToolbar({
       <h2>ATOMS</h2>
       <div className="shape-grid">
         {ATOMS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={"shape-btn" + (atom === id ? " active" : "")}
-            aria-pressed={atom === id}
-            onClick={() => onAtom(id)}
-          >
-            <span className="g" aria-hidden="true">
-              {label}
-            </span>
-            {id}
-          </button>
+          <Magnet key={id} strength={0.25}>
+            <button
+              type="button"
+              className={"shape-btn" + (atom === id ? " active" : "")}
+              aria-pressed={atom === id}
+              onClick={() => onAtom(id)}
+            >
+              <span className="g" aria-hidden="true">
+                {label}
+              </span>
+              {id}
+            </button>
+          </Magnet>
         ))}
       </div>
       <h2 style={{ marginTop: 8 }}>GLASSWARE</h2>
       <div className="shape-grid">
         {GLASSWARE.map(({ id, icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={"shape-btn" + (glass === id ? " active" : "")}
-            aria-pressed={glass === id}
-            onClick={() => onGlass(id)}
-          >
-            <span className="g" aria-hidden="true">
-              {icon}
-            </span>
-            {label}
-          </button>
+          <Magnet key={id} strength={0.25}>
+            <button
+              type="button"
+              className={"shape-btn" + (glass === id ? " active" : "")}
+              aria-pressed={glass === id}
+              onClick={() => onGlass(id)}
+            >
+              <span className="g" aria-hidden="true">
+                {icon}
+              </span>
+              {label}
+            </button>
+          </Magnet>
         ))}
       </div>
       <p className="m-sub" style={{ marginTop: 8 }}>

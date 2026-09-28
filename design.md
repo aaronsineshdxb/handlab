@@ -63,11 +63,21 @@ Legacy aliases (do not use in new code, kept for compatibility):
 tokens (`var(--space-md)`), never raw values.
 
 ## Motion
-- Easings: cubic-bezier(0.16, 1, 0.3, 1) named `--ease-out`, cubic-bezier(0.7, 0, 0.84, 0) `--ease-in`, cubic-bezier(0.65, 0, 0.35, 1) `--ease-in-out`.
-- Reveal pattern: fade only + 8px rise, one-shot, max 3 primitives per view.
-- Reduced-motion fallback: opacity-only, ≤ 150 ms.
+- Library: motion 13.x (`motion/react`) — motion-on project as of the visual overhaul.
+- Allowlist (max 3 primitives per view): Dock magnification (fine pointers only)
+  · Magnet pull ≤0.3 (fine pointers only) · layoutId sliding indicator (tabs, domain pill)
+  · one-shot text entrance (BlurText) · one-shot list stagger (AnimatedList)
+  · 404 turbulence + conic border (content page only).
+- Everything else stays CSS: easings cubic-bezier(0.16, 1, 0.3, 1) `--ease-out`,
+  cubic-bezier(0.7, 0, 0.84, 0) `--ease-in`, cubic-bezier(0.65, 0, 0.35, 1) `--ease-in-out`.
+- Reveal pattern: fade only + ≤12px rise, one-shot. No scroll-linked motion.
+- Reduced-motion fallback: opacity-only, ≤ 150 ms. Every motion primitive ships
+  static (useReducedMotion + media query). Touch gets static bars.
 - Animate transform + opacity only. Never width/height/top/left/margin/padding.
 - Focus rings appear instantly (0 ms), never transitioned.
+- Deliberately skipped: second WebGL background (live canvas owns the GPU),
+  toast-stack refactor (engine writes `#toast` imperatively), CountUp on HUD
+  stats (engine writes via refs), carousels, Lottie.
 
 ## Microinteractions stance
 - silent success — no celebratory toasts for visible effects; toasts only for failures + invisible async

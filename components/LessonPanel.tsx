@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import QuizCard from "./QuizCard";
+import SegmentedControl from "./bits/SegmentedControl";
+import AnimatedList from "./bits/AnimatedList";
 import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
 
 export type LessonLevelMode = "intro" | "advanced" | "both";
@@ -97,24 +99,17 @@ export default function LessonPanel({
   return (
     <aside className="hint lesson-panel" aria-label="Lessons" aria-live="polite">
       <h2>LESSONS</h2>
-      <div className="tool-row" role="group" aria-label="Lesson level mode" style={{ marginBottom: 8 }}>
-        {(
-          [
-            ["intro", "Easy"],
-            ["advanced", "Advanced"],
-            ["both", "Both"],
-          ] as const
-        ).map(([mode, label]) => (
-          <button
-            key={mode}
-            type="button"
-            className={"mini" + (levelMode === mode ? " active" : "")}
-            aria-pressed={levelMode === mode}
-            onClick={() => setLevelMode(mode)}
-          >
-            {label}
-          </button>
-        ))}
+      <div style={{ marginBottom: 8 }}>
+        <SegmentedControl
+          label="Lesson level mode"
+          value={levelMode}
+          onChange={setLevelMode}
+          options={[
+            { id: "intro", label: "Easy" },
+            { id: "advanced", label: "Advanced" },
+            { id: "both", label: "Both" },
+          ]}
+        />
       </div>
       {lesson && progress && (
         <div
@@ -162,17 +157,19 @@ export default function LessonPanel({
         </div>
       )}
       <nav aria-label="Lesson list">
-        {lessons.map(({ id, title, level }) => (
-          <button
-            key={id}
-            type="button"
-            className={"mini" + (active === id ? " active" : "")}
-            aria-pressed={active === id}
-            onClick={() => onSelect(id)}
-          >
-            {title} · {level}
-          </button>
-        ))}
+        <AnimatedList>
+          {lessons.map(({ id, title, level }) => (
+            <button
+              key={id}
+              type="button"
+              className={"mini" + (active === id ? " active" : "")}
+              aria-pressed={active === id}
+              onClick={() => onSelect(id)}
+            >
+              {title} · {level}
+            </button>
+          ))}
+        </AnimatedList>
       </nav>
 
       {lesson && (

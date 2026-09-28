@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "../tokens.css";
+import "../components/bits/bits.css";
 import "./globals.css";
 
 const space = Space_Grotesk({

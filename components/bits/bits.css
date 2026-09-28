@@ -1,0 +1,46 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+/* Bits layer — React Bits + Animate UI patterns, hand-ported to Hallmark tokens.
+ * Sources: react-bits (Dock, Magnet, BlurText, AnimatedList, FuzzyText, StarBorder),
+ * animate-ui (Tabs layoutId indicator), motion (AnimatePresence, springs, layout).
+ * Every colour/font below references a named token. No Tailwind in this project. */
+.magnet{display:inline-block;will-change:auto}
+.shape-grid .magnet{width:100%}
+.shape-grid .magnet .shape-btn{width:100%}
+@media (prefers-reduced-motion: reduce){.magnet{transform:none !important}}
+.blur-text{display:inline-block;overflow-wrap:anywhere;min-width:0}
+.blur-text__word{display:inline-block;white-space:pre}
+.seg{position:relative;display:flex;gap:2px;background:var(--color-paper-3);border:1px solid var(--color-rule);border-radius:var(--radius-pill);padding:2px}
+.seg__btn{position:relative;z-index:1;flex:1;background:transparent;border:none;color:var(--color-muted);border-radius:var(--radius-pill);padding:8px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;min-height:40px;white-space:nowrap;line-height:1}
+.seg__btn[aria-pressed="true"]{color:var(--color-ink)}
+.seg__btn:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.seg__thumb{position:absolute;top:2px;bottom:2px;border-radius:var(--radius-pill);background:color-mix(in oklch, var(--color-accent) 22%, transparent);border:1px solid var(--color-accent)}
+.alist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.alist__item{margin:0}
+.alist__item .mini{width:100%}
+.domain-switch .domain-btn{position:relative}
+.domain-switch .domain-btn .seg__thumb{top:0;bottom:0;border-radius:inherit}
+.dock{position:fixed;left:212px;right:20px;bottom:20px;z-index:var(--z-raised);display:flex;gap:4px;align-items:flex-end;justify-content:center;background:color-mix(in oklch, var(--color-paper-2) 90%, transparent);border:1px solid var(--color-rule);padding:10px 12px;border-radius:16px;backdrop-filter:blur(12px)}
+.dock__item{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:1px solid transparent;color:var(--color-ink);border-radius:var(--radius-input);padding:10px 14px;cursor:pointer;font-family:var(--font-body);font-size:13px;min-height:44px;white-space:nowrap;line-height:1.2;transform-origin:bottom center}
+.dock__item--primary{background:var(--color-accent);color:var(--color-accent-ink);font-weight:700}
+.dock__item--ghost{background:var(--color-paper-3);border-color:var(--color-rule);font-weight:500}
+.dock__item:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.dock__item:disabled{opacity:.55;cursor:not-allowed}
+.dock__dot{width:4px;height:4px;border-radius:50%;background:var(--color-accent)}
+.fuzzy{color:var(--color-ink);filter:url(#hl-fuzzy)}
+@property --hl-angle{syntax:"<angle>";initial-value:0deg;inherits:false}
+.star-border{position:relative;display:inline-block;border-radius:var(--radius-input);padding:1px;background:conic-gradient(from var(--hl-angle), var(--color-accent), var(--color-accent-2), var(--color-accent));animation:hl-spin 4s linear infinite}
+.star-border__inner{display:block;border-radius:calc(var(--radius-input) - 1px);background:var(--color-accent);color:var(--color-accent-ink);font-weight:700;padding:10px 16px;font-size:13px;white-space:nowrap;line-height:1}
+@keyframes hl-spin{to{--hl-angle:360deg}}
+@media (prefers-reduced-motion: reduce){
+  .fuzzy{filter:none}
+  .star-border,.star-border__inner{animation:none}
+  .dock__item{transform:none !important}
+}
+@media (max-width: 720px){
+  .dock{left:8px;right:8px;bottom:8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 10px;align-items:stretch}
+  .dock__item{min-width:0;padding:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+}
+@media (pointer: coarse){
+  .dock__item{min-height:44px}
+  .seg__btn{min-height:44px}
+}

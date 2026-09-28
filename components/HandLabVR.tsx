@@ -9,6 +9,7 @@ import {
   type VrUiState,
 } from "../lib/vr-engine";
 import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
+import Magnet from "./bits/Magnet";
 
 const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -197,15 +198,16 @@ export default function HandLabVR() {
         <h2>SPAWN SHAPE</h2>
         <div className="shape-grid">
           {VR_SHAPES.map((s) => (
-            <button
-              key={s}
-              className={"shape-btn" + (ui.shape === s ? " active" : "")}
-              aria-pressed={ui.shape === s}
-              onClick={() => eng()?.setShape(s)}
-            >
-              <span className="g">{GLYPHS[s].g}</span>
-              {GLYPHS[s].label}
-            </button>
+            <Magnet key={s} strength={0.25}>
+              <button
+                className={"shape-btn" + (ui.shape === s ? " active" : "")}
+                aria-pressed={ui.shape === s}
+                onClick={() => eng()?.setShape(s)}
+              >
+                <span className="g">{GLYPHS[s].g}</span>
+                {GLYPHS[s].label}
+              </button>
+            </Magnet>
           ))}
         </div>
         <h2>COLOR</h2>
@@ -230,16 +232,18 @@ export default function HandLabVR() {
           ))}
         </div>
         <h2>LINE</h2>
-        <button
-          className={"shape-btn" + (ui.lineMode ? " active" : "")}
-          style={{ gridColumn: "1/-1" }}
-          aria-pressed={ui.lineMode}
-          aria-live="polite"
-          aria-atomic="true"
-          onClick={() => eng()?.setLineMode(!ui.lineMode)}
-        >
-          <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
-        </button>
+        <Magnet style={{ display: "block" }} strength={0.2}>
+          <button
+            className={"shape-btn" + (ui.lineMode ? " active" : "")}
+            style={{ gridColumn: "1/-1", width: "100%" }}
+            aria-pressed={ui.lineMode}
+            aria-live="polite"
+            aria-atomic="true"
+            onClick={() => eng()?.setLineMode(!ui.lineMode)}
+          >
+            <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
+          </button>
+        </Magnet>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.finishLine()}>
             finish
