@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
-import PhysicsLab from "../../components/PhysicsLab";
+import { redirect } from "next/navigation";
+// TEMPORARY: physics disabled — original import below to re-enable.
+// import PhysicsLab from "../../components/PhysicsLab";
 
 export const metadata: Metadata = {
-  title: "HANDLAB Physics — Mechanics, Electrostatics & Optics",
-  description:
-    "Physics workspace: ramps, projectiles, springs, charges and lasers. Rapier rigid-body sim with hand tracking.",
+  title: "HANDLAB Physics — Temporarily Disabled",
+  description: "Physics workspace is temporarily disabled.",
 };
 
 export default function PhysicsPage() {
-  return <PhysicsLab />;
+  // TEMPORARY: redirect to geometry home. Revert to `return <PhysicsLab />` to re-enable.
+  redirect("/");
+  // return <PhysicsLab />;
 }

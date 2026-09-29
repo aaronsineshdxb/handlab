@@ -29,6 +29,8 @@ export interface Experiment {
   domain: SubjectDomain;
   kind: "experiment" | "activity";
   title: string;
+  /** path under /public, e.g. "/manuals/physics/exp1-ohms-law.pdf" */
+  sourcePdf?: string;
   topic: string;
   level: Level;
   objectives: string[];
