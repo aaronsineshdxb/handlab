@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
+import { motion, useMotionValue, useSpring } from "motion/react";
 
 /** React Bits Magnet pattern, tokenized. Pulls the child toward the cursor
  *  with a spring, releases on leave. Plain passthrough on touch /
@@ -50,16 +50,4 @@ export default function Magnet({
       {children}
     </motion.div>
   );
-}
-
-/** Distance-driven scale for one Dock item (React Bits Dock pattern). */
-export function useDockScale(mouseX: ReturnType<typeof useMotionValue<number>>) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const distance = useTransform(mouseX, (val: number) => {
-    const b = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
-    return val - b.x - b.width / 2;
-  });
-  const scale = useTransform(distance, [-120, 0, 120], [1, 1.45, 1]);
-  const lift = useTransform(distance, [-120, 0, 120], [0, -7, 0]);
-  return { ref, scale, lift };
 }

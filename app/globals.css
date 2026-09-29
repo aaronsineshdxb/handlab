@@ -33,9 +33,13 @@ h1,h2,h3,.brand h1,.nf-code{font-family:var(--font-display);font-weight:500;lett
 @media (hover:hover) and (pointer:fine){.shape-btn:hover{border-color:var(--color-ink)}}
 .shape-btn.active{background:var(--color-ink);border-color:var(--color-ink);color:var(--color-paper)}
 .shape-btn .g{font-size:20px;display:block;font-weight:400}
-.swatches{display:flex;gap:8px;margin-top:4px}
-.sw{width:26px;height:26px;border-radius:50%;border:1px solid var(--color-rule);cursor:pointer}
-.sw.active{outline:2px solid var(--color-ink);outline-offset:2px}
+.color-well{display:flex;align-items:center;gap:10px;margin-top:4px}
+.color-well__input{appearance:none;-webkit-appearance:none;width:44px;height:44px;min-width:44px;border-radius:50%;border:1px solid var(--color-rule);background:var(--color-paper-2);padding:4px;cursor:pointer}
+.color-well__input::-webkit-color-swatch-wrapper{padding:0}
+.color-well__input::-webkit-color-swatch{border:none;border-radius:50%}
+.color-well__input::-moz-color-swatch{border:none;border-radius:50%}
+.color-well__input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.color-well__value{font-variant-numeric:tabular-nums;text-transform:uppercase}
 .tool-row{display:flex;gap:8px;margin-top:8px;align-items:center}
 .mini{flex:1;background:var(--color-paper-2);border:1px solid var(--color-rule);color:var(--color-ink);border-radius:10px;padding:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);min-height:40px;white-space:nowrap;transition:background-color var(--dur-short) var(--ease-out),border-color var(--dur-short) var(--ease-out)}
 @media (hover:hover) and (pointer:fine){.mini:hover{border-color:var(--color-ink)}}
@@ -57,7 +61,7 @@ h1,h2,h3,.brand h1,.nf-code{font-family:var(--font-display);font-weight:500;lett
 .btn.ghost{background:var(--color-paper-2);color:var(--color-ink);border:1px solid var(--color-rule);font-weight:500}
 @media (hover:hover) and (pointer:fine){.btn.ghost:hover{border-color:var(--color-ink)}.btn:not(.ghost):hover{background:var(--color-ink-2);border-color:var(--color-ink-2)}}
 .btn:active{transform:translateY(1px)}
-.btn:focus-visible,.shape-btn:focus-visible,.mini:focus-visible,.sw:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.btn:focus-visible,.shape-btn:focus-visible,.mini:focus-visible,.color-well__input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .exp-picker:focus-visible,.hint-close:focus-visible,.domain-btn:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 :focus-visible{outline-offset:2px}
 .btn:disabled,.mini:disabled,.shape-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}

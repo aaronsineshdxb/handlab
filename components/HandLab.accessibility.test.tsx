@@ -33,10 +33,11 @@ describe("HandLab accessibility", () => {
   });
 
   it("exposes color selection and gesture drawer state", () => {
-    const swatches = markup.match(/<div class="sw[^>]+><\/div>/g)?.join("") ?? "";
+    const well = markup.match(/<input[^>]*type="color"[^>]*>/)?.[0] ?? "";
 
-    expect(swatches.match(/aria-pressed="(true|false)"/g)).toHaveLength(5);
-    expect(swatches.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(well).toContain('aria-label="Shape color"');
+    expect(well).toContain('value="#016A71"');
+    expect(markup).toContain("#016A71");
     expect(elementById(markup, "hint-panel")).toContain("gesture-help");
   });
 });
@@ -55,10 +56,10 @@ describe("HandLabVR accessibility", () => {
   });
 
   it("exposes color and stable mode state", () => {
-    const swatches = markup.match(/<div class="sw[^>]+><\/div>/g)?.join("") ?? "";
+    const well = markup.match(/<input[^>]*type="color"[^>]*>/)?.[0] ?? "";
 
-    expect(swatches.match(/aria-pressed="(true|false)"/g)).toHaveLength(5);
-    expect(swatches.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(well).toContain('aria-label="Shape color"');
+    expect(well).toContain('value="#016A71"');
     expect(markup).toMatch(/<b aria-live="polite"[^>]*>0<\/b>/);
     expect(markup).toMatch(/line mode: (on|off)/);
     expect(markup).toMatch(/<button[^>]*aria-live="polite"[^>]*aria-atomic="true"[^>]*>/);

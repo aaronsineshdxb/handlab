@@ -10,6 +10,7 @@ import {
 } from "../lib/vr-engine";
 import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
 import Magnet from "./bits/Magnet";
+import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
 
 const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
@@ -24,14 +25,6 @@ const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   octa: { g: "◇", label: "octa" },
   capsule: { g: "⬯", label: "capsule" },
 };
-
-const SWATCHES = [
-  { c: "#016A71", name: "teal" },
-  { c: "#7c5cff", name: "violet" },
-  { c: "#3ddc84", name: "green" },
-  { c: "#ffb224", name: "amber" },
-  { c: "#ff5d7a", name: "pink" },
-];
 
 const initial: VrUiState = {
   shape: "cube",
@@ -212,26 +205,7 @@ export default function HandLabVR() {
           ))}
         </div>
         <h2>COLOR</h2>
-        <div className="swatches">
-          {SWATCHES.map((s) => (
-            <div
-              key={s.c}
-              className={"sw" + (ui.color === s.c ? " active" : "")}
-              style={{ background: s.c }}
-              tabIndex={0}
-              role="button"
-              aria-label={s.name}
-              aria-pressed={ui.color === s.c}
-              onClick={() => eng()?.setColor(s.c)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  eng()?.setColor(s.c);
-                }
-              }}
-            ></div>
-          ))}
-        </div>
+        <ColorWell color={ui.color} onChange={(c) => eng()?.setColor(c)} />
         <h2>LINE</h2>
         <Magnet style={{ display: "block" }} strength={0.2}>
           <button

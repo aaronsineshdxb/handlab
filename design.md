@@ -96,8 +96,8 @@ tokens (`var(--space-md)`), never raw values.
 
 ## Motion
 - Library: motion 13.x (`motion/react`) — motion-on project as of the visual overhaul.
-- Allowlist (max 3 primitives per view): Dock magnification (fine pointers only)
-  · Magnet pull ≤0.3 (fine pointers only) · layoutId sliding indicator (tabs, domain pill)
+- Allowlist (max 3 primitives per view): static Dock (entrance fade + press
+  tick only — no hover magnification) · Magnet pull ≤0.3 (fine pointers only) · layoutId sliding indicator (tabs, domain pill)
   · one-shot text entrance (BlurText) · one-shot list stagger (AnimatedList)
   · 404 turbulence + conic border (content page only).
 - Everything else stays CSS: easings cubic-bezier(0.16, 1, 0.3, 1) `--ease-out`,
@@ -124,6 +124,8 @@ tokens (`var(--space-md)`), never raw values.
   single verb ("Enable webcam", "Save", "Next"). `white-space: nowrap`.
 - Secondary CTA: `--color-paper-2` fill, 1px `--color-rule` border,
   `--color-ink` text, pill radius. Hover deepens border to ink.
+- Color: single round native well (`ColorWell`) + hex readout. Any color
+  pickable; hand-pinch path matches `input`, so no extra wiring.
 - Teal is CTA-adjacent only: links, focus rings, active pills, citations —
   never a button fill. (Perplexity reserves teal for moments of action.)
 - Domain pills: pill, hairline border; active = ink fill + cream text.

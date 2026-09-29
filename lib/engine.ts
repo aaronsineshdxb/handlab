@@ -1352,7 +1352,7 @@ export class HandLabEngine {
     const { x, y, behind } = this.screenOf(this.cursor.position);
     if (behind) return false;
     const el = document.elementFromPoint(x, y);
-    const hit = el?.closest?.("button,.sw") as HTMLElement | null;
+    const hit = el?.closest?.("button,input") as HTMLElement | null;
     const cursor2d = this.opts.cursor2d;
     cursor2d.style.display = "block";
     cursor2d.style.left = x + "px";
