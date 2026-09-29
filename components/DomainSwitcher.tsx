@@ -6,8 +6,9 @@ import type { SubjectDomain } from "../lib/lessons/types";
 
 const DOMAINS: { id: SubjectDomain; href: string; code: string; label: string }[] = [
   { id: "geometry", href: "/", code: "GEO", label: "Geometry" },
-  { id: "physics", href: "/physics", code: "PHY", label: "Physics" },
-  { id: "chemistry", href: "/chemistry", code: "CHE", label: "Chemistry" },
+  // TEMPORARY: physics + chemistry disabled — uncomment to re-enable.
+  // { id: "physics", href: "/physics", code: "PHY", label: "Physics" },
+  // { id: "chemistry", href: "/chemistry", code: "CHE", label: "Chemistry" },
 ];
 
 export default function DomainSwitcher({
