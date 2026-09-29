@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FuzzyCode } from "../components/bits/Fx404";
 import BlurText from "../components/bits/BlurText";
 
 export const metadata: Metadata = {
@@ -19,7 +18,7 @@ export default function NotFound() {
         <div className="nf-ring" aria-hidden="true">
           <span className="nf-core" />
         </div>
-        <FuzzyCode code="404" />
+        <h1 className="nf-code">404</h1>
         <BlurText as="p" text="Out of tracking range" className="nf-title blur-text" />
         <p className="nf-sub">
           No hand detected here — the cursor never landed on this page.
@@ -29,8 +28,8 @@ export default function NotFound() {
           ERR 404 · cursor xyz: —, —, — · pinch: open
         </p>
         <div className="nf-actions">
-          <Link className="star-border" href="/">
-            <span className="star-border__inner">Back to the lab</span>
+          <Link className="btn nf-btn" href="/">
+            Back to the lab
           </Link>
         </div>
         <p className="nf-hint">

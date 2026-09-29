@@ -5,7 +5,8 @@ emitting code. Do not regenerate per page — extend or amend this file when the
 system needs to grow.
 
 Going with: audience = students · use = studying · tone = technical.
-Genre: modern-minimal (Cobalt register — cool instrument-panel technical).
+Genre: modern-minimal, Perplexity register — warm cream canvas, quiet chrome,
+single teal voltage, pill-first geometry.
 
 ## Genre
 modern-minimal
@@ -20,25 +21,26 @@ they vary only in component archetypes.
 - Content pages: Long Document — 404 + error states, centred card, typography only.
 
 ## Theme
-Custom OKLCH dark, anchored on brand blue `#4da3ff`. Vibe: "industrial precision, cool, technical".
-Axes: dark / geometric-sans / cool.
+Custom OKLCH light, Perplexity DNA (cream canvas, warm ink, single teal voltage).
+Vibe: "warm paper, quiet chrome, teal voltage".
+Axes: light / geometric-sans / cool.
 
-- `--color-paper`   oklch(13% 0.012 250)
-- `--color-paper-2` oklch(17% 0.014 250)
-- `--color-paper-3` oklch(22% 0.014 250)
-- `--color-ink`     oklch(94% 0.008 250)
-- `--color-ink-2`   oklch(78% 0.010 250)
-- `--color-rule`    oklch(30% 0.014 250)
-- `--color-rule-2`  oklch(38% 0.014 250)
-- `--color-muted`   oklch(68% 0.018 250)
-- `--color-neutral` oklch(58% 0.014 250)
-- `--color-accent`  oklch(68% 0.160 250)
-- `--color-accent-2` oklch(64% 0.200 285)
-- `--color-accent-ink` oklch(18% 0.020 250)
-- `--color-focus`   oklch(72% 0.200 250)
-- `--color-good`    oklch(72% 0.170 160)
-- `--color-warn`    oklch(76% 0.160 75)
-- `--color-bad`     oklch(64% 0.220 25)
+- `--color-paper`   oklch(98.6% 0.005 95)  — canvas #FCFCF9
+- `--color-paper-2` oklch(99.4% 0.003 95)  — cards, near-white
+- `--color-paper-3` oklch(95.5% 0.008 88)  — fills, inputs-at-rest
+- `--color-ink`     oklch(24% 0.012 85)    — text #27251E
+- `--color-ink-2`   oklch(38% 0.012 85)    — strong secondary
+- `--color-rule`    oklch(89% 0.008 85)    — hairlines
+- `--color-rule-2`  oklch(82% 0.01 85)     — stronger rules
+- `--color-muted`   oklch(56% 0.01 85)     — smoke #72706B
+- `--color-neutral` oklch(45% 0.01 85)     — mid neutral
+- `--color-accent`  oklch(45% 0.075 202)   — teal voltage #016A71
+- `--color-accent-2` oklch(62% 0.10 198)   — bright teal #00A1AC
+- `--color-accent-ink` oklch(98.6% 0.005 95) — cream text on teal
+- `--color-focus`   oklch(45% 0.075 202)   — teal rings everywhere
+- `--color-good`    oklch(55% 0.12 155)    — positive #539E55 family
+- `--color-warn`    oklch(52% 0.13 55)     — warning #97431A family
+- `--color-bad`     oklch(50% 0.14 20)     — negative #A23544 family
 
 Legacy aliases (do not use in new code, kept for compatibility):
 `--bg` → `--color-paper`, `--surface` → `--color-paper-2`,
@@ -49,14 +51,17 @@ Legacy aliases (do not use in new code, kept for compatibility):
 `--border` → `--color-rule`.
 
 ## Typography
-- Display: Space Grotesk, weight 700, style normal (roman — italic headers banned)
-- Body: IBM Plex Sans, weight 400
-- Mono: IBM Plex Mono, weight 400/500
-- Display tracking: -0.02em
-- Label tracking: 0.08em–0.14em uppercase
-- Type scale anchor: --text-display = clamp(2.0rem, 3vw + 1rem, 3.25rem) — app HUD, not marketing hero
+- Display: Geist, weight 500, style normal, tracking -0.015em (pplxSans voice)
+- Body: Geist, weight 400/500
+- Serif: Newsreader, weight 400/500 — reading surfaces only (lesson prompts,
+  experiment body, 404 title/sub, VR fatal copy). Perplexity answers in serif.
+- Mono: Geist Mono, weight 400 — code, kbd, and data readouts only.
+- Wordmark: lowercase, Geist 600, tracking -0.01em (no logo glyph).
+- Display tracking: -0.015em
+- Label tracking: 0.04em–0.06em, 11–12px, weight 500, uppercase
+- Type scale anchor: --text-display = clamp(2.0rem, 3vw + 1rem, 3.0rem)
 - Tabular numbers on all data: `font-variant-numeric: tabular-nums`
-- Headings roman always. Emphasis via weight or accent, never italic.
+- Headings roman always. Emphasis via weight or teal, never italic.
 
 ## Spacing
 4-point named scale. The values are in `tokens.css`. Pages must use named
@@ -88,9 +93,13 @@ tokens (`var(--space-md)`), never raw values.
 - spinners: delay-show 150 ms or min-visible 300 ms
 
 ## CTA voice
-- Primary CTA: solid `--color-accent` fill, `--color-accent-ink` text, 8px radius, single verb ("Enable webcam", "Save", "Next"). `white-space: nowrap`.
-- Secondary CTA: `--color-paper-3` fill, 1px `--color-rule` border, `--color-ink` text, 8px radius.
-- Domain pills: 999px pill, 1px border, active = accent border + accent-tinted fill.
+- Primary CTA: solid `--color-ink` fill, `--color-paper` text, pill radius,
+  single verb ("Enable webcam", "Save", "Next"). `white-space: nowrap`.
+- Secondary CTA: `--color-paper-2` fill, 1px `--color-rule` border,
+  `--color-ink` text, pill radius. Hover deepens border to ink.
+- Teal is CTA-adjacent only: links, focus rings, active pills, citations —
+  never a button fill. (Perplexity reserves teal for moments of action.)
+- Domain pills: pill, hairline border; active = ink fill + cream text.
 - Technical voice: spec-embedded, measured, data-first. Name the endpoint, command, number. Banned: seamless, unleash, empower, supercharge, magical, click here.
 
 ## Per-page allowances
@@ -120,21 +129,21 @@ See `tokens.css` at project root (source of truth).
 ### Tailwind v4 `@theme`
 ```css
 @theme {
-  --color-paper: oklch(13% 0.012 250);
-  --color-paper-2: oklch(17% 0.014 250);
-  --color-paper-3: oklch(22% 0.014 250);
-  --color-ink: oklch(94% 0.008 250);
-  --color-ink-2: oklch(78% 0.010 250);
-  --color-rule: oklch(30% 0.014 250);
-  --color-muted: oklch(68% 0.018 250);
-  --color-accent: oklch(68% 0.160 250);
-  --color-accent-ink: oklch(18% 0.020 250);
-  --color-focus: oklch(72% 0.200 250);
-  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-outlier: "IBM Plex Mono", ui-monospace, monospace;
+  --color-paper: oklch(98.6% 0.005 95);
+  --color-paper-2: oklch(99.4% 0.003 95);
+  --color-paper-3: oklch(95.5% 0.008 88);
+  --color-ink: oklch(24% 0.012 85);
+  --color-ink-2: oklch(38% 0.012 85);
+  --color-rule: oklch(89% 0.008 85);
+  --color-muted: oklch(56% 0.01 85);
+  --color-accent: oklch(45% 0.075 202);
+  --color-accent-ink: oklch(98.6% 0.005 95);
+  --color-focus: oklch(45% 0.075 202);
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-outlier: "Geist Mono", ui-monospace, monospace;
   --spacing-md: 1.5rem;
-  --text-md: 1.125rem;
+  --text-md: 1rem;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 ```
@@ -143,17 +152,17 @@ See `tokens.css` at project root (source of truth).
 ```json
 {
   "color": {
-    "paper": { "$value": "oklch(13% 0.012 250)", "$type": "color" },
-    "paper-2": { "$value": "oklch(17% 0.014 250)", "$type": "color" },
-    "paper-3": { "$value": "oklch(22% 0.014 250)", "$type": "color" },
-    "ink": { "$value": "oklch(94% 0.008 250)", "$type": "color" },
-    "accent": { "$value": "oklch(68% 0.160 250)", "$type": "color" },
-    "focus": { "$value": "oklch(72% 0.200 250)", "$type": "color" }
+    "paper": { "$value": "oklch(98.6% 0.005 95)", "$type": "color" },
+    "paper-2": { "$value": "oklch(99.4% 0.003 95)", "$type": "color" },
+    "paper-3": { "$value": "oklch(95.5% 0.008 88)", "$type": "color" },
+    "ink": { "$value": "oklch(24% 0.012 85)", "$type": "color" },
+    "accent": { "$value": "oklch(45% 0.075 202)", "$type": "color" },
+    "focus": { "$value": "oklch(45% 0.075 202)", "$type": "color" }
   },
   "font": {
-    "display": { "$value": "Space Grotesk", "$type": "fontFamily" },
-    "body": { "$value": "IBM Plex Sans", "$type": "fontFamily" },
-    "outlier": { "$value": "IBM Plex Mono", "$type": "fontFamily" }
+    "display": { "$value": "Geist", "$type": "fontFamily" },
+    "body": { "$value": "Geist", "$type": "fontFamily" },
+    "outlier": { "$value": "Geist Mono", "$type": "fontFamily" }
   },
   "space": { "md": { "$value": "1.5rem", "$type": "dimension" } }
 }
@@ -162,16 +171,16 @@ See `tokens.css` at project root (source of truth).
 ### shadcn/ui CSS variables
 ```css
 :root {
-  --background: 13% 0.012 250;
-  --foreground: 94% 0.008 250;
-  --primary: 68% 0.160 250;
-  --primary-foreground: 18% 0.020 250;
-  --muted: 30% 0.014 250;
-  --muted-foreground: 68% 0.018 250;
-  --border: 30% 0.014 250;
-  --input: 30% 0.014 250;
-  --ring: 72% 0.200 250;
-  --radius: 8px;
+  --background: 98.6% 0.005 95;
+  --foreground: 24% 0.012 85;
+  --primary: 45% 0.075 202;
+  --primary-foreground: 98.6% 0.005 95;
+  --muted: 89% 0.008 85;
+  --muted-foreground: 56% 0.01 85;
+  --border: 89% 0.008 85;
+  --input: 89% 0.008 85;
+  --ring: 45% 0.075 202;
+  --radius: 12px;
 }
 ```
 
@@ -179,3 +188,7 @@ See `tokens.css` at project root (source of truth).
 - Pages inventoried: `app/page.tsx` (geometry workspace), `app/physics/page.tsx` (mechanics/electrostatics/optics), `app/chemistry/page.tsx` (VSEPR/wet-lab), `app/vr/page.tsx` (WebXR isolated), `app/not-found.tsx` (out-of-tracking-range 404).
 - No prior `.hallmark/log.json`. First Hallmark run for this project.
 - Pre-flight preserved: Space Grotesk + IBM Plex Mono via next/font, dark intent, Next.js routes.
+- Full remake (2026-09-28): Perplexity design language — cream canvas #FCFCF9,
+  ink #27251E, teal voltage #016A71, Geist + Newsreader + Geist Mono,
+  pill-first geometry. 3D scene re-lit for cream (bg/fog/grid/lights/cursor).
+  Structural DNA only; no Perplexity assets, fonts, or copy reused.

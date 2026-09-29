@@ -34,7 +34,7 @@ const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
 };
 
 const SWATCHES = [
-  { c: "#4da3ff", name: "blue" },
+  { c: "#016A71", name: "teal" },
   { c: "#7c5cff", name: "violet" },
   { c: "#3ddc84", name: "green" },
   { c: "#ffb224", name: "amber" },

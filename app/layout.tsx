@@ -1,26 +1,23 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Newsreader, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "../tokens.css";
 import "../components/bits/bits.css";
 import "./globals.css";
 
-const space = Space_Grotesk({
+const sans = Geist({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-space",
+  variable: "--font-sans",
 });
 
-const plex = IBM_Plex_Mono({
+const serif = Newsreader({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex",
+  variable: "--font-serif",
 });
 
-const plexSans = IBM_Plex_Sans({
+const mono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex-sans",
+  variable: "--font-mono",
 });
 
 const ICON_SVG =
@@ -37,7 +34,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${space.variable} ${plex.variable} ${plexSans.variable}`}>
+    <html lang="en" className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
       <body>
         {children}
         <Analytics />

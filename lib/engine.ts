@@ -36,7 +36,7 @@ export interface UiState {
 
 export const initialUiState: UiState = {
   shape: "cube",
-  color: "#4da3ff",
+  color: "#016A71",
   lineMode: false,
   snapOn: true,
   spin: false,
@@ -335,7 +335,7 @@ export class HandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
-  private color = "#4da3ff";
+  private color = "#016A71";
   private geoCache: Partial<Record<ShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hrCache: Partial<Record<ShapeName, number>> = {};
@@ -463,8 +463,8 @@ export class HandLabEngine {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false; // static scene: re-render shadows only when something moves
 
-    this.scene.background = new THREE.Color(0x08090d);
-    this.scene.fog = new THREE.Fog(0x08090d, 14, 30);
+    this.scene.background = new THREE.Color(0xFCFCF9);
+    this.scene.fog = new THREE.Fog(0xFCFCF9, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -481,17 +481,17 @@ export class HandLabEngine {
     this.controls.maxDistance = 16;
     this.controls.minDistance = 3;
 
-    this.scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x1a1410, 0.9));
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9));
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0x7c5cff, 1.1);
+    const rim = new THREE.DirectionalLight(0x016A71, 0.7);
     rim.position.set(-5, 3, -4);
     this.scene.add(rim);
 
-    this.grid = new THREE.GridHelper(14, 28, 0x2c3a55, 0x1a2133);
+    this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
     this.scene.add(this.grid);
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
@@ -504,19 +504,19 @@ export class HandLabEngine {
 
     const bounds = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(8.4, 5.4, 8)),
-      new THREE.LineBasicMaterial({ color: 0x2a3350 }),
+      new THREE.LineBasicMaterial({ color: 0xD8D2C2 }),
     );
     this.scene.add(bounds);
 
     /* ---------- floating cursor (the 3-axis pointer) ---------- */
     this.core = new THREE.Mesh(
       new THREE.SphereGeometry(0.11, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0x4da3ff }),
+      new THREE.MeshBasicMaterial({ color: 0x016A71 }),
     );
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.26, 0.018, 12, 40),
       new THREE.MeshBasicMaterial({
-        color: 0x4da3ff,
+        color: 0x016A71,
         transparent: true,
         opacity: 0.9,
       }),
@@ -524,13 +524,13 @@ export class HandLabEngine {
     this.zAxis = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 1, 8),
       new THREE.MeshBasicMaterial({
-        color: 0x4da3ff,
+        color: 0x016A71,
         transparent: true,
         opacity: 0.45,
       }),
     );
     this.zAxis.rotation.x = Math.PI / 2;
-    this.glow = new THREE.PointLight(0x4da3ff, 12, 6);
+    this.glow = new THREE.PointLight(0x016A71, 12, 6);
     this.glow.position.set(0, 0.2, 0);
     this.dropLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
@@ -538,7 +538,7 @@ export class HandLabEngine {
         new THREE.Vector3(),
       ]),
       new THREE.LineDashedMaterial({
-        color: 0x4da3ff,
+        color: 0x016A71,
         dashSize: 0.12,
         gapSize: 0.08,
         transparent: true,
@@ -1214,8 +1214,8 @@ export class HandLabEngine {
     const quick =
       performance.now() - this.pinchStartT < 380 && !this.pinchMoved;
     this.pinchHeld = false;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x4da3ff);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(0x4da3ff);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
     if (this.grabbed && !quick) {
       this.grabbed = null;
     }
@@ -2036,7 +2036,7 @@ export class HandLabEngine {
     this.dropLine.computeLineDistances();
 
     // cursor tint: green = pinching, amber = line mode, blue = normal
-    const cc = this.pinchHeld ? 0x3ddc84 : this.lineMode ? 0xffb224 : 0x4da3ff;
+    const cc = this.pinchHeld ? 0x3ddc84 : this.lineMode ? 0xffb224 : 0x016A71;
     (this.core.material as THREE.MeshBasicMaterial).color.setHex(cc);
     (this.ring.material as THREE.MeshBasicMaterial).color.setHex(cc);
     this.glow.color.setHex(cc);
@@ -2098,7 +2098,7 @@ export class HandLabEngine {
       c2d.style.display = s.behind ? "none" : "block";
       c2d.style.left = s.x + "px";
       c2d.style.top = s.y + "px";
-      const cb = this.pinchState ? "#3ddc84" : "#4da3ff";
+      const cb = this.pinchState ? "#3ddc84" : "#016A71";
       if (cb !== this.lastCur2dBorder) {
         this.lastCur2dBorder = cb;
         c2d.style.borderColor = cb;

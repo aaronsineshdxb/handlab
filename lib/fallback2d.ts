@@ -996,12 +996,12 @@ export class HandLabFallbackEngine {
       cv.height = Math.round(h * dpr);
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#08090d";
+    g.fillStyle = "#FCFCF9";
     g.fillRect(0, 0, w, h);
 
     if (this.grid) {
       const step = 40 * this.zoom;
-      g.strokeStyle = "rgba(44,58,85,.5)";
+      g.strokeStyle = "rgba(39,37,30,.12)";
       g.lineWidth = 1;
       g.beginPath();
       for (let x = w / 2 % step; x < w; x += step) {
@@ -1018,14 +1018,14 @@ export class HandLabFallbackEngine {
     // bounds
     const tl = this.toScreen(-WORLD_W / 2, WORLD_H / 2);
     const br = this.toScreen(WORLD_W / 2, -WORLD_H / 2);
-    g.strokeStyle = "#2a3350";
+      g.strokeStyle = "#CFC9B8";
     g.lineWidth = 1.5;
     g.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
 
     // chains
     for (const L of this.chains) {
       if (!L.pts.length) continue;
-      g.strokeStyle = L.closed ? "#3ddc84" : "#ffb224";
+      g.strokeStyle = L.closed ? "#2E7D46" : "#B26A00";
       g.lineWidth = 2;
       g.beginPath();
       L.pts.forEach((p, i) => {
@@ -1035,7 +1035,7 @@ export class HandLabFallbackEngine {
       });
       if (L.closed) g.closePath();
       g.stroke();
-      g.fillStyle = "#ffd76a";
+      g.fillStyle = "#9B6C22";
       for (const p of L.pts) {
         const s = this.toScreen(p.x, p.y);
         g.beginPath();
@@ -1051,7 +1051,7 @@ export class HandLabFallbackEngine {
       const r = base * 0.32;
       this.paintShape(g, o.s, s.x, s.y, r, o.c, o.rot);
       if (o === this.hovered || o === this.selected) {
-        g.strokeStyle = o === this.selected ? "#ff5d7a" : "#ffe27a";
+        g.strokeStyle = o === this.selected ? "#ff5d7a" : "#9B6C22";
         g.lineWidth = 2;
         g.beginPath();
         g.arc(s.x, s.y, r + 8, 0, 7);
@@ -1061,16 +1061,16 @@ export class HandLabFallbackEngine {
 
     // cursor
     const c = this.toScreen(this.cursor.x, this.cursor.y);
-    g.strokeStyle = this.pinchHeld ? "#3ddc84" : "#4da3ff";
+    g.strokeStyle = this.pinchHeld ? "#2E7D46" : "#016A71";
     g.lineWidth = 2;
     g.beginPath();
     g.arc(c.x, c.y, 10, 0, 7);
     g.stroke();
-    g.fillStyle = this.pinchHeld ? "#3ddc84" : "#4da3ff";
+    g.fillStyle = this.pinchHeld ? "#2E7D46" : "#016A71";
     g.beginPath();
     g.arc(c.x, c.y, 3.5, 0, 7);
     g.fill();
-    g.strokeStyle = "rgba(77,163,255,.5)";
+    g.strokeStyle = "rgba(1,106,113,.35)";
     g.beginPath();
     g.moveTo(c.x - 16, c.y);
     g.lineTo(c.x + 16, c.y);
@@ -1082,7 +1082,7 @@ export class HandLabFallbackEngine {
       const sn = this.findSnap(this.cursor);
       if (sn) {
         const sp = this.toScreen(sn.x, sn.y);
-        g.strokeStyle = "#3ddc84";
+        g.strokeStyle = "#2E7D46";
         g.lineWidth = 2;
         g.beginPath();
         g.arc(sp.x, sp.y, 12, 0, 7);
