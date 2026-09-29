@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import BlurText from "../components/bits/BlurText";
 
 export const metadata: Metadata = {
   title: "404 — Out of tracking range | HANDLAB",
@@ -18,7 +19,7 @@ export default function NotFound() {
           <span className="nf-core" />
         </div>
         <h1 className="nf-code">404</h1>
-        <p className="nf-title">Out of tracking range</p>
+        <BlurText as="p" text="Out of tracking range" className="nf-title blur-text" />
         <p className="nf-sub">
           No hand detected here — the cursor never landed on this page.
           It may have been moved, deleted, or never placed at all.

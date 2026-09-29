@@ -1,38 +1,41 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
 /* Hallmark · pre-emit critique: P5 H4 E5 S4 R5 V5 · contrast: pass (40-41) · mobile: pass (34,49,50-57) · nav: N1b · footer: Ft2 · slop: pass (42-45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) */
+/* Perplexity DNA: cream canvas #FCFCF9 · ink #27251E · single teal voltage #016A71
+ * pplxSans → Geist · pplxSerif → Newsreader · pill-first geometry · hairlines · quiet chrome */
 :root {
-  --color-paper: oklch(13% 0.012 250);
-  --color-paper-2: oklch(17% 0.014 250);
-  --color-paper-3: oklch(22% 0.014 250);
-  --color-ink: oklch(94% 0.008 250);
-  --color-ink-2: oklch(78% 0.01 250);
-  --color-rule: oklch(30% 0.014 250);
-  --color-rule-2: oklch(38% 0.014 250);
-  --color-muted: oklch(68% 0.018 250);
-  --color-neutral: oklch(58% 0.014 250);
-  --color-accent: oklch(68% 0.16 250);
-  --color-accent-2: oklch(64% 0.2 285);
-  --color-accent-ink: oklch(18% 0.02 250);
-  --color-focus: oklch(72% 0.2 250);
-  --color-good: oklch(72% 0.17 160);
-  --color-warn: oklch(76% 0.16 75);
-  --color-bad: oklch(64% 0.22 25);
-  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-outlier: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --display-weight: 700;
+  --color-paper: oklch(98.6% 0.005 95);
+  --color-paper-2: oklch(99.4% 0.003 95);
+  --color-paper-3: oklch(95.5% 0.008 88);
+  --color-ink: oklch(24% 0.012 85);
+  --color-ink-2: oklch(38% 0.012 85);
+  --color-rule: oklch(89% 0.008 85);
+  --color-rule-2: oklch(82% 0.01 85);
+  --color-muted: oklch(56% 0.01 85);
+  --color-neutral: oklch(45% 0.01 85);
+  --color-accent: oklch(45% 0.075 202);
+  --color-accent-2: oklch(62% 0.1 198);
+  --color-accent-ink: oklch(98.6% 0.005 95);
+  --color-focus: oklch(45% 0.075 202);
+  --color-good: oklch(55% 0.12 155);
+  --color-warn: oklch(52% 0.13 55);
+  --color-bad: oklch(50% 0.14 20);
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-outlier: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display-weight: 500;
   --display-style: normal;
-  --tracking-display: -0.02em;
-  --tracking-label: 0.1em;
+  --tracking-display: -0.015em;
+  --tracking-label: 0.04em;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
-  --text-md: 1.125rem;
-  --text-lg: 1.375rem;
-  --text-xl: 1.75rem;
-  --text-2xl: 2.25rem;
-  --text-display: clamp(2rem, 3vw + 1rem, 3.25rem);
-  --text-display-s: clamp(1.75rem, 2vw + 1rem, 2.5rem);
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-display: clamp(2rem, 3vw + 1rem, 3rem);
+  --text-display-s: clamp(1.625rem, 2vw + 1rem, 2.25rem);
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;
   --space-xs: 0.75rem;
@@ -45,10 +48,12 @@
   --space-4xl: 11rem;
   --rule-hair: 1px;
   --rule-fine: 2px;
-  --radius-card: 14px;
+  --radius-card: 16px;
   --radius-pill: 999px;
-  --radius-input: 8px;
-  --shadow-card: 0 24px 80px oklch(13% 0.012 250 / 0.5);
+  --radius-input: 12px;
+  --radius-chip: 6px;
+  --shadow-sm: 0 1px 2px oklch(24% 0.012 85 / 0.05);
+  --shadow-card: 0 4px 12px -2px oklch(24% 0.012 85 / 0.08), 0 2px 4px -2px oklch(24% 0.012 85 / 0.04);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
@@ -63,4 +68,26 @@
   --z-modal: 400;
   --z-toast: 500;
   --z-tooltip: 600;
+}
+
+/* Perplexity dark: canvas #100E12 · brightened teal #34B4C4 · elevation by lightness */
+[data-theme="dark"] {
+  --color-paper: oklch(15% 0.008 80);
+  --color-paper-2: oklch(20% 0.01 80);
+  --color-paper-3: oklch(25% 0.012 80);
+  --color-ink: oklch(93% 0.008 90);
+  --color-ink-2: oklch(80% 0.01 85);
+  --color-rule: oklch(28% 0.01 80);
+  --color-rule-2: oklch(34% 0.012 80);
+  --color-muted: oklch(68% 0.01 85);
+  --color-neutral: oklch(60% 0.01 85);
+  --color-accent: oklch(72% 0.09 205);
+  --color-accent-2: oklch(76% 0.1 198);
+  --color-accent-ink: oklch(15% 0.008 80);
+  --color-focus: oklch(72% 0.09 205);
+  --color-good: oklch(70% 0.14 155);
+  --color-warn: oklch(72% 0.12 65);
+  --color-bad: oklch(68% 0.13 20);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+  --shadow-card: 0 8px 24px -4px oklch(0% 0 0 / 0.5), 0 2px 6px -2px oklch(0% 0 0 / 0.4);
 }

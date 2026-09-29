@@ -1,25 +1,23 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Newsreader, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "../tokens.css";
+import "../components/bits/bits.css";
 import "./globals.css";
 
-const space = Space_Grotesk({
+const sans = Geist({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-space",
+  variable: "--font-sans",
 });
 
-const plex = IBM_Plex_Mono({
+const serif = Newsreader({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex",
+  variable: "--font-serif",
 });
 
-const plexSans = IBM_Plex_Sans({
+const mono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex-sans",
+  variable: "--font-mono",
 });
 
 const ICON_SVG =
@@ -30,13 +28,22 @@ export const metadata: Metadata = {
   description:
     "Webcam hand tracking → floating 3D cursor (x / y / z). Move your index finger, pinch to click, grab and place objects in 3D space.",
   icons: { icon: ICON_SVG },
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FCFCF9" },
+    { media: "(prefers-color-scheme: dark)", color: "#100E12" },
+  ],
 };
+
+const THEME_INIT = `(function(){try{var s=localStorage.getItem("handlab-theme");if(s!=="dark"&&s!=="light"){s=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.dataset.theme=s;}catch(e){document.documentElement.dataset.theme="light";}})();`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${space.variable} ${plex.variable} ${plexSans.variable}`}>
+    <html lang="en" data-theme="light" suppressHydrationWarning className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body>
         {children}
         <Analytics />

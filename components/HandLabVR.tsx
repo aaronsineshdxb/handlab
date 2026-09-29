@@ -9,6 +9,9 @@ import {
   type VrUiState,
 } from "../lib/vr-engine";
 import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
+import Magnet from "./bits/Magnet";
+import ColorWell from "./bits/ColorWell";
+import ThemeToggle from "./bits/ThemeToggle";
 
 const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -23,17 +26,9 @@ const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   capsule: { g: "⬯", label: "capsule" },
 };
 
-const SWATCHES = [
-  { c: "#4da3ff", name: "blue" },
-  { c: "#7c5cff", name: "violet" },
-  { c: "#3ddc84", name: "green" },
-  { c: "#ffb224", name: "amber" },
-  { c: "#ff5d7a", name: "pink" },
-];
-
 const initial: VrUiState = {
   shape: "cube",
-  color: "#4da3ff",
+  color: "#016A71",
   lineMode: false,
   grid: true,
   xr: "ready",
@@ -197,49 +192,33 @@ export default function HandLabVR() {
         <h2>SPAWN SHAPE</h2>
         <div className="shape-grid">
           {VR_SHAPES.map((s) => (
-            <button
-              key={s}
-              className={"shape-btn" + (ui.shape === s ? " active" : "")}
-              aria-pressed={ui.shape === s}
-              onClick={() => eng()?.setShape(s)}
-            >
-              <span className="g">{GLYPHS[s].g}</span>
-              {GLYPHS[s].label}
-            </button>
+            <Magnet key={s} strength={0.25}>
+              <button
+                className={"shape-btn" + (ui.shape === s ? " active" : "")}
+                aria-pressed={ui.shape === s}
+                onClick={() => eng()?.setShape(s)}
+              >
+                <span className="g">{GLYPHS[s].g}</span>
+                {GLYPHS[s].label}
+              </button>
+            </Magnet>
           ))}
         </div>
         <h2>COLOR</h2>
-        <div className="swatches">
-          {SWATCHES.map((s) => (
-            <div
-              key={s.c}
-              className={"sw" + (ui.color === s.c ? " active" : "")}
-              style={{ background: s.c }}
-              tabIndex={0}
-              role="button"
-              aria-label={s.name}
-              aria-pressed={ui.color === s.c}
-              onClick={() => eng()?.setColor(s.c)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  eng()?.setColor(s.c);
-                }
-              }}
-            ></div>
-          ))}
-        </div>
+        <ColorWell color={ui.color} onChange={(c) => eng()?.setColor(c)} />
         <h2>LINE</h2>
-        <button
-          className={"shape-btn" + (ui.lineMode ? " active" : "")}
-          style={{ gridColumn: "1/-1" }}
-          aria-pressed={ui.lineMode}
-          aria-live="polite"
-          aria-atomic="true"
-          onClick={() => eng()?.setLineMode(!ui.lineMode)}
-        >
-          <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
-        </button>
+        <Magnet style={{ display: "block" }} strength={0.2}>
+          <button
+            className={"shape-btn" + (ui.lineMode ? " active" : "")}
+            style={{ gridColumn: "1/-1", width: "100%" }}
+            aria-pressed={ui.lineMode}
+            aria-live="polite"
+            aria-atomic="true"
+            onClick={() => eng()?.setLineMode(!ui.lineMode)}
+          >
+            <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
+          </button>
+        </Magnet>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.finishLine()}>
             finish
@@ -288,6 +267,10 @@ export default function HandLabVR() {
           <button className="mini" style={{ width: "100%" }} onClick={() => eng()?.toggleGrid()}>
             grid: {ui.grid ? "on" : "off"}
           </button>
+        </div>
+        <h2>DISPLAY</h2>
+        <div className="tool-row">
+          <ThemeToggle />
         </div>
       </nav>
 

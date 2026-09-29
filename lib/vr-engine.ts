@@ -9,6 +9,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { requestVRSession } from "./xr/session";
 import {
+  SCENE_THEMES,
+  currentTheme,
+  onThemeChange,
+  type ThemeName,
+} from "./theme";
+import {
   clampTarget,
   isQuickTap,
   jointDistance,
@@ -104,6 +110,11 @@ export class VRHandLabEngine {
   private controls: OrbitControls | null = null;
   private grid: THREE.GridHelper;
   private clock = new THREE.Clock();
+  private hemi: THREE.HemisphereLight;
+  private rimLight: THREE.DirectionalLight;
+  private boundsMat: THREE.LineBasicMaterial;
+  private floorMat: THREE.ShadowMaterial;
+  private themeOff: (() => void) | null = null;
 
   private cursor = new THREE.Group();
   private core: THREE.Mesh;
@@ -112,7 +123,7 @@ export class VRHandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: VrShapeName = "cube";
-  private color = "#4da3ff";
+  private color = "#016A71";
   private geoCache: Partial<Record<VrShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hovered: THREE.Mesh | null = null;
@@ -186,8 +197,8 @@ export class VRHandLabEngine {
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType("local-floor");
 
-    this.scene.background = new THREE.Color(0x08090d);
-    this.scene.fog = new THREE.Fog(0x08090d, 14, 30);
+    this.scene.background = new THREE.Color(0xFCFCF9);
+    this.scene.fog = new THREE.Fog(0xFCFCF9, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -206,42 +217,47 @@ export class VRHandLabEngine {
     this.controls.maxDistance = 16;
     this.controls.minDistance = 1;
 
-    this.scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x1a1410, 0.9));
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9);
+    this.scene.add(this.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0x7c5cff, 1.1);
-    rim.position.set(-5, 3, -4);
-    this.scene.add(rim);
+    this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
+    this.rimLight.position.set(-5, 3, -4);
+    this.scene.add(this.rimLight);
 
-    this.grid = new THREE.GridHelper(14, 28, 0x2c3a55, 0x1a2133);
+    this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
     this.scene.add(this.grid);
+    this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
-      new THREE.ShadowMaterial({ opacity: 0.32 }),
+      this.floorMat,
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -1.4;
     floor.receiveShadow = true;
     this.scene.add(floor);
+    this.boundsMat = new THREE.LineBasicMaterial({ color: 0xD8D2C2 });
     const bounds = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(8.4, 5.4, 8)),
-      new THREE.LineBasicMaterial({ color: 0x2a3350 }),
+      this.boundsMat,
     );
     bounds.position.y = 0.4;
     this.scene.add(bounds);
+    this.applySceneTheme(currentTheme());
+    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
     // cursor
     this.core = new THREE.Mesh(
       new THREE.SphereGeometry(0.05, 20, 20),
-      new THREE.MeshBasicMaterial({ color: 0x4da3ff }),
+      new THREE.MeshBasicMaterial({ color: 0x016A71 }),
     );
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.12, 0.012, 10, 32),
       new THREE.MeshBasicMaterial({
-        color: 0x4da3ff,
+        color: 0x016A71,
         transparent: true,
         opacity: 0.9,
         depthTest: false,
@@ -255,7 +271,7 @@ export class VRHandLabEngine {
     this.hoverRing = new THREE.Mesh(
       new THREE.TorusGeometry(0.55, 0.025, 10, 40),
       new THREE.MeshBasicMaterial({
-        color: 0xffe27a,
+        color: 0xB26A00,
         transparent: true,
         opacity: 0.9,
         depthTest: false,
@@ -296,7 +312,7 @@ export class VRHandLabEngine {
       c.add(
         new THREE.Line(
           laserGeo,
-          new THREE.LineBasicMaterial({ color: 0x4da3ff, transparent: true, opacity: 0.7 }),
+          new THREE.LineBasicMaterial({ color: 0x016A71, transparent: true, opacity: 0.7 }),
         ),
       );
       const idx = i;
@@ -403,7 +419,7 @@ export class VRHandLabEngine {
     const moved = start ? start.distanceTo(this.cursorPos) : 99;
     const quick = isQuickTap(downAt, performance.now(), moved);
     const wasGrabbing = this.grabbed !== null;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x4da3ff);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
     if (quick && !wasGrabbing) this.tapAction();
     if (!quick || !wasGrabbing) {
       // hold-release drops a grabbed object
@@ -828,7 +844,7 @@ export class VRHandLabEngine {
     const downAt = this.pressT.get("mouse") ?? 0;
     const moved = this.mouseDownPos.distanceTo(this.cursorPos);
     this.pressT.delete("mouse");
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x4da3ff);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
     const wasGrabbing = this.grabbed !== null;
     if (isQuickTap(downAt, performance.now(), moved) && !wasGrabbing) this.tapAction();
     this.grabbed = null;
@@ -882,8 +898,31 @@ export class VRHandLabEngine {
     });
   }
 
+  /** Re-skin scene chrome for the current UI theme. Placed objects are
+   *  user data and keep their colors. */
+  private applySceneTheme(name: ThemeName): void {
+    const p = SCENE_THEMES[name];
+    (this.scene.background as THREE.Color).setHex(p.bg);
+    (this.scene.fog as THREE.Fog).color.setHex(p.bg);
+    this.hemi.color.setHex(p.hemiSky);
+    this.hemi.groundColor.setHex(p.hemiGround);
+    this.rimLight.color.setHex(p.rim);
+    this.rimLight.intensity = p.rimIntensity;
+    this.boundsMat.color.setHex(p.bounds);
+    this.floorMat.opacity = p.floorOpacity;
+    this.scene.remove(this.grid);
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
+    this.grid = new THREE.GridHelper(14, 28, p.gridCenter, p.gridMain);
+    this.scene.add(this.grid);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.themeOff?.();
+    this.themeOff = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.onResize);
     this.opts.canvas.removeEventListener("pointermove", this.onPointerMove);

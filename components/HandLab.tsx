@@ -12,6 +12,10 @@ import {
 import { HandLabFallbackEngine } from "../lib/fallback2d";
 import LessonPanel from "./LessonPanel";
 import DomainSwitcher from "./DomainSwitcher";
+import Dock from "./bits/Dock";
+import Magnet from "./bits/Magnet";
+import ColorWell from "./bits/ColorWell";
+import ThemeToggle from "./bits/ThemeToggle";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import type { SceneSnap } from "../lib/lessons/checks";
@@ -30,14 +34,6 @@ const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   octa: { g: "◇", label: "octa" },
   capsule: { g: "⬯", label: "capsule" },
 };
-
-const SWATCHES = [
-  { c: "#4da3ff", name: "blue" },
-  { c: "#7c5cff", name: "violet" },
-  { c: "#3ddc84", name: "green" },
-  { c: "#ffb224", name: "amber" },
-  { c: "#ff5d7a", name: "pink" },
-];
 
 export default function HandLab() {
   const [ui, setUi] = useState<UiState>(initialUiState);
@@ -426,55 +422,38 @@ export default function HandLab() {
         <h2>SPAWN SHAPE [1–0]</h2>
         <div className="shape-grid">
           {SHAPES.map((s) => (
-            <button
-              key={s}
-              className={
-                "shape-btn" + (ui.shape === s ? " active" : "")
-              }
-              data-shape={s}
-              aria-pressed={ui.shape === s}
-              onClick={() => eng()?.setShape(s)}
-            >
-              <span className="g">{SHAPE_GLYPHS[s].g}</span>
-              {SHAPE_GLYPHS[s].label}
-            </button>
+            <Magnet key={s} strength={0.25}>
+              <button
+                className={
+                  "shape-btn" + (ui.shape === s ? " active" : "")
+                }
+                data-shape={s}
+                aria-pressed={ui.shape === s}
+                onClick={() => eng()?.setShape(s)}
+              >
+                <span className="g">{SHAPE_GLYPHS[s].g}</span>
+                {SHAPE_GLYPHS[s].label}
+              </button>
+            </Magnet>
           ))}
         </div>
         <h2>COLOR</h2>
-        <div className="swatches">
-          {SWATCHES.map((s) => (
-            <div
-              key={s.c}
-              className={"sw" + (ui.color === s.c ? " active" : "")}
-              data-c={s.c}
-              style={{ background: s.c }}
-              tabIndex={0}
-              role="button"
-              aria-label={s.name}
-              aria-pressed={ui.color === s.c}
-              onClick={() => eng()?.setColor(s.c)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  eng()?.setColor(s.c);
-                }
-              }}
-            ></div>
-          ))}
-        </div>
+        <ColorWell color={ui.color} onChange={(c) => eng()?.setColor(c)} />
         <h2>LINE [L]</h2>
         <div className="shape-grid">
-          <button
-            className={"shape-btn" + (ui.lineMode ? " active" : "")}
-            id="btn-line"
-            aria-pressed={ui.lineMode}
-            aria-live="polite"
-            aria-atomic="true"
-            style={{ gridColumn: "1/-1" }}
-            onClick={() => eng()?.setLineMode(!ui.lineMode)}
-          >
-            <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
-          </button>
+          <Magnet style={{ gridColumn: "1/-1" }} strength={0.2}>
+            <button
+              className={"shape-btn" + (ui.lineMode ? " active" : "")}
+              id="btn-line"
+              aria-pressed={ui.lineMode}
+              aria-live="polite"
+              aria-atomic="true"
+              style={{ gridColumn: "1/-1", width: "100%" }}
+              onClick={() => eng()?.setLineMode(!ui.lineMode)}
+            >
+              <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
+            </button>
+          </Magnet>
         </div>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.toggleSnap()}>
@@ -539,6 +518,10 @@ export default function HandLab() {
           <button className="mini" onClick={() => lessonFileRef.current?.click()}>
             lesson ↑
           </button>
+        </div>
+        <h2>DISPLAY</h2>
+        <div className="tool-row">
+          <ThemeToggle />
         </div>
         <input
           ref={fileRef}
@@ -643,52 +626,60 @@ export default function HandLab() {
         </div>
       </div>
 
-      <div className="controls">
-        <button
-          className="btn"
-          onClick={() =>
-            ui.cam === "loading"
-              ? eng()?.cancelWebcamLoad()
-              : eng()?.enableWebcam()
-          }
-        >
-          {ui.cam === "live"
-            ? "Restart webcam"
-            : ui.cam === "loading"
-              ? "Cancel load"
-              : "Enable webcam"}
-        </button>
-        <button
-          className="btn ghost"
-          title="Re-anchor hand control to the current cursor spot (R)"
-          onClick={() => eng()?.recenter()}
-        >
-          recenter
-        </button>
-        <button className="btn ghost" onClick={() => eng()?.toggleSpin()}>
-          auto-rotate: {ui.spin ? "on" : "off"}
-        </button>
-        <button className="btn ghost" onClick={() => eng()?.toggleGrid()}>
-          grid: {ui.grid ? "on" : "off"}
-        </button>
-        <button
-          className="btn ghost"
-          aria-expanded={helpOpen}
-          aria-controls="hint-panel"
-          onClick={() => setHelpOpen(!helpOpen)}
-        >
-          gestures: {helpOpen ? "shown" : "hidden"}
-        </button>
-        <button
-          className="btn ghost"
-          disabled={!!lessonId}
-          aria-expanded={previewOpen && !lessonId}
-          aria-controls="video-dock"
-          onClick={() => setPreviewOpen(!previewOpen)}
-        >
-          camera: {previewOpen && !lessonId ? "shown" : "hidden"}
-        </button>
-      </div>
+      <Dock
+        label="Lab controls"
+        items={[
+          {
+            id: "webcam",
+            label:
+              ui.cam === "live"
+                ? "Restart webcam"
+                : ui.cam === "loading"
+                  ? "Cancel load"
+                  : "Enable webcam",
+            primary: true,
+            onClick: () =>
+              ui.cam === "loading"
+                ? eng()?.cancelWebcamLoad()
+                : eng()?.enableWebcam(),
+          },
+          {
+            id: "recenter",
+            label: "recenter",
+            title: "Re-anchor hand control to the current cursor spot (R)",
+            onClick: () => eng()?.recenter(),
+          },
+          {
+            id: "spin",
+            label: `auto-rotate: ${ui.spin ? "on" : "off"}`,
+            active: ui.spin,
+            onClick: () => eng()?.toggleSpin(),
+          },
+          {
+            id: "grid",
+            label: `grid: ${ui.grid ? "on" : "off"}`,
+            active: ui.grid,
+            onClick: () => eng()?.toggleGrid(),
+          },
+          {
+            id: "gestures",
+            label: `gestures: ${helpOpen ? "shown" : "hidden"}`,
+            active: helpOpen,
+            expanded: helpOpen,
+            controls: "hint-panel",
+            onClick: () => setHelpOpen(!helpOpen),
+          },
+          {
+            id: "camera",
+            label: `camera: ${previewOpen && !lessonId ? "shown" : "hidden"}`,
+            active: previewOpen && !lessonId,
+            disabled: !!lessonId,
+            expanded: previewOpen && !lessonId,
+            controls: "video-dock",
+            onClick: () => setPreviewOpen(!previewOpen),
+          },
+        ]}
+      />
 
       <div id="depthbar" className={lessonId ? "lesson-mode-hidden" : ""}>
         DEPTH (Z){" "}

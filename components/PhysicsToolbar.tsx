@@ -6,6 +6,9 @@
  * Buttons are enabled as selection state now so page layout / a11y
  * can be verified before the Rapier WASM integration lands.
  */
+import Magnet from "./bits/Magnet";
+import ThemeToggle from "./bits/ThemeToggle";
+
 const TOOLS = [
   { id: "ramp", icon: "RMP", label: "Ramp" },
   { id: "cart", icon: "CRT", label: "Cart" },
@@ -31,23 +34,28 @@ export default function PhysicsToolbar({
       <h2>PHYSICS TOOLS</h2>
       <div className="shape-grid">
         {TOOLS.map(({ id, icon, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={"shape-btn" + (active === id ? " active" : "")}
-            aria-pressed={active === id}
-            onClick={() => onSelect(id)}
-          >
-            <span className="g" aria-hidden="true">
-              {icon}
-            </span>
-            {label}
-          </button>
+          <Magnet key={id} strength={0.25}>
+            <button
+              type="button"
+              className={"shape-btn" + (active === id ? " active" : "")}
+              aria-pressed={active === id}
+              onClick={() => onSelect(id)}
+            >
+              <span className="g" aria-hidden="true">
+                {icon}
+              </span>
+              {label}
+            </button>
+          </Magnet>
         ))}
       </div>
       <p className="m-sub" style={{ marginTop: 8 }}>
         Rapier rigid bodies land in Sprint 1 — selection is staged first.
       </p>
+      <h2 style={{ marginTop: 8 }}>DISPLAY</h2>
+      <div className="tool-row">
+        <ThemeToggle />
+      </div>
     </nav>
   );
 }
