@@ -42,6 +42,33 @@ Axes: light / geometric-sans / cool.
 - `--color-warn`    oklch(52% 0.13 55)     — warning #97431A family
 - `--color-bad`     oklch(50% 0.14 20)     — negative #A23544 family
 
+## Dark mode
+First-class, Perplexity-style. `data-theme="dark"` on `<html>` re-keys every
+token; a blocking init script in layout paints the stored choice (else the OS
+preference) before first paint. Toggle lives in each lab toolbar (DISPLAY
+section), persists to `localStorage(handlab-theme)`. The 3D engines subscribe
+via `lib/theme.ts` (`SCENE_THEMES` + MutationObserver) and re-skin background,
+fog, grid, bounds, lights, floor shadow, and rest-state cursor; pinch/line
+state tints swap to their bright pair. Placed-object colors are user data and
+never change with the theme. 2D fallback picks its palette per frame.
+
+- `--color-paper`   oklch(15% 0.008 80)   — canvas #100E12
+- `--color-paper-2` oklch(20% 0.01 80)    — cards
+- `--color-paper-3` oklch(25% 0.012 80)   — fills
+- `--color-ink`     oklch(93% 0.008 90)   — warm white text
+- `--color-ink-2`   oklch(80% 0.01 85)
+- `--color-rule`    oklch(28% 0.01 80)
+- `--color-rule-2`  oklch(34% 0.012 80)
+- `--color-muted`   oklch(68% 0.01 85)
+- `--color-neutral` oklch(60% 0.01 85)
+- `--color-accent`  oklch(72% 0.09 205)   — brightened teal #34B4C4
+- `--color-accent-ink` oklch(15% 0.008 80) — near-black text on teal
+- `--color-focus`   oklch(72% 0.09 205)
+- `--color-good`    oklch(70% 0.14 155)
+- `--color-warn`    oklch(72% 0.12 65)
+- `--color-bad`     oklch(68% 0.13 20)
+- Shadows go black-based on dark (elevation still reads via lightness steps).
+
 Legacy aliases (do not use in new code, kept for compatibility):
 `--bg` → `--color-paper`, `--surface` → `--color-paper-2`,
 `--surface2` → `--color-paper-3`, `--fg` → `--color-ink`,

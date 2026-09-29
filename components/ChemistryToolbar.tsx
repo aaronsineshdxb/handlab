@@ -1,6 +1,7 @@
 "use client";
 
 import Magnet from "./bits/Magnet";
+import ThemeToggle from "./bits/ThemeToggle";
 
 /**
  * Chemistry palette (blueprint §6.2).
@@ -80,6 +81,10 @@ export default function ChemistryToolbar({
       <p className="m-sub" style={{ marginTop: 8 }}>
         VSEPR snapping + fluids land in Sprints 2–3.
       </p>
+      <h2 style={{ marginTop: 8 }}>DISPLAY</h2>
+      <div className="tool-row">
+        <ThemeToggle />
+      </div>
     </nav>
   );
 }

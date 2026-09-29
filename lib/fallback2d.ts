@@ -996,12 +996,26 @@ export class HandLabFallbackEngine {
       cv.height = Math.round(h * dpr);
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#FCFCF9";
+    // Scene chrome follows the UI theme; placed objects are user data.
+    const dark = document.documentElement.dataset.theme === "dark";
+    const C = {
+      bg: dark ? "#100E12" : "#FCFCF9",
+      gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
+      grid: dark ? "#2A2721" : "#CFC9B8",
+      snap: dark ? "#3ddc84" : "#2E7D46",
+      line: dark ? "#ffb224" : "#B26A00",
+      vertex: dark ? "#ffd76a" : "#9B6C22",
+      unselected: dark ? "#ffe27a" : "#9B6C22",
+      cursor: dark ? "#34B4C4" : "#016A71",
+      pinch: dark ? "#3ddc84" : "#2E7D46",
+      halo: dark ? "rgba(52,180,196,.4)" : "rgba(1,106,113,.35)",
+    };
+    g.fillStyle = C.bg;
     g.fillRect(0, 0, w, h);
 
     if (this.grid) {
       const step = 40 * this.zoom;
-      g.strokeStyle = "rgba(39,37,30,.12)";
+      g.strokeStyle = C.gridFaint;
       g.lineWidth = 1;
       g.beginPath();
       for (let x = w / 2 % step; x < w; x += step) {
@@ -1018,14 +1032,14 @@ export class HandLabFallbackEngine {
     // bounds
     const tl = this.toScreen(-WORLD_W / 2, WORLD_H / 2);
     const br = this.toScreen(WORLD_W / 2, -WORLD_H / 2);
-      g.strokeStyle = "#CFC9B8";
+      g.strokeStyle = C.grid;
     g.lineWidth = 1.5;
     g.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
 
     // chains
     for (const L of this.chains) {
       if (!L.pts.length) continue;
-      g.strokeStyle = L.closed ? "#2E7D46" : "#B26A00";
+      g.strokeStyle = L.closed ? C.snap : C.line;
       g.lineWidth = 2;
       g.beginPath();
       L.pts.forEach((p, i) => {
@@ -1035,7 +1049,7 @@ export class HandLabFallbackEngine {
       });
       if (L.closed) g.closePath();
       g.stroke();
-      g.fillStyle = "#9B6C22";
+      g.fillStyle = C.vertex;
       for (const p of L.pts) {
         const s = this.toScreen(p.x, p.y);
         g.beginPath();
@@ -1051,7 +1065,7 @@ export class HandLabFallbackEngine {
       const r = base * 0.32;
       this.paintShape(g, o.s, s.x, s.y, r, o.c, o.rot);
       if (o === this.hovered || o === this.selected) {
-        g.strokeStyle = o === this.selected ? "#ff5d7a" : "#9B6C22";
+        g.strokeStyle = o === this.selected ? "#ff5d7a" : C.unselected;
         g.lineWidth = 2;
         g.beginPath();
         g.arc(s.x, s.y, r + 8, 0, 7);
@@ -1061,16 +1075,16 @@ export class HandLabFallbackEngine {
 
     // cursor
     const c = this.toScreen(this.cursor.x, this.cursor.y);
-    g.strokeStyle = this.pinchHeld ? "#2E7D46" : "#016A71";
+    g.strokeStyle = this.pinchHeld ? C.pinch : C.cursor;
     g.lineWidth = 2;
     g.beginPath();
     g.arc(c.x, c.y, 10, 0, 7);
     g.stroke();
-    g.fillStyle = this.pinchHeld ? "#2E7D46" : "#016A71";
+    g.fillStyle = this.pinchHeld ? C.pinch : C.cursor;
     g.beginPath();
     g.arc(c.x, c.y, 3.5, 0, 7);
     g.fill();
-    g.strokeStyle = "rgba(1,106,113,.35)";
+    g.strokeStyle = C.halo;
     g.beginPath();
     g.moveTo(c.x - 16, c.y);
     g.lineTo(c.x + 16, c.y);
@@ -1082,7 +1096,7 @@ export class HandLabFallbackEngine {
       const sn = this.findSnap(this.cursor);
       if (sn) {
         const sp = this.toScreen(sn.x, sn.y);
-        g.strokeStyle = "#2E7D46";
+        g.strokeStyle = C.snap;
         g.lineWidth = 2;
         g.beginPath();
         g.arc(sp.x, sp.y, 12, 0, 7);

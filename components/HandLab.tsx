@@ -14,6 +14,7 @@ import LessonPanel from "./LessonPanel";
 import DomainSwitcher from "./DomainSwitcher";
 import Dock from "./bits/Dock";
 import Magnet from "./bits/Magnet";
+import ThemeToggle from "./bits/ThemeToggle";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import type { SceneSnap } from "../lib/lessons/checks";
@@ -544,6 +545,10 @@ export default function HandLab() {
           <button className="mini" onClick={() => lessonFileRef.current?.click()}>
             lesson ↑
           </button>
+        </div>
+        <h2>DISPLAY</h2>
+        <div className="tool-row">
+          <ThemeToggle />
         </div>
         <input
           ref={fileRef}

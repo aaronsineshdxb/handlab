@@ -7,6 +7,7 @@
  * can be verified before the Rapier WASM integration lands.
  */
 import Magnet from "./bits/Magnet";
+import ThemeToggle from "./bits/ThemeToggle";
 
 const TOOLS = [
   { id: "ramp", icon: "RMP", label: "Ramp" },
@@ -51,6 +52,10 @@ export default function PhysicsToolbar({
       <p className="m-sub" style={{ marginTop: 8 }}>
         Rapier rigid bodies land in Sprint 1 — selection is staged first.
       </p>
+      <h2 style={{ marginTop: 8 }}>DISPLAY</h2>
+      <div className="tool-row">
+        <ThemeToggle />
+      </div>
     </nav>
   );
 }

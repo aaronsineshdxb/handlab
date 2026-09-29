@@ -69,3 +69,25 @@
   --z-toast: 500;
   --z-tooltip: 600;
 }
+
+/* Perplexity dark: canvas #100E12 · brightened teal #34B4C4 · elevation by lightness */
+[data-theme="dark"] {
+  --color-paper: oklch(15% 0.008 80);
+  --color-paper-2: oklch(20% 0.01 80);
+  --color-paper-3: oklch(25% 0.012 80);
+  --color-ink: oklch(93% 0.008 90);
+  --color-ink-2: oklch(80% 0.01 85);
+  --color-rule: oklch(28% 0.01 80);
+  --color-rule-2: oklch(34% 0.012 80);
+  --color-muted: oklch(68% 0.01 85);
+  --color-neutral: oklch(60% 0.01 85);
+  --color-accent: oklch(72% 0.09 205);
+  --color-accent-2: oklch(76% 0.1 198);
+  --color-accent-ink: oklch(15% 0.008 80);
+  --color-focus: oklch(72% 0.09 205);
+  --color-good: oklch(70% 0.14 155);
+  --color-warn: oklch(72% 0.12 65);
+  --color-bad: oklch(68% 0.13 20);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+  --shadow-card: 0 8px 24px -4px oklch(0% 0 0 / 0.5), 0 2px 6px -2px oklch(0% 0 0 / 0.4);
+}

@@ -10,6 +10,7 @@ import {
 } from "../lib/vr-engine";
 import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
 import Magnet from "./bits/Magnet";
+import ThemeToggle from "./bits/ThemeToggle";
 
 const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -292,6 +293,10 @@ export default function HandLabVR() {
           <button className="mini" style={{ width: "100%" }} onClick={() => eng()?.toggleGrid()}>
             grid: {ui.grid ? "on" : "off"}
           </button>
+        </div>
+        <h2>DISPLAY</h2>
+        <div className="tool-row">
+          <ThemeToggle />
         </div>
       </nav>
 

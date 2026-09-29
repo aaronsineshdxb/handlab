@@ -28,13 +28,22 @@ export const metadata: Metadata = {
   description:
     "Webcam hand tracking → floating 3D cursor (x / y / z). Move your index finger, pinch to click, grab and place objects in 3D space.",
   icons: { icon: ICON_SVG },
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FCFCF9" },
+    { media: "(prefers-color-scheme: dark)", color: "#100E12" },
+  ],
 };
+
+const THEME_INIT = `(function(){try{var s=localStorage.getItem("handlab-theme");if(s!=="dark"&&s!=="light"){s=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.dataset.theme=s;}catch(e){document.documentElement.dataset.theme="light";}})();`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+    <html lang="en" data-theme="light" suppressHydrationWarning className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body>
         {children}
         <Analytics />

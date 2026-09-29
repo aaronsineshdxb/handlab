@@ -9,6 +9,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { requestVRSession } from "./xr/session";
 import {
+  SCENE_THEMES,
+  currentTheme,
+  onThemeChange,
+  type ThemeName,
+} from "./theme";
+import {
   clampTarget,
   isQuickTap,
   jointDistance,
@@ -104,6 +110,11 @@ export class VRHandLabEngine {
   private controls: OrbitControls | null = null;
   private grid: THREE.GridHelper;
   private clock = new THREE.Clock();
+  private hemi: THREE.HemisphereLight;
+  private rimLight: THREE.DirectionalLight;
+  private boundsMat: THREE.LineBasicMaterial;
+  private floorMat: THREE.ShadowMaterial;
+  private themeOff: (() => void) | null = null;
 
   private cursor = new THREE.Group();
   private core: THREE.Mesh;
@@ -206,32 +217,37 @@ export class VRHandLabEngine {
     this.controls.maxDistance = 16;
     this.controls.minDistance = 1;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9));
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9);
+    this.scene.add(this.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0x016A71, 0.7);
-    rim.position.set(-5, 3, -4);
-    this.scene.add(rim);
+    this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
+    this.rimLight.position.set(-5, 3, -4);
+    this.scene.add(this.rimLight);
 
     this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
     this.scene.add(this.grid);
+    this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
-      new THREE.ShadowMaterial({ opacity: 0.32 }),
+      this.floorMat,
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -1.4;
     floor.receiveShadow = true;
     this.scene.add(floor);
+    this.boundsMat = new THREE.LineBasicMaterial({ color: 0xD8D2C2 });
     const bounds = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(8.4, 5.4, 8)),
-      new THREE.LineBasicMaterial({ color: 0xD8D2C2 }),
+      this.boundsMat,
     );
     bounds.position.y = 0.4;
     this.scene.add(bounds);
+    this.applySceneTheme(currentTheme());
+    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
     // cursor
     this.core = new THREE.Mesh(
@@ -255,7 +271,7 @@ export class VRHandLabEngine {
     this.hoverRing = new THREE.Mesh(
       new THREE.TorusGeometry(0.55, 0.025, 10, 40),
       new THREE.MeshBasicMaterial({
-        color: 0xffe27a,
+        color: 0xB26A00,
         transparent: true,
         opacity: 0.9,
         depthTest: false,
@@ -882,8 +898,31 @@ export class VRHandLabEngine {
     });
   }
 
+  /** Re-skin scene chrome for the current UI theme. Placed objects are
+   *  user data and keep their colors. */
+  private applySceneTheme(name: ThemeName): void {
+    const p = SCENE_THEMES[name];
+    (this.scene.background as THREE.Color).setHex(p.bg);
+    (this.scene.fog as THREE.Fog).color.setHex(p.bg);
+    this.hemi.color.setHex(p.hemiSky);
+    this.hemi.groundColor.setHex(p.hemiGround);
+    this.rimLight.color.setHex(p.rim);
+    this.rimLight.intensity = p.rimIntensity;
+    this.boundsMat.color.setHex(p.bounds);
+    this.floorMat.opacity = p.floorOpacity;
+    this.scene.remove(this.grid);
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
+    this.grid = new THREE.GridHelper(14, 28, p.gridCenter, p.gridMain);
+    this.scene.add(this.grid);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.themeOff?.();
+    this.themeOff = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.onResize);
     this.opts.canvas.removeEventListener("pointermove", this.onPointerMove);
