@@ -10,9 +10,16 @@ const sans = Geist({
   variable: "--font-sans",
 });
 
+// Newsreader is a 60KB decorative face used only by the 404 page, the VR fatal
+// message and the (currently redirected) physics/chemistry viewer. It is never
+// rendered on the lab route, so preloading it put 60KB on the critical path
+// for a font nobody sees. preload:false still delivers it for the pages that
+// do use it — the browser fetches the woff2 on first use, not on parse.
 const serif = Newsreader({
   subsets: ["latin"],
   variable: "--font-serif",
+  display: "swap",
+  preload: false,
 });
 
 const mono = Geist_Mono({
