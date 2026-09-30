@@ -1,1 +1,0 @@
-{"accent": "hex #4da3ff, migrated to oklch(68% 0.16 250)", "date": "2026-09-28", "fonts": "Space Grotesk + IBM Plex Mono via next/font (app/layout.tsx)", "framework": "Next.js 15 app router", "motion": "motion-cut (three only, no framer-motion/gsap)", "palette": "hex :root in app/globals.css, dark intent", "spacing": "ad-hoc px, --radius:14px, no --space-* scale"}
