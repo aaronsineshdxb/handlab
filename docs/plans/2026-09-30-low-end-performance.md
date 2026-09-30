@@ -2355,7 +2355,23 @@ git commit -m "perf: stop preloading the display face on the canvas route"
 
 ---
 
-### Task 26: Swap `motion/react` for `LazyMotion`
+### Task 26: Swap `motion/react` for `LazyMotion` — ❌ TRIED AND REVERTED
+
+> **Outcome (2026-09-30): reverted, do not re-attempt without new evidence.**
+> Measured both ways on a real build:
+>
+> | Variant | eager `/` | lazy HandLab | to interactive |
+> |---|---:|---:|---:|
+> | without LazyMotion | 102.0 KB | 219.2 KB | **321.2 KB** |
+> | with LazyMotion (`m` + `domMax`) | 102.0 KB | 246.1 KB | **348.1 KB** |
+>
+> `LazyMotion` puts the `m` runtime in the root layout — which every route
+> includes — *and* leaves the feature set to load again on top of the lazy
+> HandLab chunk. That is 27 KB worse, and it costs a provider, six component
+> rewrites, and a `domMax` indirection. Route code splitting (Task 23) already
+> moved Motion off the critical path, so there was nothing left to win.
+>
+> Original objective follows for the record.
 
 **Objective:** Cut 45 KB gzip from the critical path by deferring the animation features until something actually animates.
 
@@ -2660,7 +2676,7 @@ Expected: no output
 | 23 — route code splitting | ☐ | |
 | 24 — lazy fallback engine | ☐ | |
 | 25 — font trim | ☐ | |
-| 26 — LazyMotion | ☐ | |
+| 26 — LazyMotion | ☐ **reverted** | measured 27KB worse; see task header |
 | 27 — budget green | ☐ | |
 | 28 — README | ☐ | |
 | 29 — profiling protocol | ☐ | |

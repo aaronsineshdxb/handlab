@@ -8,11 +8,15 @@ import { describe, expect, it } from "vitest";
  *
  * History:
  *   baseline 2026-09-30  /page 324.7 KB, /vr/page 321.5 KB (Three.js eager)
- *   after code splitting  /page 102.2 KB, /vr/page 102.2 KB
+ *   after code splitting  /page 102.0 KB, /vr/page 102.0 KB
  *
  * Numbers below are the post-split measurements plus ~5% headroom. Do not raise
  * one to make a build pass — if a legitimate change needs more weight, say so
  * in review instead.
+ *
+ * Note: LazyMotion was tried and reverted. Deferring Motion's features put the
+ * `m` runtime in both the layout and the lazy HandLab chunk, taking the route
+ * to 348KB to interactive versus 321KB without it.
  */
 const BUDGET_GZ: Record<string, number> = {
   "/page": 108 * 1024,
