@@ -26,6 +26,29 @@ const CSP = [
 const nextConfig: NextConfig = {
   async headers() {
     return [
+      // Order matters: these specific rules must precede the /(.*) catch-all.
+      // The vendored MediaPipe runtime (11.8MB) and hand model (7.8MB) are
+      // content-stable and never change in place, so they are safe to cache
+      // immutably. Without this, every cold session pays a revalidation round
+      // trip for 19.6MB before the webcam can initialise.
+      {
+        source: "/wasm/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/models/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [
