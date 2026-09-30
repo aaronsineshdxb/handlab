@@ -69,6 +69,7 @@ export default function HandLab() {
   const tCountRef = useRef<HTMLElement>(null);
   const tModelRef = useRef<HTMLSpanElement>(null);
   const tFpsRef = useRef<HTMLSpanElement>(null);
+  const tPrRef = useRef<HTMLSpanElement>(null);
   const tZRef = useRef<HTMLSpanElement>(null);
   const depthiRef = useRef<HTMLElement>(null);
 
@@ -97,6 +98,7 @@ export default function HandLab() {
       !tCountRef.current ||
       !tModelRef.current ||
       !tFpsRef.current ||
+      !tPrRef.current ||
       !tZRef.current ||
       !depthiRef.current
     )
@@ -109,6 +111,7 @@ export default function HandLab() {
       "t-count": tCountRef.current,
       "t-model": tModelRef.current,
       "t-fps": tFpsRef.current,
+      "t-pr": tPrRef.current,
       "t-z": tZRef.current,
       depthi: depthiRef.current,
     };
@@ -741,6 +744,9 @@ export default function HandLab() {
           </span>
           <span id="t-fps" ref={tFpsRef}>
             — fps
+          </span>
+          <span id="t-pr" ref={tPrRef}>
+            render —
           </span>
         </div>
         <div style={{ position: "relative" }}>

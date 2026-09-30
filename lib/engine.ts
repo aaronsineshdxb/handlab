@@ -8,6 +8,7 @@ import { fuseDepth } from "./depth/fusion";
 import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
+import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -75,6 +76,7 @@ export interface HudNodes {
   "t-count": HTMLElement;
   "t-model": HTMLElement;
   "t-fps": HTMLElement;
+  "t-pr": HTMLElement;
   "t-z": HTMLElement;
   depthi: HTMLElement;
 }
@@ -526,8 +528,8 @@ export class HandLabEngine {
   constructor(opts: EngineOpts) {
     this.opts = opts;
     const dpr = window.devicePixelRatio || 1;
-    this.prNow = Math.min(dpr, 2);
-    this.PR_MAX = Math.min(dpr, 2);
+    this.prNow = Math.min(dpr, PR_MAX_CAP);
+    this.PR_MAX = Math.min(dpr, PR_MAX_CAP);
 
     /* ---------- renderer / scene ---------- */
     try {
@@ -2297,15 +2299,15 @@ export class HandLabEngine {
     this.emaDt = this.emaDt * 0.95 + dt * 1000 * 0.05;
     if (++this.prTick >= 120) {
       this.prTick = 0;
-      if (this.emaDt > 26 && this.prNow > 1) {
-        this.prNow = Math.max(1, this.prNow - 0.25);
-        this.renderer.setPixelRatio(this.prNow);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-      } else if (this.emaDt < 13 && this.prNow < this.PR_MAX) {
-        this.prNow = Math.min(this.PR_MAX, this.prNow + 0.25);
-        this.renderer.setPixelRatio(this.prNow);
+      const next = nextPixelRatio(this.prNow, this.emaDt);
+      if (next !== this.prNow) {
+        this.prNow = next;
+        this.renderer.setPixelRatio(next);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
       }
+      // Surface the ratio so an unexpectedly low value is visible rather than
+      // mysterious. A healthy machine reads 2.00x and stays there.
+      this.setText("t-pr", `render ${this.prNow.toFixed(2)}x`);
     }
 
     if (this.shadowsDirty) {
