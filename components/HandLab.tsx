@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   HandLabEngine,
   SHAPES,
@@ -18,7 +18,7 @@ import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
-import type { SceneSnap } from "../lib/lessons/checks";
+import { evalChecks, type SceneSnap } from "../lib/lessons/checks";
 import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
 import { addImportedLesson } from "../lib/lessons/validation";
 
@@ -46,6 +46,8 @@ export default function HandLab() {
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [lessonStepIdx, setLessonStepIdx] = useState(0);
   const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
+  const [sceneRev, setSceneRev] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -107,6 +109,17 @@ export default function HandLab() {
       depthi: depthiRef.current,
     };
     let engine: HandLabEngine | HandLabFallbackEngine | null = null;
+    // Lesson checks re-evaluate off this. Scene mutations arrive in bursts
+    // (place, then a drag emitting math every 6th frame), so coalesce to one
+    // React update per animation frame instead of one per mutation.
+    let sceneRaf = 0;
+    const onScene = () => {
+      if (sceneRaf) return;
+      sceneRaf = requestAnimationFrame(() => {
+        sceneRaf = 0;
+        setSceneRev((rev) => rev + 1);
+      });
+    };
     try {
       engine = new HandLabEngine({
         canvas: canvasRef.current,
@@ -116,6 +129,7 @@ export default function HandLab() {
         toast: toastRef.current,
         hud,
         emit: setUi,
+        onScene,
         onCamLive: () => setPreviewOpen(true),
         onFatal: (msg) => setFatal(msg),
       });
@@ -131,6 +145,7 @@ export default function HandLab() {
           toast: toastRef.current,
           hud,
           emit: setUi,
+          onScene,
           onCamLive: () => setPreviewOpen(true),
           onFatal: (msg) => setFatal(msg),
         });
@@ -145,6 +160,7 @@ export default function HandLab() {
     }
     engineRef.current = engine;
     return () => {
+      if (sceneRaf) cancelAnimationFrame(sceneRaf);
       engine?.dispose();
       engineRef.current = null;
     };
@@ -163,14 +179,16 @@ export default function HandLab() {
     }, 1400);
   };
 
-  const buildSnap = (): SceneSnap => {
+  // Recomputed only when the engine reports a scene change, so this stays off
+  // the render path's hot loop while still reflecting the live scene.
+  const snap = useMemo<SceneSnap>(() => {
     const scene = eng()?.exportScene();
     return {
       objects: scene?.objects.map(({ s }) => ({ s })) ?? [],
       chains: scene?.chains ?? [],
-      quizAnswers: {},
+      quizAnswers,
     };
-  };
+  }, [sceneRev, quizAnswers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const download = (name: string, url: string) => {
     const a = document.createElement("a");
@@ -278,6 +296,10 @@ export default function HandLab() {
   };
 
   const handleQuizAnswer = (check: QuizCheck, answerIndex: number) => {
+    setQuizAnswers((current) => {
+      if (current[check.question] === answerIndex) return current;
+      return { ...current, [check.question]: answerIndex };
+    });
     if (answerIndex !== check.answer || !lessonId) return;
     const nextProgress: Progress = {
       lessonId,
@@ -292,6 +314,28 @@ export default function HandLab() {
       [lessonId]: nextProgress,
     }));
   };
+
+  // A step counts as done once every one of its checks passes against the live
+  // scene — that's what the Next button is gated on, so record it here.
+  useEffect(() => {
+    if (!lessonId) return;
+    const lesson = lessons.find(({ id }) => id === lessonId);
+    const step = lesson?.steps[lessonStepIdx];
+    if (!step || !evalChecks(step.checks, snap)) return;
+
+    const done = progressMap[lessonId];
+    if (done?.done && done.stepIdx === lessonStepIdx) return;
+
+    const nextProgress: Progress = {
+      lessonId,
+      stepIdx: lessonStepIdx,
+      done: true,
+      score: 1,
+      updatedAt: Date.now(),
+    };
+    saveStep(nextProgress);
+    setProgressMap((current) => ({ ...current, [lessonId]: nextProgress }));
+  }, [lessonId, lessonStepIdx, lessons, progressMap, snap]);
 
   if (fatal)
     return (
@@ -556,6 +600,7 @@ export default function HandLab() {
         onBack={previousLessonStep}
         progress={lessonId ? progressMap[lessonId] : undefined}
         onQuizAnswer={handleQuizAnswer}
+        snap={snap}
       />
 
       <aside

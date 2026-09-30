@@ -4,9 +4,30 @@ import { useEffect, useState } from "react";
 import QuizCard from "./QuizCard";
 import SegmentedControl from "./bits/SegmentedControl";
 import AnimatedList from "./bits/AnimatedList";
-import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
+import type {
+  CheckKind,
+  Lesson,
+  Progress,
+  QuizCheck,
+} from "../lib/lessons/types";
+import { evalCheck, type SceneSnap } from "../lib/lessons/checks";
 
 export type LessonLevelMode = "intro" | "advanced" | "both";
+
+/** Plain-language description of a scene check, shown as a live checklist so
+ *  a blocked step explains what the student still has to do. */
+export function describeCheck(check: CheckKind): string {
+  switch (check.kind) {
+    case "place-count":
+      return `Place ${check.count} × ${check.shape}`;
+    case "chain-closed":
+      return `Close a loop of ${check.minPoints}+ points`;
+    case "area-gt":
+      return `Enclose an area greater than ${check.min} m²`;
+    default:
+      return "Answer the question";
+  }
+}
 
 export function getVisibleStepIndexes(lesson: Lesson, levelMode: LessonLevelMode): number[] {
   return lesson.steps.reduce<number[]>((indexes, step, index) => {
@@ -24,6 +45,9 @@ export interface LessonPanelProps {
   onBack: (previousStepIdx: number) => void;
   progress?: Progress;
   onQuizAnswer?: (check: QuizCheck, answerIndex: number) => void;
+  /** Live scene snapshot. When provided, scene-based checks (place-count,
+   *  chain-closed, area-gt) gate progression instead of being ignored. */
+  snap?: SceneSnap;
 }
 
 export default function LessonPanel({
@@ -35,6 +59,7 @@ export default function LessonPanel({
   onBack,
   progress,
   onQuizAnswer,
+  snap,
 }: LessonPanelProps) {
   const lesson = lessons.find(({ id }) => id === active);
   const [levelMode, setLevelMode] = useState<LessonLevelMode>("both");
@@ -89,6 +114,18 @@ export default function LessonPanel({
   const quizComplete =
     quizCheck?.kind === "quiz" && completedQuizKey === quizKey;
   const quizIncomplete = quizCheck?.kind === "quiz" && !quizComplete;
+
+  // Scene checks are evaluated against the live scene. Without a snapshot
+  // (e.g. the standalone physics/chemistry labs) they can't be verified, so
+  // they're treated as satisfied rather than silently blocking the student.
+  const sceneChecks = (step?.checks ?? []).filter((c) => c.kind !== "quiz");
+  const checkStatus = sceneChecks.map((check) => ({
+    check,
+    label: describeCheck(check),
+    passed: snap ? evalCheck(check, snap) : true,
+  }));
+  const sceneIncomplete = checkStatus.some((c) => !c.passed);
+  const stepBlocked = quizIncomplete || sceneIncomplete;
 
   const resetQuiz = () => {
     setCompletedQuizKey(null);
@@ -203,6 +240,39 @@ export default function LessonPanel({
                   Hint: {step.hint}
                 </p>
               )}
+              {checkStatus.length > 0 && (
+                <ul
+                  className="m-sub lesson-checks"
+                  aria-label="Step requirements"
+                  style={{
+                    listStyle: "none",
+                    padding: 0,
+                    margin: "8px 0 0",
+                    display: "grid",
+                    gap: 4,
+                  }}
+                >
+                  {checkStatus.map(({ check, label, passed }) => (
+                    <li
+                      key={`${check.kind}:${JSON.stringify(check)}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        color: passed ? "var(--good)" : "var(--muted)",
+                      }}
+                    >
+                      <span aria-hidden="true">{passed ? "✓" : "○"}</span>
+                      <span>
+                        <span className="sr-only">
+                          {passed ? "Done: " : "Not done: "}
+                        </span>
+                        {label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {quizCheck?.kind === "quiz" && (
                 <QuizCard
                   key={`${active}:${step.id}:${quizCheck.question}:${quizRun}`}
@@ -234,7 +304,8 @@ export default function LessonPanel({
         <button
           type="button"
           className="btn"
-          disabled={nextStepIdx === undefined || quizIncomplete}
+          disabled={nextStepIdx === undefined || stepBlocked}
+          aria-describedby={nextStepIdx !== undefined && stepBlocked ? "next-blocked" : undefined}
           onClick={() => {
             if (nextStepIdx === undefined) return;
             resetQuiz();
@@ -243,6 +314,13 @@ export default function LessonPanel({
         >
           Next
         </button>
+        {nextStepIdx !== undefined && stepBlocked && (
+          <p id="next-blocked" className="m-sub" role="status" style={{ marginTop: 6 }}>
+            {sceneIncomplete
+              ? "Finish the step requirements above to continue."
+              : "Answer the question correctly to continue."}
+          </p>
+        )}
       </div>
     </aside>
   );

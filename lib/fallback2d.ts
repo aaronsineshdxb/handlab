@@ -533,10 +533,12 @@ export class HandLabFallbackEngine {
 
   private setCount(): void {
     this.opts.hud["t-count"].textContent = String(this.objs.length);
+    this.opts.onScene?.();
   }
 
   private emitMath(): void {
     this.opts.onMath?.(this.getMeasurements());
+    this.opts.onScene?.();
   }
 
   private measure(L: Chain2D, i: number): Measurement {

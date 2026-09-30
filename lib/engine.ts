@@ -134,6 +134,9 @@ export interface EngineOpts {
   onMath?: (m: Measurement[]) => void;
   onCamLive?: () => void;
   onFatal?: (msg: string) => void;
+  /** Fired whenever the set of objects or the line geometry changes, so
+   *  lesson checks can re-evaluate against the live scene. */
+  onScene?: () => void;
 }
 
 /* ---------- module-level helpers (no DOM access at import time) ---------- */
@@ -1124,6 +1127,7 @@ export class HandLabEngine {
 
   private setCount(): void {
     this.opts.hud["t-count"].textContent = String(this.spawnables.length);
+    this.opts.onScene?.();
   }
 
   /* ---------- objects ---------- */
@@ -1594,6 +1598,7 @@ export class HandLabEngine {
 
   private emitMath(): void {
     this.opts.onMath?.(this.getMeasurements());
+    this.opts.onScene?.();
   }
 
   private rebuildJunctions(): void {

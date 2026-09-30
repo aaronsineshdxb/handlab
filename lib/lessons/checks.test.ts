@@ -29,22 +29,33 @@ describe("evalCheck", () => {
     expect(evalCheck(check, snap({ objects: [{ s: "cube" }] }))).toBe(false);
   });
 
-  it("evaluates only the first chain", () => {
+  it("passes when any chain closes, not only the first", () => {
     const check = { kind: "chain-closed", minPoints: 3 } as const;
-    const firstChain = [
+    const openChain = [
       [0, 0, 0],
       [1, 0, 0],
       [0.5, 0, 0],
     ];
-    const laterChain = [
+    const closedChain = [
       [0, 0, 0],
       [1, 0, 0],
       [0, 0, 0],
     ];
 
     expect(
-      evalCheck(check, snap({ chains: [firstChain, laterChain] })),
-    ).toBe(false);
+      evalCheck(check, snap({ chains: [openChain, closedChain] })),
+    ).toBe(true);
+  });
+
+  it("fails when no chain is closed", () => {
+    const check = { kind: "chain-closed", minPoints: 3 } as const;
+    const openChain = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0.5, 0, 0],
+    ];
+
+    expect(evalCheck(check, snap({ chains: [openChain] }))).toBe(false);
   });
 
   it("fails a chain at the exact closure distance threshold", () => {
