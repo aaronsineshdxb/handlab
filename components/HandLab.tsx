@@ -10,7 +10,6 @@ import {
   type ShapeName,
   type UiState,
 } from "../lib/engine";
-import { HandLabFallbackEngine } from "../lib/fallback2d";
 import LessonPanel from "./LessonPanel";
 import DomainSwitcher from "./DomainSwitcher";
 import Dock from "./bits/Dock";
@@ -23,6 +22,7 @@ import { evalChecks, type SceneSnap } from "../lib/lessons/checks";
 import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
 import { addImportedLesson } from "../lib/lessons/validation";
 import { createSceneSync } from "../lib/sceneSync";
+import type { HandLabFallbackEngine } from "../lib/fallback2d";
 
 const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -116,52 +116,62 @@ export default function HandLab() {
       depthi: depthiRef.current,
     };
     let engine: HandLabEngine | HandLabFallbackEngine | null = null;
+    let disposed = false;
     // Lesson checks re-evaluate off this. Scene mutations arrive in bursts
     // (place, then a drag emitting math every 6th frame), so coalesce to one
     // React update per 100ms. See lib/sceneSync.ts — reconciling the HUD
     // once per animation frame was the largest source of drag jank.
     const sceneSync = createSceneSync(() => setSceneRev((rev) => rev + 1));
     const onScene = () => sceneSync();
-    try {
-      engine = new HandLabEngine({
-        canvas: canvasRef.current,
-        video: videoRef.current,
-        skel: skelRef.current,
-        cursor2d: cursor2dRef.current,
-        toast: toastRef.current,
-        hud,
-        emit: setUi,
-        onScene,
-        onCamLive: () => setPreviewOpen(true),
-        onFatal: (msg) => setFatal(msg),
-      });
-    } catch (webglErr) {
-      // WebGL unavailable (blocklisted GPU, headless, remote desktop):
-      // fall back to the 2D canvas engine instead of a fatal screen.
+    const opts = {
+      canvas: canvasRef.current,
+      video: videoRef.current,
+      skel: skelRef.current,
+      cursor2d: cursor2dRef.current,
+      toast: toastRef.current,
+      hud,
+      emit: setUi,
+      onScene,
+      onCamLive: () => setPreviewOpen(true),
+      onFatal: (msg: string) => setFatal(msg),
+    };
+    // Async so the 2D fallback can be imported on demand. An effect may not
+    // return a promise, so the setup is detached and `disposed` guards every
+    // post-await continuation.
+    void (async () => {
       try {
-        engine = new HandLabFallbackEngine({
-          canvas: canvasRef.current,
-          video: videoRef.current,
-          skel: skelRef.current,
-          cursor2d: cursor2dRef.current,
-          toast: toastRef.current,
-          hud,
-          emit: setUi,
-          onScene,
-          onCamLive: () => setPreviewOpen(true),
-          onFatal: (msg) => setFatal(msg),
-        });
-        setIs2D(true);
-      } catch (err2) {
-        // ponytail: environmental failure (no WebGL AND no 2D) shows a
-        // message, never the red error overlay
-        console.error(webglErr);
-        setFatal(err2 instanceof Error ? err2.message : String(err2));
+        engine = new HandLabEngine(opts);
+      } catch (webglErr) {
+        // WebGL unavailable (blocklisted GPU, headless, remote desktop):
+        // fall back to the 2D canvas engine instead of a fatal screen. This
+        // module is ~1.2k lines, so it is fetched only when actually needed.
+        if (disposed) return;
+        try {
+          const { HandLabFallbackEngine: Fallback } = await import(
+            "../lib/fallback2d"
+          );
+          if (disposed) return;
+          engine = new Fallback(opts);
+          setIs2D(true);
+        } catch (err2) {
+          if (disposed) return;
+          // ponytail: environmental failure (no WebGL AND no 2D) shows a
+          // message, never the red error overlay
+          console.error(webglErr);
+          setFatal(err2 instanceof Error ? err2.message : String(err2));
+          return;
+        }
+      }
+      if (disposed) {
+        engine?.dispose();
+        engine = null;
         return;
       }
-    }
-    engineRef.current = engine;
+      engineRef.current = engine;
+    })();
+
     return () => {
+      disposed = true;
       sceneSync.dispose();
       engine?.dispose();
       engineRef.current = null;
