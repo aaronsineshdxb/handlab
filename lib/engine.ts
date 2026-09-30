@@ -7,6 +7,7 @@ import type {
 import { fuseDepth } from "./depth/fusion";
 import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
+import { shouldDetect } from "./handRate";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -290,6 +291,55 @@ const WASM_URL = "/wasm";
 const MODEL_URL = "/models/hand_landmarker.task";
 
 /**
+ * Create the HandLandmarker, preferring the GPU delegate.
+ *
+ * `delegate: "GPU"` throws outright on blocklisted drivers and some integrated
+ * GPUs, which previously killed the whole webcam path and dropped the user to
+ * mouse-only. The 2D fallback engine already retries on CPU
+ * (lib/fallback2d.ts); do the same here so a weak GPU degrades to a slower
+ * tracker instead of no tracker at all.
+ */
+async function createLandmarker(
+  files: unknown,
+  Ctor: {
+    createFromOptions(
+      files: unknown,
+      options: {
+        baseOptions: { modelAssetPath: string; delegate: "GPU" | "CPU" };
+        runningMode: "VIDEO";
+        numHands: number;
+        minHandDetectionConfidence: number;
+        minTrackingConfidence: number;
+      },
+    ): Promise<HandLandmarker>;
+  },
+): Promise<{ landmarker: HandLandmarker; usedCpu: boolean }> {
+  const shared = {
+    runningMode: "VIDEO" as const,
+    numHands: 2,
+    minHandDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+  try {
+    return {
+      landmarker: await Ctor.createFromOptions(files, {
+        baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
+        ...shared,
+      }),
+      usedCpu: false,
+    };
+  } catch {
+    return {
+      landmarker: await Ctor.createFromOptions(files, {
+        baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+        ...shared,
+      }),
+      usedCpu: true,
+    };
+  }
+}
+
+/**
  * Reduce a full scene to the minimal shape lesson checks need.
  *
  * `exportScene` builds a hex color string plus 6 numbers per object because
@@ -425,6 +475,11 @@ export class HandLabEngine {
   private stream: MediaStream | null = null;
   private anchor: Anchor | null = null;
   private lastVideoT = -1;
+  private lastDetectAt = -Infinity;
+  private skelRaf = 0;
+  private lastHands: NormalizedLandmark[][] = [];
+  private lastSkelSig = "";
+  private landmarkerUsedCpu = false;
   private pinchState = false;
   private prevTwoDist = 0;
   private smoothZ = 0;
@@ -755,6 +810,7 @@ export class HandLabEngine {
     this.camRequest++; // invalidate any in-flight enableWebcam()
     cancelAnimationFrame(this.tickRaf);
     cancelAnimationFrame(this.handRaf);
+    cancelAnimationFrame(this.skelRaf);
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("wheel", this.onWheel);
     this.opts.canvas.removeEventListener(
@@ -999,17 +1055,12 @@ export class HandLabEngine {
         "wasm backend",
       );
       if (stale() || this.disposed) return;
-      const nextLandmarker = await withTimeout(
-        HandLandmarker.createFromOptions(files, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-          runningMode: "VIDEO",
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        }),
+      const { landmarker: nextLandmarker, usedCpu } = await withTimeout(
+        createLandmarker(files, HandLandmarker),
         30000,
         "model load",
       );
+      this.landmarkerUsedCpu = usedCpu;
       if (stale() || this.disposed) {
         try {
           nextLandmarker.close();
@@ -1048,7 +1099,10 @@ export class HandLabEngine {
       await video.play();
       if (stale() || this.disposed) return;
       this.camLive = true;
-      this.setText("t-model", "hand model: live");
+      this.setText(
+        "t-model",
+        this.landmarkerUsedCpu ? "hand model: live (cpu)" : "hand model: live",
+      );
       this.emitCam("live");
       this.toast("webcam live — move your index finger");
       this.opts.onCamLive?.();
@@ -1851,10 +1905,12 @@ export class HandLabEngine {
     if (
       !this.landmarker ||
       video.readyState < 2 ||
-      video.currentTime === this.lastVideoT
+      video.currentTime === this.lastVideoT ||
+      !shouldDetect(now, this.lastDetectAt)
     )
       return;
     this.lastVideoT = video.currentTime;
+    this.lastDetectAt = now;
     let res: {
       landmarks?: NormalizedLandmark[][];
       handednesses?: { categoryName?: string }[][];
@@ -1865,7 +1921,7 @@ export class HandLabEngine {
       return;
     }
     const hands = res.landmarks ?? [];
-    this.drawSkel(hands, this.pinchState);
+    this.queueSkel(hands);
     if (!hands.length) {
       // hysteresis: tolerate a few dropped frames before declaring loss
       if (++this.lostFrames >= 4) {
@@ -1883,8 +1939,38 @@ export class HandLabEngine {
     this.drive(hands, res.handednesses);
   };
 
+  /**
+   * Defer the skeleton redraw out of the detection frame.
+   *
+   * drawSkel is a 2D canvas repaint of 21 landmarks x N hands. Running it
+   * inside handLoop lengthens the frame that also pays for inference and
+   * gesture processing, which is exactly the frame we care about. Handing it
+   * to its own rAF keeps detection and preview on separate frames.
+   */
+  private queueSkel(hands: NormalizedLandmark[][]): void {
+    this.lastHands = hands;
+    if (this.skelRaf) return;
+    this.skelRaf = requestAnimationFrame(() => {
+      this.skelRaf = 0;
+      if (this.disposed) return;
+      this.drawSkel(this.lastHands, this.pinchState);
+    });
+  }
+
   private drawSkel(all: NormalizedLandmark[][] | undefined, pinched = false): void {
     if (!this.sctx) return;
+    // 21 landmarks x N hands. Rounding to ~2px on a 248x140 preview is below
+    // perceptual threshold, so this skips most redraws while the hand is still
+    // or moving slowly.
+    const sig = (all || [])
+      .map((lm) =>
+        lm
+          .map((p) => `${Math.round(p.x * 124)},${Math.round(p.y * 70)}`)
+          .join(";"),
+      )
+      .join("|");
+    if (sig === this.lastSkelSig) return;
+    this.lastSkelSig = sig;
     const g = this.sctx;
     g.clearRect(0, 0, 248, 140);
     (all || []).forEach((lm) => {

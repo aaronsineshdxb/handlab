@@ -20,6 +20,7 @@ import {
   type ShapeName,
   type UiState,
 } from "./engine";
+import { shouldDetect } from "./handRate";
 
 export { SHAPES, initialUiState };
 export type { CamState, EngineOpts, HudNodes, Measurement, SceneData, ShapeName, UiState };
@@ -147,6 +148,7 @@ export class HandLabFallbackEngine {
   private camLive = false;
   private handRaf = 0;
   private lastVideoT = -1;
+  private lastDetectAt = -Infinity;
   private frames = 0;
   private fT = performance.now();
   private lostFrames = 0;
@@ -842,10 +844,12 @@ export class HandLabFallbackEngine {
     if (
       !this.landmarker ||
       video.readyState < 2 ||
-      video.currentTime === this.lastVideoT
+      video.currentTime === this.lastVideoT ||
+      !shouldDetect(now, this.lastDetectAt)
     )
       return;
     this.lastVideoT = video.currentTime;
+    this.lastDetectAt = now;
     let res: {
       landmarks?: NormalizedLandmark[][];
       handednesses?: { categoryName?: string }[][];
