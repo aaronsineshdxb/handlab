@@ -480,6 +480,7 @@ export class HandLabEngine {
   private lastHands: NormalizedLandmark[][] = [];
   private lastSkelSig = "";
   private landmarkerUsedCpu = false;
+  private onVisibility: (() => void) | null = null;
   private pinchState = false;
   private prevTwoDist = 0;
   private smoothZ = 0;
@@ -808,6 +809,10 @@ export class HandLabEngine {
     this.themeOff?.();
     this.themeOff = null;
     this.camRequest++; // invalidate any in-flight enableWebcam()
+    if (this.onVisibility) {
+      document.removeEventListener("visibilitychange", this.onVisibility);
+      this.onVisibility = null;
+    }
     cancelAnimationFrame(this.tickRaf);
     cancelAnimationFrame(this.handRaf);
     cancelAnimationFrame(this.skelRaf);
@@ -1099,6 +1104,12 @@ export class HandLabEngine {
       await video.play();
       if (stale() || this.disposed) return;
       this.camLive = true;
+      // Background work: the depth model runs on setTimeout, which browsers do
+      // NOT throttle when a tab is hidden, so pause it explicitly.
+      this.onVisibility = () => {
+        this.mono.setPaused(document.hidden);
+      };
+      document.addEventListener("visibilitychange", this.onVisibility);
       this.setText(
         "t-model",
         this.landmarkerUsedCpu ? "hand model: live (cpu)" : "hand model: live",
@@ -1895,6 +1906,9 @@ export class HandLabEngine {
   private handLoop = (now: number): void => {
     if (this.disposed) return;
     this.handRaf = requestAnimationFrame(this.handLoop);
+    // Browsers throttle rAF to ~1Hz rather than suspending it, and MediaPipe
+    // inference is by far the most expensive thing we do per frame.
+    if (document.hidden) return;
     this.frames++;
     if (now - this.fT > 1000) {
       this.setText("t-fps", this.frames + " fps");
@@ -2179,6 +2193,7 @@ export class HandLabEngine {
   private tick = (): void => {
     if (this.disposed) return;
     this.tickRaf = requestAnimationFrame(this.tick);
+    if (document.hidden) return;
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
     this.cursor.position.lerp(

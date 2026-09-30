@@ -92,6 +92,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
   private map: DepthMap | null = null;
   private anchorZ: number | null = null;
   private running = false;
+  private paused = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private scratch: HTMLCanvasElement | null = null;
   private infers = 0;
@@ -155,13 +156,27 @@ export class DepthAnythingV2Provider implements DepthProvider {
 
   private loop = async (): Promise<void> => {
     if (!this.running) return;
-    try {
-      await this.inferOnce();
-    } catch {
-      /* keep the loop alive; next tick retries */
+    // setTimeout is not throttled by the browser when a tab is hidden, so an
+    // unpaged depth model keeps inferring at full rate in the background.
+    if (!this.paused) {
+      try {
+        await this.inferOnce();
+      } catch {
+        /* keep the loop alive; next tick retries */
+      }
     }
     if (this.running) this.timer = setTimeout(this.loop, INFER_MS);
   };
+
+  /**
+   * Stop inferring while the document is hidden. The cached map goes stale,
+   * and freshness() in fusion.ts already downgrades its confidence to zero
+   * as it ages, so sample() degrades to the palm baseline rather than
+   * reporting a confident stale value.
+   */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+  }
 
   private async inferOnce(): Promise<void> {
     const video = this.video;
