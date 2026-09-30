@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HandLabEngine,
   SHAPES,
@@ -48,6 +48,8 @@ export default function HandLab() {
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [lessonStepIdx, setLessonStepIdx] = useState(0);
   const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
+  const progressRef = useRef<Record<string, Progress>>({});
+  progressRef.current = progressMap;
   const [sceneRev, setSceneRev] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
@@ -163,9 +165,9 @@ export default function HandLab() {
     };
   }, []);
 
-  const eng = () => engineRef.current;
+  const eng = useCallback(() => engineRef.current, []);
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
     const toast = toastRef.current;
     if (!toast) return;
     toast.textContent = message;
@@ -174,7 +176,7 @@ export default function HandLab() {
     toastTimerRef.current = setTimeout(() => {
       toast.style.opacity = "0";
     }, 1400);
-  };
+  }, []);
 
   // Recomputed only when the engine reports a scene change (throttled to
   // 10Hz by sceneSync), so this stays off the render hot path. toCheckSnap
@@ -247,80 +249,101 @@ export default function HandLab() {
     showToast("lesson imported");
   };
 
-  const selectLesson = (nextLessonId: string) => {
-    if (lessonId === nextLessonId) {
-      eng()?.setLineMode(false);
-      setLessonId(null);
-      setLessonStepIdx(0);
-      return;
-    }
+  // The four handlers below are memoised so LessonPanel's auto-advance effect
+  // (which lists onNext/onBack in its deps) stops tearing down and re-running
+  // on every parent render. Their dependency arrays deliberately exclude
+  // sceneRev/snap/quizAnswers — a scene change must not invalidate them.
+  const selectLesson = useCallback(
+    (nextLessonId: string) => {
+      if (lessonId === nextLessonId) {
+        eng()?.setLineMode(false);
+        setLessonId(null);
+        setLessonStepIdx(0);
+        return;
+      }
 
-    const engine = eng();
-    engine?.clearAll();
-    engine?.clearLines();
-    engine?.setLineMode(false);
-    setHelpOpen(false);
-    setLessonId(nextLessonId);
-    const lastStepIdx = Math.max(
-      (lessons.find(({ id }) => id === nextLessonId)?.steps.length ?? 1) - 1,
-      0,
-    );
-    const storedStepIdx = progressMap[nextLessonId]?.stepIdx ?? 0;
-    setLessonStepIdx(Math.min(Math.max(Math.floor(storedStepIdx), 0), lastStepIdx));
-  };
+      const engine = eng();
+      engine?.clearAll();
+      engine?.clearLines();
+      engine?.setLineMode(false);
+      setHelpOpen(false);
+      setLessonId(nextLessonId);
+      const lastStepIdx = Math.max(
+        (lessons.find(({ id }) => id === nextLessonId)?.steps.length ?? 1) - 1,
+        0,
+      );
+      const storedStepIdx = progressMap[nextLessonId]?.stepIdx ?? 0;
+      setLessonStepIdx(
+        Math.min(Math.max(Math.floor(storedStepIdx), 0), lastStepIdx),
+      );
+    },
+    [lessonId, lessons, progressMap],
+  );
 
-  const nextLessonStep = (nextStepIdx: number) => {
-    const lesson = lessons.find(({ id }) => id === lessonId);
-    if (
-      !lesson ||
-      !Number.isInteger(nextStepIdx) ||
-      nextStepIdx <= lessonStepIdx ||
-      nextStepIdx >= lesson.steps.length
-    )
-      return;
-    setLessonStepIdx(nextStepIdx);
-  };
+  const nextLessonStep = useCallback(
+    (nextStepIdx: number) => {
+      const lesson = lessons.find(({ id }) => id === lessonId);
+      if (
+        !lesson ||
+        !Number.isInteger(nextStepIdx) ||
+        nextStepIdx <= lessonStepIdx ||
+        nextStepIdx >= lesson.steps.length
+      )
+        return;
+      setLessonStepIdx(nextStepIdx);
+    },
+    [lessons, lessonId, lessonStepIdx],
+  );
 
-  const previousLessonStep = (previousStepIdx: number) => {
-    if (
-      !lessonId ||
-      !Number.isInteger(previousStepIdx) ||
-      previousStepIdx >= lessonStepIdx ||
-      previousStepIdx < 0
-    )
-      return;
-    setLessonStepIdx(previousStepIdx);
-  };
+  const previousLessonStep = useCallback(
+    (previousStepIdx: number) => {
+      if (
+        !lessonId ||
+        !Number.isInteger(previousStepIdx) ||
+        previousStepIdx >= lessonStepIdx ||
+        previousStepIdx < 0
+      )
+        return;
+      setLessonStepIdx(previousStepIdx);
+    },
+    [lessonId, lessonStepIdx],
+  );
 
-  const handleQuizAnswer = (check: QuizCheck, answerIndex: number) => {
-    setQuizAnswers((current) => {
-      if (current[check.question] === answerIndex) return current;
-      return { ...current, [check.question]: answerIndex };
-    });
-    if (answerIndex !== check.answer || !lessonId) return;
-    const nextProgress: Progress = {
-      lessonId,
-      stepIdx: lessonStepIdx,
-      done: true,
-      score: 1,
-      updatedAt: Date.now(),
-    };
-    saveStep(nextProgress);
-    setProgressMap((current) => ({
-      ...current,
-      [lessonId]: nextProgress,
-    }));
-  };
+  const handleQuizAnswer = useCallback(
+    (check: QuizCheck, answerIndex: number) => {
+      setQuizAnswers((current) => {
+        if (current[check.question] === answerIndex) return current;
+        return { ...current, [check.question]: answerIndex };
+      });
+      if (answerIndex !== check.answer || !lessonId) return;
+      const nextProgress: Progress = {
+        lessonId,
+        stepIdx: lessonStepIdx,
+        done: true,
+        score: 1,
+        updatedAt: Date.now(),
+      };
+      saveStep(nextProgress);
+      setProgressMap((current) => ({
+        ...current,
+        [lessonId]: nextProgress,
+      }));
+    },
+    [lessonId, lessonStepIdx],
+  );
 
   // A step counts as done once every one of its checks passes against the live
   // scene — that's what the Next button is gated on, so record it here.
+  // progressMap is read through a ref so saving progress here cannot retrigger
+  // this effect, and steps with no checks bail out before any of it.
   useEffect(() => {
     if (!lessonId) return;
     const lesson = lessons.find(({ id }) => id === lessonId);
     const step = lesson?.steps[lessonStepIdx];
-    if (!step || !evalChecks(step.checks, snap)) return;
+    if (!step || step.checks.length === 0) return;
+    if (!evalChecks(step.checks, snap)) return;
 
-    const done = progressMap[lessonId];
+    const done = progressRef.current[lessonId];
     if (done?.done && done.stepIdx === lessonStepIdx) return;
 
     const nextProgress: Progress = {
@@ -332,7 +355,65 @@ export default function HandLab() {
     };
     saveStep(nextProgress);
     setProgressMap((current) => ({ ...current, [lessonId]: nextProgress }));
-  }, [lessonId, lessonStepIdx, lessons, progressMap, snap]);
+  }, [lessonId, lessonStepIdx, lessons, snap]);
+
+  // Dock items are memoised so React.memo(Dock) actually skips renders.
+  // Depending on the volatile UI flags is correct and cheap — they only
+  // change on user action, never on a scene sync.
+  const dockItems = useMemo(
+    () => [
+      {
+        id: "webcam",
+        label:
+          ui.cam === "live"
+            ? "Restart webcam"
+            : ui.cam === "loading"
+              ? "Cancel load"
+              : "Enable webcam",
+        primary: true,
+        onClick: () =>
+          ui.cam === "loading"
+            ? eng()?.cancelWebcamLoad()
+            : eng()?.enableWebcam(),
+      },
+      {
+        id: "recenter",
+        label: "recenter",
+        title: "Re-anchor hand control to the current cursor spot (R)",
+        onClick: () => eng()?.recenter(),
+      },
+      {
+        id: "spin",
+        label: `auto-rotate: ${ui.spin ? "on" : "off"}`,
+        active: ui.spin,
+        onClick: () => eng()?.toggleSpin(),
+      },
+      {
+        id: "grid",
+        label: `grid: ${ui.grid ? "on" : "off"}`,
+        active: ui.grid,
+        onClick: () => eng()?.toggleGrid(),
+      },
+      {
+        id: "gestures",
+        label: `gestures: ${helpOpen ? "shown" : "hidden"}`,
+        active: helpOpen,
+        expanded: helpOpen,
+        controls: "hint-panel",
+        onClick: () => setHelpOpen(!helpOpen),
+      },
+      {
+        id: "camera",
+        label: `camera: ${previewOpen && !lessonId ? "shown" : "hidden"}`,
+        active: previewOpen && !lessonId,
+        disabled: !!lessonId,
+        expanded: previewOpen && !lessonId,
+        controls: "video-dock",
+        onClick: () => setPreviewOpen(!previewOpen),
+      },
+    ],
+    [ui.cam, ui.spin, ui.grid, helpOpen, previewOpen, lessonId, eng],
+  );
 
   if (fatal)
     return (
@@ -668,60 +749,7 @@ export default function HandLab() {
         </div>
       </div>
 
-      <Dock
-        label="Lab controls"
-        items={[
-          {
-            id: "webcam",
-            label:
-              ui.cam === "live"
-                ? "Restart webcam"
-                : ui.cam === "loading"
-                  ? "Cancel load"
-                  : "Enable webcam",
-            primary: true,
-            onClick: () =>
-              ui.cam === "loading"
-                ? eng()?.cancelWebcamLoad()
-                : eng()?.enableWebcam(),
-          },
-          {
-            id: "recenter",
-            label: "recenter",
-            title: "Re-anchor hand control to the current cursor spot (R)",
-            onClick: () => eng()?.recenter(),
-          },
-          {
-            id: "spin",
-            label: `auto-rotate: ${ui.spin ? "on" : "off"}`,
-            active: ui.spin,
-            onClick: () => eng()?.toggleSpin(),
-          },
-          {
-            id: "grid",
-            label: `grid: ${ui.grid ? "on" : "off"}`,
-            active: ui.grid,
-            onClick: () => eng()?.toggleGrid(),
-          },
-          {
-            id: "gestures",
-            label: `gestures: ${helpOpen ? "shown" : "hidden"}`,
-            active: helpOpen,
-            expanded: helpOpen,
-            controls: "hint-panel",
-            onClick: () => setHelpOpen(!helpOpen),
-          },
-          {
-            id: "camera",
-            label: `camera: ${previewOpen && !lessonId ? "shown" : "hidden"}`,
-            active: previewOpen && !lessonId,
-            disabled: !!lessonId,
-            expanded: previewOpen && !lessonId,
-            controls: "video-dock",
-            onClick: () => setPreviewOpen(!previewOpen),
-          },
-        ]}
-      />
+      <Dock label="Lab controls" items={dockItems} />
 
       <div id="depthbar" className={lessonId ? "lesson-mode-hidden" : ""}>
         DEPTH (Z){" "}
