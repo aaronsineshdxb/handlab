@@ -6,17 +6,17 @@ import { describe, expect, it } from "vitest";
 /**
  * Ceilings for the eager client JS of each route, in gzip bytes.
  *
- * Initialised from the measured 2026-09-30 baseline plus 5% headroom:
- *   /page     1181.6 KB raw / 324.7 KB gzip
- *   /vr/page  1170.3 KB raw / 321.5 KB gzip
+ * History:
+ *   baseline 2026-09-30  /page 324.7 KB, /vr/page 321.5 KB (Three.js eager)
+ *   after code splitting  /page 102.2 KB, /vr/page 102.2 KB
  *
- * As Phase 4 of the low-end plan lands (route code splitting, LazyMotion,
- * lazy fallback engine) these get LOWERED. Do not raise one to make a build
- * pass — if a legitimate change needs more weight, say so in review instead.
+ * Numbers below are the post-split measurements plus ~5% headroom. Do not raise
+ * one to make a build pass — if a legitimate change needs more weight, say so
+ * in review instead.
  */
 const BUDGET_GZ: Record<string, number> = {
-  "/page": 340 * 1024,
-  "/vr/page": 337 * 1024,
+  "/page": 108 * 1024,
+  "/vr/page": 108 * 1024,
 };
 
 const manifestPath = join(process.cwd(), ".next/app-build-manifest.json");
@@ -50,9 +50,7 @@ describe.skipIf(!hasBuild)("bundle budget", () => {
     });
   }
 
-  // TODO(Task 23): remove .skip once the lab route is code-split. Today three.js
-  // is eagerly loaded (3 chunks), which is the single biggest bundle cost.
-  it.skip("keeps three.js out of the / route's eager chunks", () => {
+  it("keeps three.js out of the / route's eager chunks", () => {
     // Phase 4 splits the lab out, so the renderer loads after first paint.
     // This is the single biggest bundle win, so it gets its own assertion
     // rather than relying on the gzip ceiling alone.

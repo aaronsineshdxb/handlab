@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import HandLabVR from "../../components/HandLabVR";
+import VrEntry from "../../components/VrEntry";
 
 export const metadata: Metadata = {
   title: "HANDLAB VR — WebXR hand + controller building",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function VRPage() {
-  return <HandLabVR />;
+  return <VrEntry />;
 }

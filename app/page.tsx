@@ -1,5 +1,5 @@
-import HandLab from "../components/HandLab";
+import LabEntry from "../components/LabEntry";
 
 export default function Page() {
-  return <HandLab />;
+  return <LabEntry />;
 }
