@@ -21,6 +21,7 @@ import { loadProgress, saveStep } from "../lib/lessons/store";
 import { evalChecks, type SceneSnap } from "../lib/lessons/checks";
 import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
 import { addImportedLesson } from "../lib/lessons/validation";
+import { createSceneSync } from "../lib/sceneSync";
 
 const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -111,15 +112,10 @@ export default function HandLab() {
     let engine: HandLabEngine | HandLabFallbackEngine | null = null;
     // Lesson checks re-evaluate off this. Scene mutations arrive in bursts
     // (place, then a drag emitting math every 6th frame), so coalesce to one
-    // React update per animation frame instead of one per mutation.
-    let sceneRaf = 0;
-    const onScene = () => {
-      if (sceneRaf) return;
-      sceneRaf = requestAnimationFrame(() => {
-        sceneRaf = 0;
-        setSceneRev((rev) => rev + 1);
-      });
-    };
+    // React update per 100ms. See lib/sceneSync.ts — reconciling the HUD
+    // once per animation frame was the largest source of drag jank.
+    const sceneSync = createSceneSync(() => setSceneRev((rev) => rev + 1));
+    const onScene = () => sceneSync();
     try {
       engine = new HandLabEngine({
         canvas: canvasRef.current,
@@ -160,7 +156,7 @@ export default function HandLab() {
     }
     engineRef.current = engine;
     return () => {
-      if (sceneRaf) cancelAnimationFrame(sceneRaf);
+      sceneSync.dispose();
       engine?.dispose();
       engineRef.current = null;
     };
