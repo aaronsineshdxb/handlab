@@ -1,9 +1,10 @@
+import { memo } from "react";
 "use client";
 
 /** Single round color well (native picker). One circle shows the current
  *  color; any color is pickable. Keyboard + pinch accessible natively —
  *  the engine's hand-press path matches `input`, so no extra wiring. */
-export default function ColorWell({
+function ColorWell({
   color,
   onChange,
   label = "Shape color",
@@ -27,3 +28,5 @@ export default function ColorWell({
     </div>
   );
 }
+
+export default memo(ColorWell);

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
-import { useId } from "react";
+import { memo, useId } from "react";
 import type { SubjectDomain } from "../lib/lessons/types";
 
 const DOMAINS: { id: SubjectDomain; href: string; code: string; label: string }[] = [
@@ -13,7 +13,7 @@ const DOMAINS: { id: SubjectDomain; href: string; code: string; label: string }[
   // { id: "chemistry", href: "/chemistry", code: "CHE", label: "Chemistry" },
 ];
 
-export default function DomainSwitcher({
+function DomainSwitcher({
   active,
 }: {
   active?: SubjectDomain;
@@ -68,3 +68,5 @@ export default function DomainSwitcher({
     </nav>
   );
 }
+
+export default memo(DomainSwitcher);

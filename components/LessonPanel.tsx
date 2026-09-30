@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import QuizCard from "./QuizCard";
 import SegmentedControl from "./bits/SegmentedControl";
 import AnimatedList from "./bits/AnimatedList";
@@ -50,7 +50,7 @@ export interface LessonPanelProps {
   snap?: SceneSnap;
 }
 
-export default function LessonPanel({
+function LessonPanel({
   lessons,
   active,
   stepIdx,
@@ -134,7 +134,7 @@ export default function LessonPanel({
   };
 
   return (
-    <aside className="hint lesson-panel" aria-label="Lessons" aria-live="polite">
+    <aside className="hint lesson-panel" aria-label="Lessons">
       <h2>LESSONS</h2>
       <div style={{ marginBottom: 8 }}>
         <SegmentedControl
@@ -226,8 +226,13 @@ export default function LessonPanel({
 
           {step && (
             <>
-              <h3 className="m-sub">STEP {activeStepPosition + 1}</h3>
-              <p>{step.title}</p>
+              {/* Announce step navigation only. A polite live region wrapping
+                  the checklist re-announced it on every scene sync, which is
+                  every 100ms while a student drags a shape. */}
+              <div aria-live="polite" aria-atomic="true">
+                <h3 className="m-sub">STEP {activeStepPosition + 1}</h3>
+                <p>{step.title}</p>
+              </div>
               <p className="m-sub" style={{ marginTop: 8 }}>
                 {step.prompt}
               </p>
@@ -252,9 +257,9 @@ export default function LessonPanel({
                     gap: 4,
                   }}
                 >
-                  {checkStatus.map(({ check, label, passed }) => (
+                  {checkStatus.map(({ check, label, passed }, index) => (
                     <li
-                      key={`${check.kind}:${JSON.stringify(check)}`}
+                      key={`${check.kind}-${index}`}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -325,3 +330,5 @@ export default function LessonPanel({
     </aside>
   );
 }
+
+export default memo(LessonPanel);

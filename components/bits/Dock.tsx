@@ -1,3 +1,4 @@
+import { memo } from "react";
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
@@ -17,7 +18,7 @@ export interface DockItem {
 /** Static control bar for the lab. Buttons never grow on hover — the bar
  *  keeps one entrance fade plus a press tick. Labels stay single-line;
  *  the bar reflows to a grid under 720 px. */
-export default function Dock({ items, label }: { items: DockItem[]; label: string }) {
+function Dock({ items, label }: { items: DockItem[]; label: string }) {
   const reduce = useReducedMotion();
   return (
     <motion.nav
@@ -49,3 +50,5 @@ export default function Dock({ items, label }: { items: DockItem[]; label: strin
     </motion.nav>
   );
 }
+
+export default memo(Dock);
