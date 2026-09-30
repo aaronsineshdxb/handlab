@@ -1,0 +1,69 @@
+import { existsSync, readFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * Ceilings for the eager client JS of each route, in gzip bytes.
+ *
+ * Initialised from the measured 2026-09-30 baseline plus 5% headroom:
+ *   /page     1181.6 KB raw / 324.7 KB gzip
+ *   /vr/page  1170.3 KB raw / 321.5 KB gzip
+ *
+ * As Phase 4 of the low-end plan lands (route code splitting, LazyMotion,
+ * lazy fallback engine) these get LOWERED. Do not raise one to make a build
+ * pass — if a legitimate change needs more weight, say so in review instead.
+ */
+const BUDGET_GZ: Record<string, number> = {
+  "/page": 340 * 1024,
+  "/vr/page": 337 * 1024,
+};
+
+const manifestPath = join(process.cwd(), ".next/app-build-manifest.json");
+// No .next build means nothing to measure; skip rather than fail. CI and the
+// Task 30 verification run build first.
+const hasBuild = existsSync(manifestPath);
+
+describe.skipIf(!hasBuild)("bundle budget", () => {
+  const { pages } = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    pages: Record<string, string[]>;
+  };
+
+  const gzipOf = (files: string[]): number =>
+    files
+      .filter((f) => f.endsWith(".js"))
+      .reduce(
+        (sum, f) =>
+          sum + gzipSync(readFileSync(join(process.cwd(), ".next", f))).length,
+        0,
+      );
+
+  for (const [route, budget] of Object.entries(BUDGET_GZ)) {
+    it(`${route} stays under ${(budget / 1024).toFixed(0)}KB gzip`, () => {
+      const files = pages[route];
+      expect(files, `route ${route} missing from build manifest`).toBeDefined();
+      const gz = gzipOf(files);
+      expect(
+        gz,
+        `${route} is ${(gz / 1024).toFixed(1)}KB gzip, budget ${(budget / 1024).toFixed(0)}KB`,
+      ).toBeLessThanOrEqual(budget);
+    });
+  }
+
+  // TODO(Task 23): remove .skip once the lab route is code-split. Today three.js
+  // is eagerly loaded (3 chunks), which is the single biggest bundle cost.
+  it.skip("keeps three.js out of the / route's eager chunks", () => {
+    // Phase 4 splits the lab out, so the renderer loads after first paint.
+    // This is the single biggest bundle win, so it gets its own assertion
+    // rather than relying on the gzip ceiling alone.
+    const heavy = pages["/page"].filter((f) => {
+      if (!f.endsWith(".js")) return false;
+      const src = readFileSync(join(process.cwd(), ".next", f), "utf8");
+      return src.includes("WebGLRenderer") || src.includes("PerspectiveCamera");
+    });
+    expect(
+      heavy,
+      `three.js found in eager chunks: ${heavy.join(", ")}`,
+    ).toHaveLength(0);
+  });
+});

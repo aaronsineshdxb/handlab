@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "perf": "next build && node scripts/perf-report.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
