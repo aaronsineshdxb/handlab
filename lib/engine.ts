@@ -7,6 +7,7 @@ import type {
 import { fuseDepth } from "./depth/fusion";
 import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
+import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
   currentTheme,
@@ -287,6 +288,26 @@ const TASKS_VISION_VERSION = "1.0.1";
 // and re-download the .task URL below, verifying the md5 against x-goog-hash.
 const WASM_URL = "/wasm";
 const MODEL_URL = "/models/hand_landmarker.task";
+
+/**
+ * Reduce a full scene to the minimal shape lesson checks need.
+ *
+ * `exportScene` builds a hex color string plus 6 numbers per object because
+ * it round-trips through save/load. Lesson checks only read the shape name
+ * and chain coordinates, so this drops roughly 200 allocations per sync for
+ * a 30-object scene. Pure function, so it is testable without a WebGL
+ * context — see lib/checksnap.test.ts.
+ */
+export function toCheckSnap(
+  scene: SceneData,
+  quizAnswers: Record<string, number> = {},
+): SceneSnap {
+  return {
+    objects: scene.objects.map(({ s }) => ({ s })),
+    chains: scene.chains,
+    quizAnswers,
+  };
+}
 
 // ponytail: rejects if the model/camera promises stall, so the UI can't hang on "Loading model…" forever
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {

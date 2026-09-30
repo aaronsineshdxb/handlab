@@ -5,6 +5,7 @@ import {
   HandLabEngine,
   SHAPES,
   initialUiState,
+  toCheckSnap,
   type HudNodes,
   type ShapeName,
   type UiState,
@@ -175,16 +176,16 @@ export default function HandLab() {
     }, 1400);
   };
 
-  // Recomputed only when the engine reports a scene change, so this stays off
-  // the render path's hot loop while still reflecting the live scene.
+  // Recomputed only when the engine reports a scene change (throttled to
+  // 10Hz by sceneSync), so this stays off the render hot path. toCheckSnap
+  // drops the color/rotation fields the checks never read.
   const snap = useMemo<SceneSnap>(() => {
     const scene = eng()?.exportScene();
-    return {
-      objects: scene?.objects.map(({ s }) => ({ s })) ?? [],
-      chains: scene?.chains ?? [],
+    return toCheckSnap(
+      scene ?? { version: 1, objects: [], chains: [] },
       quizAnswers,
-    };
-  }, [sceneRev, quizAnswers]); // eslint-disable-line react-hooks/exhaustive-deps
+    );
+  }, [sceneRev, quizAnswers]);
 
   const download = (name: string, url: string) => {
     const a = document.createElement("a");
