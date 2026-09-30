@@ -6,12 +6,20 @@ import {
   tipZ,
 } from "./fusion";
 import type { DepthProvider, DepthSample } from "./types";
+import {
+  isConstrainedDevice,
+  pickDepthDtype,
+  readDeviceSignals,
+  type DepthDtype,
+} from "../caps";
 
 /**
  * Depth Anything V2 monocular depth provider (Transformers.js, in-browser).
  *
- * - Model: onnx-community/depth-anything-v2-small (~100MB, cached after first
- *   load). WebGPU/fp16 when available, WASM fallback otherwise.
+ * - Model: onnx-community/depth-anything-v2-small, WebGPU/fp16 (~50MB) or
+ *   WASM/q8 (~27MB) chosen by lib/caps.ts — fp32 is never used, because the
+ *   WASM path has no fp16 acceleration and would pay 99MB for nothing.
+ *   Cached by Transformers.js after the first load.
  * - Runs at ~2.5fps on a 256px-wide crop in a background loop; sample() reads
  *   the latest cached map, so the 60fps hand loop never blocks on inference.
  * - Output is RELATIVE depth (bigger predicted_depth = nearer). sample()
@@ -23,12 +31,36 @@ import type { DepthProvider, DepthSample } from "./types";
 
 export const DA_V2_MODEL_ID = "onnx-community/depth-anything-v2-small";
 // Supply-chain note (audit §2.1): this model is fetched from the Hugging Face
-// Hub at runtime (~100MB, cached by Transformers.js after first load) — too
-// large to vendor. The ID above is an exact pinned repo; do not change it to
-// a range or alias. Transformers.js validates the repo manifest on download,
-// and the app treats all depth output as untrusted (clamped in fusion.ts).
+// Hub at runtime and cached by Transformers.js after first load — too large to
+// vendor. The ID above is an exact pinned repo; do not change it to a range
+// or alias. Transformers.js validates the repo manifest on download, and the
+// app treats all depth output as untrusted (clamped in fusion.ts).
 const INFER_W = 256;
 const INFER_MS = 400;
+
+// Download weight by dtype, verified against the HF Hub (2026-09-30):
+//   model.onnx (fp32)          = 99.1 MB   <- never used
+//   model_fp16.onnx            = 49.6 MB
+//   model_quantized.onnx (q8)  = 27.3 MB
+// A device that lands on the WASM path has no WebGPU, which usually means an
+// integrated GPU, older phone, or a browser without the API — precisely the
+// hardware where a 72MB difference decides whether the feature ever loads.
+export const DEPTH_BYTES: Record<DepthDtype, string> = {
+  fp16: "~50MB",
+  q8: "~27MB",
+};
+
+async function hasWebGPU(): Promise<boolean> {
+  const gpu = (
+    navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }
+  ).gpu;
+  if (!gpu) return false;
+  try {
+    return (await gpu.requestAdapter()) !== null;
+  } catch {
+    return false;
+  }
+}
 
 export type DepthStatus = "off" | "loading" | "live" | "error";
 
@@ -80,20 +112,35 @@ export class DepthAnythingV2Provider implements DepthProvider {
     if (this.running) return;
     this.running = true;
     this.video = video;
-    this.setStatus("loading", "downloading depth model (~100MB, once)…");
+    const webgpu = await hasWebGPU();
+    if (!this.running) return;
+    const dtype = pickDepthDtype({
+      hasWebGPU: webgpu,
+      constrained: isConstrainedDevice(readDeviceSignals()),
+    });
+    this.setStatus(
+      "loading",
+      `downloading depth model (${DEPTH_BYTES[dtype]}, once)…`,
+    );
     try {
       const { pipeline } = await import("@huggingface/transformers");
+      const load = (device: "webgpu" | "wasm", d: DepthDtype) =>
+        pipeline("depth-estimation", DA_V2_MODEL_ID, {
+          device,
+          dtype: d,
+        }) as Promise<DepthEstimator>;
       let est: DepthEstimator;
       try {
-        est = (await pipeline("depth-estimation", DA_V2_MODEL_ID, {
-          device: "webgpu",
-          dtype: "fp16",
-        })) as unknown as DepthEstimator;
-      } catch {
-        // No WebGPU (Safari, headless, blocklisted GPU): WASM fallback.
-        est = (await pipeline("depth-estimation", DA_V2_MODEL_ID, {
-          device: "wasm",
-        })) as unknown as DepthEstimator;
+        est = await load(webgpu ? "webgpu" : "wasm", dtype);
+      } catch (err) {
+        if (!webgpu) throw err;
+        // WebGPU advertised but the pipeline refused (blocklisted driver,
+        // headless). Retry on WASM rather than losing depth entirely.
+        this.setStatus(
+          "loading",
+          `downloading depth model (${DEPTH_BYTES.q8}, once)…`,
+        );
+        est = await load("wasm", "q8");
       }
       if (!this.running) return; // stopped while loading
       this.estimator = est;
