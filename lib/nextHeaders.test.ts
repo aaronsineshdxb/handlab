@@ -46,7 +46,7 @@ describe("static asset cache headers", () => {
     expect(keys).toContain("X-Frame-Options");
   });
 
-  it("permits every host the Hugging Face Hub redirects weights to", async () => {
+  it("locks connect-src to same-origin now that depth weights are vendored", async () => {
     const all = await rules();
     const rule = all.find((r) => r.source === "/(.*)");
     const csp = rule!.headers.find((h) => h.key === "Content-Security-Policy")!
@@ -56,33 +56,28 @@ describe("static asset cache headers", () => {
       .map((d) => d.trim())
       .find((d) => d.startsWith("connect-src"))!;
 
-    // huggingface.co/.../resolve/main/onnx/<file> 302s to a storage CDN whose
-    // host has changed over time (cdn-lfs.huggingface.co -> us.aws.cdn.hf.co,
-    // the Xet bridge) and may be region-scoped. An explicit host list broke
-    // the depth download the moment HF moved. The wildcard is what keeps it
-    // working; assert it rather than a specific CDN name.
-    expect(connectSrc).toContain("https://*.hf.co");
-    // The wildcard does NOT cover the apex: `huggingface.co` is a different
-    // domain from `hf.co`, so config.json / preprocessor_config.json are
-    // fetched from the apex and need their own entry.
-    expect(connectSrc).toContain("https://huggingface.co");
-    // ...and it must stay scoped to Hugging Face rather than opening up to
-    // arbitrary CDNs, and must not admit jsdelivr (see monocular.ts).
-    expect(connectSrc).toContain("'self'");
+    // The Depth Anything V2 weights, the ORT runtime, the MediaPipe runtime
+    // and the hand model all ship under /public. This used to allow
+    // https://huggingface.co plus https://*.hf.co, and it was a standing
+    // hazard: HF resolve URLs 302 to a storage CDN whose host moves (cdn-lfs ->
+    // us.aws.cdn.hf.co), the apex is not covered by the wildcard, and either
+    // entry going stale showed up only as "depth AI network error" in the
+    // console. If you ever need a host here again, it is a deliberate change,
+    // not a fallback — and depth still works offline because monocular.ts
+    // sets env.allowRemoteModels=false.
+    expect(connectSrc).toBe("connect-src 'self'");
+    expect(connectSrc).not.toContain("huggingface");
+    expect(connectSrc).not.toContain("hf.co");
+    // jsdelivr is what transformers defaults wasmPaths to; allowing it would
+    // mask a broken ORT_WASM_PATHS override behind a third-party CDN.
     expect(connectSrc).not.toContain("jsdelivr");
     expect(connectSrc).not.toContain("data:");
-    // Every scheme source is either a concrete host or a single-subdomain
-    // wildcard — never a bare `https://*`, and never plain http.
+    // No scheme sources at all — nothing off-origin may be fetched.
     const schemes = connectSrc
       .replace(/^connect-src\s*/, "")
       .split(/\s+/)
       .filter((s) => s.startsWith("http"));
-    expect(schemes.length).toBeGreaterThan(0);
-    for (const s of schemes) {
-      expect(s, `${s} must be https and host-scoped`).toMatch(
-        /^https:\/\/(\*\.)?[a-z0-9][a-z0-9.-]*$/,
-      );
-    }
+    expect(schemes).toEqual([]);
   });
 
   it("does not weaken the CSP when adding cache rules", async () => {

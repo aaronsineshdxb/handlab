@@ -108,10 +108,16 @@ The toolbar's SCENE section:
 
 - Depth AI (on by default): Depth Anything V2 (`onnx-community/depth-anything-v2-small`,
   via `@huggingface/transformers`) runs monocular depth estimation at ~2.5fps
-  on a 256px crop in a background loop. Weights are fetched once and cached:
-  ~50MB via WebGPU (fp16), or ~27MB on the WASM fallback (q8). fp32 is never
-  used — the WASM backend has no fp16 acceleration, so it would cost 99MB for
-  nothing. A WebGPU adapter always gets fp16; no-WebGPU always gets q8.
+  on a 256px crop in a background loop. Weights are vendored under
+  `/public/models/onnx-community/depth-anything-v2-small`, so there is no
+  Hugging Face download: it works offline and `connect-src` is `'self'` only.
+  The device picks ~50MB via WebGPU (fp16) or ~27MB on the WASM fallback (q8).
+  fp32 is never used — the WASM backend has no fp16 acceleration, so it would
+  cost 99MB for nothing. A WebGPU adapter always gets fp16; no-WebGPU always
+  gets q8. To re-vendor after a version bump:
+  `curl -L https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/{config.json,preprocessor_config.json,quantize_config.json}`
+  plus `onnx/model_fp16.onnx` and `onnx/model_quantized.onnx`, then update the
+  sha256 pins in `lib/depthAssets.test.ts` in the same commit.
   The ONNX Runtime WASM build is vendored under `/public/ort` and loaded
   same-origin, because transformers.js otherwise rewrites `wasmPaths` to
   jsdelivr — which our CSP blocks — and depth AI fails with a bare network

@@ -19,7 +19,7 @@ import {
  * - Model: onnx-community/depth-anything-v2-small, WebGPU/fp16 (~50MB) or
  *   WASM/q8 (~27MB) chosen by lib/caps.ts — fp32 is never used, because the
  *   WASM path has no fp16 acceleration and would pay 99MB for nothing.
- *   Cached by Transformers.js after the first load.
+ *   The weights are VENDORED under /public/models, not downloaded.
  * - Runs at ~2.5fps on a 256px-wide crop in a background loop; sample() reads
  *   the latest cached map, so the 60fps hand loop never blocks on inference.
  * - Output is RELATIVE depth (bigger predicted_depth = nearer). sample()
@@ -30,25 +30,61 @@ import {
  */
 
 export const DA_V2_MODEL_ID = "onnx-community/depth-anything-v2-small";
-// Supply-chain note (audit §2.1): this model is fetched from the Hugging Face
-// Hub at runtime and cached by Transformers.js after first load — too large to
-// vendor. The ID above is an exact pinned repo; do not change it to a range
-// or alias. Transformers.js validates the repo manifest on download, and the
-// app treats all depth output as untrusted (clamped in fusion.ts).
+// Supply-chain note (audit §2.1): the weights ship in this repo under
+// /public/models/onnx-community/depth-anything-v2-small and are served
+// same-origin, so depth AI works offline and behind a restrictive CSP. The ID
+// above is an exact pinned repo — it is the on-disk directory path AND the
+// upstream provenance of the bytes; do not change it to a range or alias
+// without re-vendoring. Checksums of the vendored files are asserted in
+// lib/depthAssets.test.ts. The app treats all depth output as untrusted
+// (clamped in fusion.ts).
 const INFER_W = 256;
 const INFER_MS = 400;
 
-// Download weight by dtype, verified against the HF Hub (2026-09-30):
+// Vendored weight per dtype, verified against the HF Hub (2026-09-30):
 //   model.onnx (fp32)          = 99.1 MB   <- never used
 //   model_fp16.onnx            = 49.6 MB
 //   model_quantized.onnx (q8)  = 27.3 MB
 // A device that lands on the WASM path has no WebGPU, which usually means an
 // integrated GPU, older phone, or a browser without the API — precisely the
 // hardware where a 72MB difference decides whether the feature ever loads.
+// Both live in the repo, so this is a size-of-checkout question, not a
+// download that can fail.
 export const DEPTH_BYTES: Record<DepthDtype, string> = {
   fp16: "~50MB",
   q8: "~27MB",
 };
+
+// Transformers.js resolves a repo id to `${env.localModelPath}/${model}/${file}`.
+// We keep the repo id (so provenance is visible in the code and the tests) and
+// point localModelPath at the vendored directory, which mirrors the upstream
+// repo layout exactly: public/models/<org>/<name>/{config.json,
+// preprocessor_config.json, quantize_config.json, onnx/model_<dtype>.onnx}.
+export const DEPTH_LOCAL_MODEL_PATH = "/models/";
+
+// Hard offline switch. With allowRemoteModels=false, any file that is missing
+// from /public/models fails fast with ModelFileNotFoundError naming the local
+// path, instead of silently falling through to a huggingface.co fetch that our
+// own CSP no longer permits. That turns "depth AI randomly broken behind a
+// proxy" into an actionable error naming the file to re-vendor.
+export const DEPTH_ENV_OVERRIDES = {
+  allowLocalModels: true,
+  allowRemoteModels: false,
+  localModelPath: DEPTH_LOCAL_MODEL_PATH,
+  // The browser Cache API would keep a second copy of the 50MB weight under an
+  // HF-derived cache key; /models is already immutable for a year (see
+  // next.config.ts), so a second cache is pure waste.
+  useBrowserCache: false,
+  // Transformers.js "pre-loads" the ORT glue .mjs as a blob: URL
+  // (ensureWasmLoaded in the hub utils) and ORT then dynamic-imports that
+  // blob. Our CSP has no blob: in script-src — and adding it would let any
+  // blob ever created execute as script — so the import dies with a bare
+  // "Failed to fetch dynamically imported module" and no backend is found.
+  // Disabling the pre-load cache hands ORT the raw /ort/*.mjs path instead,
+  // which script-src 'self' permits; the .mjs (53KB) re-fetches at most
+  // twice per page load (once per pipeline attempt), served immutable.
+  useWasmCache: false,
+} as const;
 
 // ONNX Runtime's WASM build is vendored under /public/ort, same as the
 // MediaPipe runtime under /public/wasm.
@@ -135,10 +171,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
       hasWebGPU: webgpu,
       constrained: isConstrainedDevice(readDeviceSignals()),
     });
-    this.setStatus(
-      "loading",
-      `downloading depth model (${DEPTH_BYTES[dtype]}, once)…`,
-    );
+    this.setStatus("loading", `loading depth model (${DEPTH_BYTES[dtype]})…`);
     try {
       const { pipeline, env } = await import("@huggingface/transformers");
       // Must be set after the module is evaluated: transformers replaces
@@ -147,6 +180,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
         env.backends.onnx.wasm.wasmPaths = ORT_WASM_PATHS;
         env.backends.onnx.wasm.numThreads = 1;
       }
+      Object.assign(env, DEPTH_ENV_OVERRIDES);
       const load = (device: "webgpu" | "wasm", d: DepthDtype) =>
         pipeline("depth-estimation", DA_V2_MODEL_ID, {
           device,
@@ -159,10 +193,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
         if (!webgpu) throw err;
         // WebGPU advertised but the pipeline refused (blocklisted driver,
         // headless). Retry on WASM rather than losing depth entirely.
-        this.setStatus(
-          "loading",
-          `downloading depth model (${DEPTH_BYTES.q8}, once)…`,
-        );
+        this.setStatus("loading", `loading depth model (${DEPTH_BYTES.q8})…`);
         est = await load("wasm", "q8");
       }
       if (!this.running) return; // stopped while loading
