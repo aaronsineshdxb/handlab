@@ -48,14 +48,22 @@ export type DepthDtype = "fp16" | "q8";
 /**
  * Choose the depth model precision.
  *
- * The WASM path has no fp16 matmul acceleration, so fp32 there costs 99.1MB
- * and buys nothing. q8 is 27.3MB and runs on a smaller graph. Constrained
- * devices always take q8, including on WebGPU.
+ * WebGPU => fp16 (~50MB). A WebGPU adapter means the device has a GPU that can
+ * run fp16 matmuls, so it is not the weak hardware we are optimising for, and
+ * q8 on the WebGPU execution provider is both less accurate and less reliable.
+ * `constrained` must NOT override this: hardwareConcurrency is a poor proxy
+ * (a capable M-series Mac reports 2 in some configurations), and letting it
+ * force q8 here pushed an int8 graph onto the WebGPU EP.
+ *
+ * No WebGPU => q8 (~27MB). This is the weak-device path by definition — an
+ * integrated GPU, older phone, or a browser without the API. The WASM backend
+ * has no fp16 matmul acceleration, so fp32 there would cost 99.1MB and buy
+ * nothing at all.
  */
 export function pickDepthDtype(opts: {
   hasWebGPU: boolean;
   constrained: boolean;
 }): DepthDtype {
-  if (opts.constrained) return "q8";
-  return opts.hasWebGPU ? "fp16" : "q8";
+  if (opts.hasWebGPU) return "fp16";
+  return "q8";
 }

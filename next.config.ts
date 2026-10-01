@@ -6,6 +6,13 @@ import type { NextConfig } from "next";
 //   - WASM + hand model are vendored locally (no jsdelivr/g apis needed)
 //   - connect-src still allows Hugging Face Hub: Depth Anything V2
 //     (~100MB) downloads at runtime and is cached by Transformers.js
+//   - jsdelivr is deliberately NOT allowed. transformers.web.js rewrites
+//     `env.backends.onnx.wasm.wasmPaths` to a cdn.jsdelivr.net URL as a
+//     module-load side effect; lib/depth/monocular.ts overrides it to
+//     same-origin /ort after import. If that override is ever lost, depth AI
+//     fails with a bare network error rather than an obvious 403, so keep
+//     jsdelivr out and keep the vendored copy in sync with node_modules:
+//       cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.* public/ort/
 //   - script-src keeps 'unsafe-eval'/'unsafe-inline': required by Next.js
 //     runtime + Transformers.js WASM workers. DOM XSS risk stays low —
 //     the codebase uses no dangerouslySetInnerHTML/innerHTML/eval.
@@ -42,6 +49,15 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/models/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/ort/:path*",
         headers: [
           {
             key: "Cache-Control",

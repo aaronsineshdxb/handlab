@@ -50,6 +50,22 @@ export const DEPTH_BYTES: Record<DepthDtype, string> = {
   q8: "~27MB",
 };
 
+// ONNX Runtime's WASM build is vendored under /public/ort, same as the
+// MediaPipe runtime under /public/wasm.
+//
+// Why this is required rather than merely nice: transformers.web.js
+// unconditionally overwrites `wasmPaths` at module-load time with
+//   https://cdn.jsdelivr.net/npm/onnxruntime-web@<ver>/dist/...
+// and our own CSP (next.config.ts) does not allow jsdelivr in connect-src.
+// So without an explicit same-origin path here, every device that reaches the
+// WASM backend has its 27MB runtime request blocked and the feature fails with
+// a bare network error. Pointing at /ort also keeps the runtime inside the
+// immutable cache rules and off a third-party CDN.
+export const ORT_WASM_PATHS = {
+  mjs: "/ort/ort-wasm-simd-threaded.asyncify.mjs",
+  wasm: "/ort/ort-wasm-simd-threaded.asyncify.wasm",
+};
+
 async function hasWebGPU(): Promise<boolean> {
   const gpu = (
     navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }
@@ -124,7 +140,13 @@ export class DepthAnythingV2Provider implements DepthProvider {
       `downloading depth model (${DEPTH_BYTES[dtype]}, once)…`,
     );
     try {
-      const { pipeline } = await import("@huggingface/transformers");
+      const { pipeline, env } = await import("@huggingface/transformers");
+      // Must be set after the module is evaluated: transformers replaces
+      // wasmPaths with its CDN default as a module-load side effect.
+      if (env.backends?.onnx?.wasm) {
+        env.backends.onnx.wasm.wasmPaths = ORT_WASM_PATHS;
+        env.backends.onnx.wasm.numThreads = 1;
+      }
       const load = (device: "webgpu" | "wasm", d: DepthDtype) =>
         pipeline("depth-estimation", DA_V2_MODEL_ID, {
           device,

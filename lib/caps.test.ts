@@ -52,8 +52,10 @@ describe("pickDepthDtype", () => {
     expect(pickDepthDtype({ hasWebGPU: false, constrained: false })).toBe("q8");
   });
 
-  it("still uses q8 on a constrained device with WebGPU", () => {
-    // WebGPU present but the device is dire: prefer the smaller weights.
-    expect(pickDepthDtype({ hasWebGPU: true, constrained: true })).toBe("q8");
+  it("does not let a constrained signal force q8 onto WebGPU", () => {
+    // Regression guard: hardwareConcurrency reported 2 on a capable M-series
+    // Mac, and the old logic pushed an int8 graph onto the WebGPU EP.
+    expect(pickDepthDtype({ hasWebGPU: true, constrained: true })).toBe("fp16");
+    expect(pickDepthDtype({ hasWebGPU: true, constrained: false })).toBe("fp16");
   });
 });
