@@ -46,6 +46,45 @@ describe("static asset cache headers", () => {
     expect(keys).toContain("X-Frame-Options");
   });
 
+  it("permits every host the Hugging Face Hub redirects weights to", async () => {
+    const all = await rules();
+    const rule = all.find((r) => r.source === "/(.*)");
+    const csp = rule!.headers.find((h) => h.key === "Content-Security-Policy")!
+      .value;
+    const connectSrc = csp
+      .split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("connect-src"))!;
+
+    // huggingface.co/.../resolve/main/onnx/<file> 302s to a storage CDN whose
+    // host has changed over time (cdn-lfs.huggingface.co -> us.aws.cdn.hf.co,
+    // the Xet bridge) and may be region-scoped. An explicit host list broke
+    // the depth download the moment HF moved. The wildcard is what keeps it
+    // working; assert it rather than a specific CDN name.
+    expect(connectSrc).toContain("https://*.hf.co");
+    // The wildcard does NOT cover the apex: `huggingface.co` is a different
+    // domain from `hf.co`, so config.json / preprocessor_config.json are
+    // fetched from the apex and need their own entry.
+    expect(connectSrc).toContain("https://huggingface.co");
+    // ...and it must stay scoped to Hugging Face rather than opening up to
+    // arbitrary CDNs, and must not admit jsdelivr (see monocular.ts).
+    expect(connectSrc).toContain("'self'");
+    expect(connectSrc).not.toContain("jsdelivr");
+    expect(connectSrc).not.toContain("data:");
+    // Every scheme source is either a concrete host or a single-subdomain
+    // wildcard — never a bare `https://*`, and never plain http.
+    const schemes = connectSrc
+      .replace(/^connect-src\s*/, "")
+      .split(/\s+/)
+      .filter((s) => s.startsWith("http"));
+    expect(schemes.length).toBeGreaterThan(0);
+    for (const s of schemes) {
+      expect(s, `${s} must be https and host-scoped`).toMatch(
+        /^https:\/\/(\*\.)?[a-z0-9][a-z0-9.-]*$/,
+      );
+    }
+  });
+
   it("does not weaken the CSP when adding cache rules", async () => {
     const all = await rules();
     const rule = all.find((r) => r.source === "/(.*)");

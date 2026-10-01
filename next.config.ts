@@ -4,8 +4,16 @@ import type { NextConfig } from "next";
 // framing (clickjacking/permission-jacking) and over-broad permissions
 // are the main risks. The CSP below is deliberately scoped:
 //   - WASM + hand model are vendored locally (no jsdelivr/g apis needed)
-//   - connect-src still allows Hugging Face Hub: Depth Anything V2
-//     (~100MB) downloads at runtime and is cached by Transformers.js
+//   - connect-src allows Hugging Face for the Depth Anything V2 weights.
+//     NOTE the wildcard: huggingface.co/…/resolve/main/onnx/<file> answers 302
+//     to a storage CDN, and which host that is has changed over time — it was
+//     cdn-lfs.huggingface.co, now us.aws.cdn.hf.co (the Xet bridge), and may be
+//     region-scoped. Listing individual hosts silently broke the depth download
+//     ("network error" in the console) the moment HF moved.
+//     BOTH entries are required and neither covers the other: `*.hf.co` does
+//     not match the apex `huggingface.co`, which is a separate domain from the
+//     `hf.co` CDN. Dropping either one breaks the depth download.
+//     Verify with: curl -sI <resolve url> | grep -i location
 //   - jsdelivr is deliberately NOT allowed. transformers.web.js rewrites
 //     `env.backends.onnx.wasm.wasmPaths` to a cdn.jsdelivr.net URL as a
 //     module-load side effect; lib/depth/monocular.ts overrides it to
@@ -20,7 +28,7 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://huggingface.co https://cdn-lfs.huggingface.co https://cdn-lfs.hf.co",
+  "connect-src 'self' https://huggingface.co https://*.hf.co",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' https://fonts.gstatic.com",

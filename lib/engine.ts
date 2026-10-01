@@ -557,7 +557,10 @@ export class HandLabEngine {
     this.renderer.setPixelRatio(Math.min(dpr, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoftShadowMap was removed in three r186 and is silently coerced to
+    // PCFShadowMap; naming the type we actually get keeps the console clean and
+    // stops this line reading as a soft-shadow setting it no longer is.
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false; // static scene: re-render shadows only when something moves
 
     this.scene.background = new THREE.Color(0xFCFCF9);
