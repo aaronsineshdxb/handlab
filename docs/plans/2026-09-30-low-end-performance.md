@@ -2650,34 +2650,34 @@ Expected: no output
 
 | Task | Status | Notes |
 |---|---|---|
-| 0 — commit in-flight work | ☐ | |
-| 1 — perf report script | ☐ | |
-| 2 — bundle budget (red) | ☐ | |
-| 3 — sceneSync module | ☐ | |
-| 4 — wire throttle | ☐ | |
-| 5 — toCheckSnap | ☐ | |
-| 6 — use toCheckSnap | ☐ | |
-| 7 — useCallback handlers | ☐ | |
-| 8 — progress effect deps | ☐ | |
-| 9 — memoise dock items | ☐ | |
-| 10 — React.memo subtrees | ☐ | |
-| 11 — Magnet springs | ☐ | |
-| 12 — list keys | ☐ | |
-| 13 — aria-live scope | ☐ | |
-| 14 — device caps | ☐ | |
-| 15 — q8 depth weights | ☐ | |
-| 16 — CPU delegate retry | ☐ | |
-| 17 — 30 Hz hand detection | ☐ | |
-| 18 — pause on hidden | ☐ | |
-| 19 — skeleton redraw guard | ☐ | |
-| 20 — skeleton off-frame | ☐ | |
-| 21 — DPR floor 0.75 | ☐ | only visual concession |
-| 22 — cache headers | ☐ | |
-| 23 — route code splitting | ☐ | |
-| 24 — lazy fallback engine | ☐ | |
-| 25 — font trim | ☐ | |
-| 26 — LazyMotion | ☐ **reverted** | measured 27KB worse; see task header |
-| 27 — budget green | ☐ | |
-| 28 — README | ☐ | |
-| 29 — profiling protocol | ☐ | |
-| 30 — full verification | ☐ | |
+| 0 — commit in-flight work | ✅ | |
+| 1 — perf report script | ✅ | |
+| 2 — bundle budget (red) | ✅ | deviated: green from the start, lowered as wins landed |
+| 3 — sceneSync module | ✅ | |
+| 4 — wire throttle | ✅ | |
+| 5 — toCheckSnap | ✅ | |
+| 6 — use toCheckSnap | ✅ | |
+| 7 — useCallback handlers | ✅ | |
+| 8 — progress effect deps | ✅ | |
+| 9 — memoise dock items | ✅ | |
+| 10 — React.memo subtrees | ✅ | |
+| 11 — Magnet springs | ✅ | shared pointer probe, rAF-coalesced hover |
+| 12 — list keys | ✅ | |
+| 13 — aria-live scope | ✅ | |
+| 14 — device caps | ✅ | |
+| 15 — q8 depth weights | ✅ | measured 99.1MB -> 27.3MB |
+| 16 — CPU delegate retry | ✅ | |
+| 17 — 30 Hz hand detection | ✅ | |
+| 18 — pause on hidden | ✅ | depth loop only; rAF self-throttles already |
+| 19 — skeleton redraw guard | ✅ | |
+| 20 — skeleton off-frame | ✅ | |
+| 21 — DPR floor 0.75 | ✅ | the single visual concession |
+| 22 — cache headers | ✅ | |
+| 23 — route code splitting | ✅ | 333KB -> 104KB first load |
+| 24 — lazy fallback engine | ✅ | |
+| 25 — font trim | ✅ | |
+| 26 — LazyMotion | ❌ reverted | measured 27KB worse; see task header |
+| 27 — budget green | ✅ | |
+| 28 — README | ✅ | |
+| 29 — profiling protocol | ✅ | |
+| 30 — full verification | ✅ | typecheck + 135 tests + build + HTTP smoke |
