@@ -110,8 +110,14 @@ The toolbar's SCENE section:
   via `@huggingface/transformers`) runs monocular depth estimation at ~2.5fps
   on a 256px crop in a background loop. Weights are fetched once and cached:
   ~50MB via WebGPU (fp16), or ~27MB on the WASM fallback (q8). fp32 is never
-  used — the WASM path has no fp16 acceleration, so it would cost 99MB for
-  nothing. Devices reporting 2 cores, 2GB RAM, or Save-Data always take q8. The
+  used — the WASM backend has no fp16 acceleration, so it would cost 99MB for
+  nothing. A WebGPU adapter always gets fp16; no-WebGPU always gets q8.
+  The ONNX Runtime WASM build is vendored under `/public/ort` and loaded
+  same-origin, because transformers.js otherwise rewrites `wasmPaths` to
+  jsdelivr — which our CSP blocks — and depth AI fails with a bare network
+  error. Re-vendor with
+  `cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.* public/ort/`.
+  The
   fingertip z-score delta vs its anchor is fused 70/30 with the palm-size
   baseline; stale/low-confidence neural samples are ignored, so worst case is
   pure palm baseline. Inference pauses while the tab is hidden. Starts
