@@ -17,8 +17,10 @@ npm run dev
 # open http://localhost:3000
 ```
 
-Requires internet access (MediaPipe model + fonts load from CDNs) and a webcam
-for hand tracking. Everything also works with mouse + keyboard.
+Requires internet access on the first visit (MediaPipe model, depth weights and
+fonts load from the network) and a webcam for hand tracking. Mouse + keyboard
+work with no camera, and everything is cached afterwards. The app auto-tunes
+render resolution and hand-tracking rate to hold frame rate on modest hardware.
 
 The app starts in a lightweight mouse-first workspace. Use `gestures` to open
 the help drawer and `camera` to show the tracking preview when you need it;
@@ -106,19 +108,35 @@ The toolbar's SCENE section:
 
 - Depth AI (on by default): Depth Anything V2 (`onnx-community/depth-anything-v2-small`,
   via `@huggingface/transformers`) runs monocular depth estimation at ~2.5fps
-  on a 256px crop in a background loop — WebGPU/fp16 when available, WASM
-  fallback otherwise. The fingertip z-score delta vs its anchor is fused 70/30
-  with the palm-size baseline; stale/low-confidence neural samples are ignored,
-  so worst case is pure palm baseline. Starts automatically with the webcam
-  (downloads ~100MB once, cached after); disable via `depth v2` in the toolbar.
+  on a 256px crop in a background loop. Weights are fetched once and cached:
+  ~50MB via WebGPU (fp16), or ~27MB on the WASM fallback (q8). fp32 is never
+  used — the WASM path has no fp16 acceleration, so it would cost 99MB for
+  nothing. Devices reporting 2 cores, 2GB RAM, or Save-Data always take q8. The
+  fingertip z-score delta vs its anchor is fused 70/30 with the palm-size
+  baseline; stale/low-confidence neural samples are ignored, so worst case is
+  pure palm baseline. Inference pauses while the tab is hidden. Starts
+  automatically with the webcam; disable via `depth v2` in the toolbar.
   Unavailable in 2D fallback mode.
-- Hand tracking: MediaPipe HandLandmarker (GPU delegate), loaded on demand
-  when you click Enable webcam. Tip/size EMA filter with motion-adaptive
-  response, palm-normalized pinch thresholds, 4-frame loss hysteresis,
-  handedness-aware control hand, and stabilized fist/zoom.
+- Hand tracking: MediaPipe HandLandmarker, loaded on demand when you click
+  Enable webcam. Prefers the GPU delegate and silently retries on CPU when GPU
+  creation fails, so a blocklisted GPU degrades to a slower tracker rather than
+  no tracker. Detection is capped at 30Hz. Tip/size EMA filter with
+  motion-adaptive response, palm-normalized pinch thresholds, 4-frame loss
+  hysteresis, handedness-aware control hand, and stabilized fist/zoom.
 - Rendering is optimized: allocation-free hot paths, in-place line updates,
-  on-demand shadow maps, shared geometries/materials, throttled HUD,
-  and adaptive pixel ratio.
+  on-demand shadow maps, shared geometries/materials, a dirty-checked
+  imperative HUD, and adaptive pixel ratio that can fall to 0.75x on a device
+  which cannot otherwise hold frame rate. Both render loops and the depth loop
+  pause while the tab is hidden.
+- Bundle: the lab and VR routes are code-split behind `dynamic()` with
+  `ssr: false`, so Three.js (and the 1.2k-line 2D fallback engine, which loads
+  only when WebGL context creation actually fails) arrive after first paint.
+  Eager client JS per route is ~102KB gzip, guarded by
+  `lib/perf-budget.test.ts`. Vendored `/wasm` and `/models` assets (19.6MB) are
+  served `immutable` and cached for a year.
+- Scene changes are coalesced to one React update per 100ms
+  (`lib/sceneSync.ts`). Reconciling the HUD once per animation frame, with a
+  full scene export each time, was the single largest source of drag jank.
 
 ## VR (`/vr` route)
 
