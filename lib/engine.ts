@@ -483,6 +483,7 @@ export class HandLabEngine {
   private lastSkelSig = "";
   private landmarkerUsedCpu = false;
   private onVisibility: (() => void) | null = null;
+  private wasHidden = false;
   private pinchState = false;
   private prevTwoDist = 0;
   private smoothZ = 0;
@@ -2195,7 +2196,18 @@ export class HandLabEngine {
   private tick = (): void => {
     if (this.disposed) return;
     this.tickRaf = requestAnimationFrame(this.tick);
-    if (document.hidden) return;
+    if (document.hidden) {
+      this.wasHidden = true;
+      return;
+    }
+    if (this.wasHidden) {
+      // Drain the elapsed time accrued while hidden. Without this the first
+      // visible frame reports a 50ms dt (the clamp ceiling), which poisons the
+      // frame-time EMA and can trigger a spurious pixel-ratio step-down.
+      this.wasHidden = false;
+      this.clock.getDelta();
+      this.emaDt = 16;
+    }
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
     this.cursor.position.lerp(
@@ -2299,7 +2311,7 @@ export class HandLabEngine {
     this.emaDt = this.emaDt * 0.95 + dt * 1000 * 0.05;
     if (++this.prTick >= 120) {
       this.prTick = 0;
-      const next = nextPixelRatio(this.prNow, this.emaDt);
+            const next = nextPixelRatio(this.prNow, this.emaDt, this.PR_MAX);
       if (next !== this.prNow) {
         this.prNow = next;
         this.renderer.setPixelRatio(next);

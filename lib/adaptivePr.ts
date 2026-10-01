@@ -16,8 +16,17 @@ export const PR_MAX_CAP = 2;
 const SLOW_MS = 26; // ~38fps — start shedding pixels
 const FAST_MS = 13; // ~77fps — start adding them back
 
-export function nextPixelRatio(current: number, emaDt: number): number {
+/**
+ * @param maxCap Ceiling for this device, normally Math.min(devicePixelRatio, 2).
+ *   Must be passed explicitly: without it a 1x display would climb to 2x and
+ *   supersample, which is the opposite of what this module is for.
+ */
+export function nextPixelRatio(
+  current: number,
+  emaDt: number,
+  maxCap: number = PR_MAX_CAP,
+): number {
   if (emaDt > SLOW_MS) return Math.max(PR_FLOOR, current - PR_STEP);
-  if (emaDt < FAST_MS) return Math.min(PR_MAX_CAP, current + PR_STEP);
+  if (emaDt < FAST_MS) return Math.min(maxCap, current + PR_STEP);
   return current;
 }

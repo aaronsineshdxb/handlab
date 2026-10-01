@@ -38,6 +38,17 @@ describe("nextPixelRatio", () => {
     expect(nextPixelRatio(2, 10)).toBe(PR_MAX_CAP);
   });
 
+  it("respects a 1x device ceiling instead of supersampling", () => {
+    // Regression guard: without the explicit cap a standard 1x display would
+    // climb 1.25 -> 2.0 and render 4x the pixels it needs.
+    expect(nextPixelRatio(1, 10, 1)).toBe(1);
+    expect(nextPixelRatio(1.5, 10, 1.5)).toBe(1.5);
+  });
+
+  it("still steps down below a 1x ceiling when slow", () => {
+    expect(nextPixelRatio(1, 40, 1)).toBe(PR_FLOOR);
+  });
+
   it("is stable at the floor when slow, and recovers when fast", () => {
     // A device that cannot hold up: sits at the floor rather than oscillating.
     let pr = 1;
