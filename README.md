@@ -68,8 +68,8 @@ the preview opens automatically after webcam permission succeeds.
 | Pinch tap | Click / place object / drop line point |
 | Pinch hold | Grab + drag objects or line vertices in 3D |
 | Fist (hold 0.6s) | Delete hovered object |
-| Two-hand spread | Camera zoom |
-| Mouse move / wheel | Move on view plane / dolly in-out |
+| Two-hand spread | Disabled — camera stays fixed |
+| Mouse move / wheel | Move on view plane (wheel zoom disabled) |
 | `1–0` | Select shape (10 shapes) |
 | `L` | Line mode |
 | `R` | Recenter hand control |
@@ -134,7 +134,8 @@ The toolbar's SCENE section:
   creation fails, so a blocklisted GPU degrades to a slower tracker rather than
   no tracker. Detection is capped at 30Hz. Tip/size EMA filter with
   motion-adaptive response, palm-normalized pinch thresholds, 4-frame loss
-  hysteresis, handedness-aware control hand, and stabilized fist/zoom.
+  hysteresis, handedness-aware control hand, and stabilized fist detection
+  (camera zoom disabled).
 - Rendering is optimized: allocation-free hot paths, in-place line updates,
   on-demand shadow maps, shared geometries/materials, a dirty-checked
   imperative HUD, and adaptive pixel ratio that can fall to 0.75x on a device

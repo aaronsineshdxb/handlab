@@ -8,6 +8,7 @@
  */
 import Magnet from "./bits/Magnet";
 import ThemeToggle from "./bits/ThemeToggle";
+import { AccentSection } from "./bits/AccentPicker";
 
 const TOOLS = [
   { id: "ramp", icon: "RMP", label: "Ramp" },
@@ -56,6 +57,7 @@ export default function PhysicsToolbar({
       <div className="tool-row">
         <ThemeToggle />
       </div>
+      <AccentSection />
     </nav>
   );
 }

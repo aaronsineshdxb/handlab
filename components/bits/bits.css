@@ -26,6 +26,20 @@
 .dock__item:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .dock__item:disabled{opacity:.55;cursor:not-allowed}
 .dock__dot{width:4px;height:4px;border-radius:50%;background:var(--color-accent)}
+.accent-picker{width:100%}
+.accent-picker__row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.accent-swatch{position:relative;width:28px;height:28px;min-width:28px;border-radius:50%;border:1px solid var(--color-rule);cursor:pointer;padding:0;transition:border-color var(--dur-short) var(--ease-out),transform 100ms var(--ease-out)}
+@media (hover:hover) and (pointer:fine){.accent-swatch:hover{border-color:var(--color-ink)}}
+.accent-swatch.active{border:2px solid var(--color-ink)}
+.accent-swatch:active{transform:scale(0.94)}
+.accent-swatch:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.accent-swatch--custom{display:inline-grid;place-items:center;background:conic-gradient(from 0deg,#e86a7a,#e8a33d,#3ddc84,#34b4c4,#6d4de0,#e86a7a);color:#fff;font-weight:700;overflow:hidden}
+.accent-swatch--custom.active{background:none}
+.accent-swatch__plus{font-size:16px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none}
+.accent-swatch--custom.active .accent-swatch__plus{display:none}
+.accent-swatch__input{position:absolute;inset:-6px;opacity:0;cursor:pointer}
+.accent-picker__label{margin-top:6px;text-transform:lowercase}
+.toolbar .accent-title{margin-top:8px}
 @media (prefers-reduced-motion: reduce){
   .dock__item{transform:none !important}
 }

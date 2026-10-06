@@ -9,9 +9,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { requestVRSession } from "./xr/session";
 import {
-  SCENE_THEMES,
+  currentCustomHex,
+  currentScheme,
   currentTheme,
   onThemeChange,
+  sceneThemeFor,
+  sceneThemeNow,
   type ThemeName,
 } from "./theme";
 import {
@@ -247,18 +250,18 @@ export class VRHandLabEngine {
     );
     bounds.position.y = 0.4;
     this.scene.add(bounds);
-    this.applySceneTheme(currentTheme());
-    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
-    // cursor
+    // cursor — seeded from the effective scheme; applySceneTheme runs
+    // after these exist (it touches core/ring).
+    const seedAccent = sceneThemeNow().cursor;
     this.core = new THREE.Mesh(
       new THREE.SphereGeometry(0.05, 20, 20),
-      new THREE.MeshBasicMaterial({ color: 0x016A71 }),
+      new THREE.MeshBasicMaterial({ color: seedAccent }),
     );
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.12, 0.012, 10, 32),
       new THREE.MeshBasicMaterial({
-        color: 0x016A71,
+        color: seedAccent,
         transparent: true,
         opacity: 0.9,
         depthTest: false,
@@ -268,6 +271,9 @@ export class VRHandLabEngine {
     this.cursor.add(this.core, this.ring);
     this.cursor.position.copy(this.cursorPos);
     this.scene.add(this.cursor);
+
+    this.applySceneTheme(currentTheme());
+    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
     this.hoverRing = new THREE.Mesh(
       new THREE.TorusGeometry(0.55, 0.025, 10, 40),
@@ -899,10 +905,10 @@ export class VRHandLabEngine {
     });
   }
 
-  /** Re-skin scene chrome for the current UI theme. Placed objects are
-   *  user data and keep their colors. */
+  /** Re-skin scene chrome for the current UI theme + colour scheme.
+   *  Placed objects are user data and keep their colors. */
   private applySceneTheme(name: ThemeName): void {
-    const p = SCENE_THEMES[name];
+    const p = sceneThemeFor(name, currentScheme(), currentCustomHex());
     (this.scene.background as THREE.Color).setHex(p.bg);
     (this.scene.fog as THREE.Fog).color.setHex(p.bg);
     this.hemi.color.setHex(p.hemiSky);
@@ -916,8 +922,12 @@ export class VRHandLabEngine {
     (this.grid.material as THREE.Material).dispose();
     this.grid = new THREE.GridHelper(14, 28, p.gridCenter, p.gridMain);
     this.scene.add(this.grid);
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    // Guarded: applySceneTheme now runs after cursor creation, but keep this
+    // safe against future reorderings.
+    if (this.core)
+      (this.core.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    if (this.ring)
+      (this.ring.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
   }
 
   dispose(): void {

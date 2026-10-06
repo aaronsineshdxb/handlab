@@ -21,6 +21,7 @@ import {
   type UiState,
 } from "./engine";
 import { shouldDetect } from "./handRate";
+import { ACCENTS, isAccentName, isValidCustomHex } from "./theme";
 
 export { SHAPES, initialUiState };
 export type { CamState, EngineOpts, HudNodes, Measurement, SceneData, ShapeName, UiState };
@@ -136,6 +137,7 @@ export class HandLabFallbackEngine {
   private pinchDownAt = 0;
   private pinchHeld = false;
 
+  // Zoom disabled: view scale stays fixed at 1.
   private zoom = 1;
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private hudCache = {} as Record<keyof HudNodes, string>;
@@ -171,7 +173,7 @@ export class HandLabFallbackEngine {
     this.onResize();
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
-    window.addEventListener("wheel", this.onWheel, { passive: true });
+    // Zoom disabled: no wheel listener.
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
@@ -190,7 +192,7 @@ export class HandLabFallbackEngine {
     cancelAnimationFrame(this.handRaf);
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
-    window.removeEventListener("wheel", this.onWheel);
+    // No wheel listener (zoom disabled) — nothing to remove.
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
     this.opts.canvas.removeEventListener(
@@ -783,9 +785,8 @@ export class HandLabFallbackEngine {
     this.dragging = null;
   };
 
-  private onWheel = (e: WheelEvent): void => {
-    this.zoom = Math.min(2.5, Math.max(0.6, this.zoom * (e.deltaY > 0 ? 0.92 : 1.08)));
-  };
+  // Zoom disabled: view scale stays fixed — wheel does nothing.
+  private onWheel = (_e: WheelEvent): void => {};
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === "l" || e.key === "L") this.setLineMode(!this.lineMode);
@@ -1002,8 +1003,30 @@ export class HandLabFallbackEngine {
       cv.height = Math.round(h * dpr);
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Scene chrome follows the UI theme; placed objects are user data.
+    // Scene chrome follows the UI theme + colour scheme; placed objects
+    // are user data. DOM-only read (no localStorage) to stay cheap per frame.
+    // NOTE: mirrors sceneAccentFor() in lib/theme.ts by hand — keep the
+    // preset/custom mapping in sync if that function changes.
     const dark = document.documentElement.dataset.theme === "dark";
+    const rawScheme = document.documentElement.dataset.accent ?? "teal";
+    const scheme = isAccentName(rawScheme) ? rawScheme : "teal";
+    let accentNum: number;
+    if (scheme === "custom") {
+      const inline = document.documentElement.style
+        .getPropertyValue("--color-accent")
+        .trim();
+      accentNum = isValidCustomHex(inline)
+        ? parseInt(inline.slice(1), 16)
+        : dark
+          ? ACCENTS.teal.dark.scene
+          : ACCENTS.teal.light.scene;
+    } else {
+      accentNum = dark ? ACCENTS[scheme].dark.scene : ACCENTS[scheme].light.scene;
+    }
+    const accentCss = `#${accentNum.toString(16).padStart(6, "0")}`;
+    const ar = (accentNum >> 16) & 255;
+    const ag = (accentNum >> 8) & 255;
+    const ab = accentNum & 255;
     const C = {
       bg: dark ? "#100E12" : "#FCFCF9",
       gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
@@ -1012,9 +1035,9 @@ export class HandLabFallbackEngine {
       line: dark ? "#ffb224" : "#B26A00",
       vertex: dark ? "#ffd76a" : "#9B6C22",
       unselected: dark ? "#ffe27a" : "#9B6C22",
-      cursor: dark ? "#34B4C4" : "#016A71",
+      cursor: accentCss,
       pinch: dark ? "#3ddc84" : "#2E7D46",
-      halo: dark ? "rgba(52,180,196,.4)" : "rgba(1,106,113,.35)",
+      halo: `rgba(${ar},${ag},${ab},${dark ? ".4" : ".35"})`,
     };
     g.fillStyle = C.bg;
     g.fillRect(0, 0, w, h);

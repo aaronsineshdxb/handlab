@@ -16,6 +16,7 @@ import Dock from "./bits/Dock";
 import Magnet from "./bits/Magnet";
 import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
+import { AccentSection } from "./bits/AccentPicker";
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import { evalChecks, type SceneSnap } from "../lib/lessons/checks";
@@ -658,6 +659,7 @@ export default function HandLab() {
         <div className="tool-row">
           <ThemeToggle />
         </div>
+        <AccentSection />
         <input
           ref={fileRef}
           type="file"
@@ -735,11 +737,11 @@ export default function HandLab() {
           <kbd>snap</kbd> tap near a point or line to snap + connect (green ring)
         </div>
         <div>
-          <kbd>2-hand spread</kbd> camera zoom
+          <kbd>2-hand spread</kbd> zoom disabled — camera stays fixed
         </div>
         <div style={{ marginTop: 8, color: "var(--muted)" }}>
-          No webcam? Mouse moves on your view plane, wheel = in/out, click =
-          place, drag = move. R recenters hand control.
+          No webcam? Mouse moves on your view plane (wheel zoom disabled),
+          click = place, drag = move. R recenters hand control.
         </div>
       </aside>
 

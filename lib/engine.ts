@@ -12,8 +12,12 @@ import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
+  currentCustomHex,
+  currentScheme,
   currentTheme,
   onThemeChange,
+  sceneThemeFor,
+  sceneThemeNow,
   type ThemeName,
 } from "./theme";
 
@@ -485,7 +489,6 @@ export class HandLabEngine {
   private onVisibility: (() => void) | null = null;
   private wasHidden = false;
   private pinchState = false;
-  private prevTwoDist = 0;
   private smoothZ = 0;
   private fistSince = 0;
   private sctx: CanvasRenderingContext2D | null;
@@ -496,7 +499,6 @@ export class HandLabEngine {
   private filtInit = false;
   private lostFrames = 0;
   private fistFrames = 0;
-  private zoomSm = 0;
   private mathTick = 0;
   // webcam lifecycle guards: single detect loop, stale-request protection
   private camStarting = false;
@@ -610,18 +612,19 @@ export class HandLabEngine {
       this.boundsMat,
     );
     this.scene.add(bounds);
-    this.applySceneTheme(currentTheme());
-    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
     /* ---------- floating cursor (the 3-axis pointer) ---------- */
+    // Seed cursor meshes from the effective scheme so first paint is
+    // correct even before applySceneTheme runs below.
+    const seedAccent = sceneThemeNow().cursor;
     this.core = new THREE.Mesh(
       new THREE.SphereGeometry(0.11, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0x016A71 }),
+      new THREE.MeshBasicMaterial({ color: seedAccent }),
     );
     this.ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.26, 0.018, 12, 40),
       new THREE.MeshBasicMaterial({
-        color: 0x016A71,
+        color: seedAccent,
         transparent: true,
         opacity: 0.9,
       }),
@@ -629,13 +632,13 @@ export class HandLabEngine {
     this.zAxis = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 1, 8),
       new THREE.MeshBasicMaterial({
-        color: 0x016A71,
+        color: seedAccent,
         transparent: true,
         opacity: 0.45,
       }),
     );
     this.zAxis.rotation.x = Math.PI / 2;
-    this.glow = new THREE.PointLight(0x016A71, 12, 6);
+    this.glow = new THREE.PointLight(seedAccent, 12, 6);
     this.glow.position.set(0, 0.2, 0);
     this.dropLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
@@ -643,7 +646,7 @@ export class HandLabEngine {
         new THREE.Vector3(),
       ]),
       new THREE.LineDashedMaterial({
-        color: 0x016A71,
+        color: seedAccent,
         dashSize: 0.12,
         gapSize: 0.08,
         transparent: true,
@@ -654,6 +657,10 @@ export class HandLabEngine {
     this.cursor.add(this.core, this.ring, this.zAxis, this.glow, this.dropLine);
     this.cursor.position.set(0, 0, 0);
     this.scene.add(this.cursor);
+
+    // Runs after cursor meshes exist so accent re-skin covers zAxis/dropLine.
+    this.applySceneTheme(currentTheme());
+    this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
 
     /* ---------- hover + selection rings ---------- */
     this.hoverRing = new THREE.Mesh(
@@ -706,7 +713,7 @@ export class HandLabEngine {
 
     /* ---------- listeners ---------- */
     window.addEventListener("pointermove", this.onPointerMove);
-    window.addEventListener("wheel", this.onWheel, { passive: true });
+    // Zoom disabled: camera stays fixed — no wheel listener.
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
@@ -784,12 +791,14 @@ export class HandLabEngine {
     );
   };
 
-  /** Re-skin scene chrome for the current UI theme. Placed objects are
-   *  user data and keep their colors; only background, grid, lights, and
-   *  the rest-state cursor follow the toggle. The per-frame tick picks up
-   *  `cursorRest`, so state tints (pinch/line) keep working. */
+  /** Re-skin scene chrome for the current UI theme + colour scheme.
+   *  Placed objects are user data and keep their colors; only background,
+   *  grid, lights, and the rest-state cursor follow the toggle. The
+   *  per-frame tick picks up `cursorRest`, so state tints (pinch/line) keep
+   *  working. `onThemeChange` also fires on scheme flips, so this stays in
+   *  sync when the user picks a scheme at will. */
   private applySceneTheme(name: ThemeName): void {
-    const p = SCENE_THEMES[name];
+    const p = sceneThemeFor(name, currentScheme(), currentCustomHex());
     (this.scene.background as THREE.Color).setHex(p.bg);
     (this.scene.fog as THREE.Fog).color.setHex(p.bg);
     this.hemi.color.setHex(p.hemiSky);
@@ -804,10 +813,15 @@ export class HandLabEngine {
     this.grid = new THREE.GridHelper(14, 28, p.gridCenter, p.gridMain);
     this.scene.add(this.grid);
     this.cursorRest = p.cursor;
+    // applySceneTheme runs once before the cursor meshes exist — guard it.
+    if (this.zAxis)
+      (this.zAxis.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    if (this.dropLine)
+      (this.dropLine.material as THREE.LineBasicMaterial).color.setHex(p.cursor);
     // state tints stay readable on both canvases: deep pair on cream, bright pair on near-black
     const dark = name === "dark";
-    this.cursorPinch = dark ? 0x3ddc84 : 0x2E7D46;
-    this.cursorLine = dark ? 0xffb224 : 0xB26A00;
+    this.cursorPinch = dark ? 0x3ddc84 : 0x2e7d46;
+    this.cursorLine = dark ? 0xffb224 : 0xb26a00;
   }
 
   dispose(): void {
@@ -823,7 +837,7 @@ export class HandLabEngine {
     cancelAnimationFrame(this.handRaf);
     cancelAnimationFrame(this.skelRaf);
     window.removeEventListener("pointermove", this.onPointerMove);
-    window.removeEventListener("wheel", this.onWheel);
+    // No wheel listener (zoom disabled) — nothing to remove.
     this.opts.canvas.removeEventListener(
       "pointerdown",
       this.onCanvasPointerDown,
@@ -1486,13 +1500,8 @@ export class HandLabEngine {
     if (this.mouseDown && this.grabbed) this.onPinchMove();
   };
 
-  private onWheel = (e: WheelEvent): void => {
-    if (this.handActive) return;
-    this.camera.getWorldDirection(this._v1);
-    this.target
-      .addScaledVector(this._v1, -Math.sign(e.deltaY) * 0.4)
-      .clamp(this.LIM_MIN, this.LIM_MAX);
-  };
+  // Zoom disabled: camera stays fixed — wheel does nothing.
+  private onWheel = (_e: WheelEvent): void => {};
 
   private onCanvasPointerDown = (): void => {
     if (this.handActive) return;
@@ -2130,20 +2139,7 @@ export class HandLabEngine {
         .addScaledVector(this._camR, dx)
         .addScaledVector(this._camU, dy)
         .addScaledVector(this._camF, (0.5 - fOy) * 8);
-      const d = Math.hypot(other[8].x - rawTip.x, other[8].y - rawTip.y);
-      if (this.prevTwoDist && Math.abs(d - this.prevTwoDist) > 0.008) {
-        const step = THREE.MathUtils.clamp(
-          1 - (d - this.prevTwoDist) * 1.4,
-          0.97,
-          1.03,
-        );
-        this.zoomSm += (step - this.zoomSm) * 0.5;
-        if (this.zoomSm !== 0) this.camera.position.multiplyScalar(1 + (this.zoomSm - 1));
-      }
-      this.prevTwoDist = d;
-    } else {
-      this.prevTwoDist = 0;
-      this.zoomSm = 0;
+      // Zoom disabled: two-hand spread no longer moves the camera.
     }
     this.target.clamp(this.LIM_MIN, this.LIM_MAX);
 

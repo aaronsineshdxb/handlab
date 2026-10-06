@@ -52,6 +52,24 @@ fog, grid, bounds, lights, floor shadow, and rest-state cursor; pinch/line
 state tints swap to their bright pair. Placed-object colors are user data and
 never change with the theme. 2D fallback picks its palette per frame.
 
+## Colour schemes
+User-selectable at will. `data-accent` on `<html>` (`teal | violet | forest |
+amber | rose | blue | custom`) re-keys only `--color-accent`,
+`--color-accent-2`, and `--color-focus`; paper/ink/rules/status never move so
+elevation and readability stay put. Picker lives in each lab toolbar
+(COLOUR SCHEME section, `components/bits/AccentPicker.tsx`): six preset
+swatches + a custom `input[type=color]` well for any hex. Presets persist to
+`localStorage(handlab-scheme)`; custom hex persists to
+`localStorage(handlab-accent-custom)` and is painted inline
+(`--color-accent`, `--color-focus`, `color-mix` `--color-accent-2`,
+luminance-picked `--color-accent-ink`). The blocking init script paints the
+stored scheme before first paint. The 3D engines (`lib/engine.ts`,
+`lib/vr-engine.ts` via `sceneThemeFor` + `onThemeChange` observing
+`data-accent`/`style`) re-skin cursor, rim light, z-axis, and drop-line to the
+scheme; pinch/line state tints stay green/amber. The 2D fallback derives its
+cursor/halo per frame from the same scheme. Placed-object colors are user
+data and never change with the scheme.
+
 - `--color-paper`   oklch(15% 0.008 80)   — canvas #100E12
 - `--color-paper-2` oklch(20% 0.01 80)    — cards
 - `--color-paper-3` oklch(25% 0.012 80)   — fills

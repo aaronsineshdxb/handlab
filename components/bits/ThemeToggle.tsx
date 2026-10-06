@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
-import { THEME_KEY, currentTheme, type ThemeName } from "../../lib/theme";
+import { applyTheme, currentTheme, type ThemeName } from "../../lib/theme";
 
 /** Light/dark toggle. Writes `data-theme` on <html> (tokens + 3D scene
  *  follow) and persists to localStorage. Initial value is painted by the
@@ -20,12 +20,7 @@ function ThemeToggle() {
       aria-pressed={theme === "dark"}
       title="Toggle light / dark theme"
       onClick={() => {
-        document.documentElement.dataset.theme = next;
-        try {
-          localStorage.setItem(THEME_KEY, next);
-        } catch {
-          /* private mode: theme still flips for this session */
-        }
+        applyTheme(next);
         setTheme(next);
       }}
     >

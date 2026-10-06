@@ -91,3 +91,58 @@
   --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
   --shadow-card: 0 8px 24px -4px oklch(0% 0 0 / 0.5), 0 2px 6px -2px oklch(0% 0 0 / 0.4);
 }
+
+/* User-selectable colour schemes. Only accent tokens are re-keyed — paper,
+ * ink, rules and status colours stay on the Perplexity ramp so elevation
+ * and readability never shift under the user. `custom` is painted inline
+ * by lib/theme.ts (any hex), so it needs no block here. */
+[data-accent="violet"] {
+  --color-accent: oklch(48% 0.14 285);
+  --color-accent-2: oklch(62% 0.15 285);
+  --color-focus: oklch(48% 0.14 285);
+}
+[data-theme="dark"][data-accent="violet"] {
+  --color-accent: oklch(75% 0.12 285);
+  --color-accent-2: oklch(79% 0.11 285);
+  --color-focus: oklch(75% 0.12 285);
+}
+[data-accent="forest"] {
+  --color-accent: oklch(48% 0.11 155);
+  --color-accent-2: oklch(60% 0.13 155);
+  --color-focus: oklch(48% 0.11 155);
+}
+[data-theme="dark"][data-accent="forest"] {
+  --color-accent: oklch(75% 0.14 155);
+  --color-accent-2: oklch(79% 0.13 155);
+  --color-focus: oklch(75% 0.14 155);
+}
+[data-accent="amber"] {
+  --color-accent: oklch(48% 0.12 75);
+  --color-accent-2: oklch(62% 0.13 75);
+  --color-focus: oklch(48% 0.12 75);
+}
+[data-theme="dark"][data-accent="amber"] {
+  --color-accent: oklch(76% 0.12 75);
+  --color-accent-2: oklch(80% 0.11 75);
+  --color-focus: oklch(76% 0.12 75);
+}
+[data-accent="rose"] {
+  --color-accent: oklch(48% 0.13 20);
+  --color-accent-2: oklch(60% 0.14 20);
+  --color-focus: oklch(48% 0.13 20);
+}
+[data-theme="dark"][data-accent="rose"] {
+  --color-accent: oklch(70% 0.13 20);
+  --color-accent-2: oklch(75% 0.12 20);
+  --color-focus: oklch(70% 0.13 20);
+}
+[data-accent="blue"] {
+  --color-accent: oklch(48% 0.13 260);
+  --color-accent-2: oklch(62% 0.14 260);
+  --color-focus: oklch(48% 0.13 260);
+}
+[data-theme="dark"][data-accent="blue"] {
+  --color-accent: oklch(74% 0.11 260);
+  --color-accent-2: oklch(78% 0.1 260);
+  --color-focus: oklch(74% 0.11 260);
+}

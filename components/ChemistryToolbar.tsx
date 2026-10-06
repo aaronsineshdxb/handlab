@@ -2,6 +2,7 @@
 
 import Magnet from "./bits/Magnet";
 import ThemeToggle from "./bits/ThemeToggle";
+import { AccentSection } from "./bits/AccentPicker";
 
 /**
  * Chemistry palette (blueprint §6.2).
@@ -85,6 +86,7 @@ export default function ChemistryToolbar({
       <div className="tool-row">
         <ThemeToggle />
       </div>
+      <AccentSection />
     </nav>
   );
 }

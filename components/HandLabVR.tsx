@@ -12,6 +12,7 @@ import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
 import Magnet from "./bits/Magnet";
 import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
+import { AccentSection } from "./bits/AccentPicker";
 
 const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -272,6 +273,7 @@ export default function HandLabVR() {
         <div className="tool-row">
           <ThemeToggle />
         </div>
+        <AccentSection />
       </nav>
 
       <aside className="hint" aria-label="VR gesture map">

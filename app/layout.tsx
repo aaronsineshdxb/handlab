@@ -41,13 +41,16 @@ export const metadata: Metadata = {
   ],
 };
 
-const THEME_INIT = `(function(){try{var s=localStorage.getItem("handlab-theme");if(s!=="dark"&&s!=="light"){s=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.dataset.theme=s;}catch(e){document.documentElement.dataset.theme="light";}})();`;
+// NOTE: scheme allow-list + 0.35 luminance threshold duplicated from
+// lib/theme.ts (isAccentName, ACCENT_INK_THRESHOLD). Update both when adding
+// a preset or tuning ink. Inline because the blocking script cannot import TS.
+const THEME_INIT = `(function(){try{var t=localStorage.getItem("handlab-theme");if(t!=="dark"&&t!=="light"){t=window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.dataset.theme=t;var ok=["teal","violet","forest","amber","rose","blue","custom"];var s=localStorage.getItem("handlab-scheme");if(ok.indexOf(s)<0){s="teal";}document.documentElement.dataset.accent=s;if(s==="custom"){var c=localStorage.getItem("handlab-accent-custom");if(!/^#[0-9a-fA-F]{6}$/.test(c||"")){c="#016A71";}var st=document.documentElement.style;st.setProperty("--color-accent",c);st.setProperty("--color-focus",c);st.setProperty("--color-accent-2","color-mix(in oklch, "+c+" 72%, white)");var n=parseInt(c.slice(1),16),r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255,f=function(v){return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);},lum=0.2126*f(r)+0.7152*f(g)+0.0722*f(b);st.setProperty("--color-accent-ink",lum>0.35?"#27251E":"#FCFCF9");}}catch(e){document.documentElement.dataset.theme="light";document.documentElement.dataset.accent="teal";}})();`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" data-theme="light" suppressHydrationWarning className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
+    <html lang="en" data-theme="light" data-accent="teal" suppressHydrationWarning className={`${sans.variable} ${serif.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
