@@ -20,6 +20,7 @@ import {
   type ShapeName,
   type UiState,
 } from "./engine";
+import type { SceneSnap } from "./lessons/checks";
 import { shouldDetect } from "./handRate";
 import { ACCENTS, isAccentName, isValidCustomHex } from "./theme";
 
@@ -278,6 +279,20 @@ export class HandLabFallbackEngine {
       chains: this.chains.map((L) =>
         L.pts.map((p) => [p.x, p.y, 0] as [number, number, number]),
       ),
+    };
+  }
+
+  /** Check-only snapshot without color/rotation fields (API parity with the
+   *  WebGL engine's exportCheckSnap so HandLab calls one method on either). */
+  exportCheckSnap(
+    quizAnswers: Record<string, number> = {},
+  ): SceneSnap {
+    return {
+      objects: this.objs.map((o) => ({ s: o.s })),
+      chains: this.chains.map((L) =>
+        L.pts.map((p) => [p.x, p.y, 0] as [number, number, number]),
+      ),
+      quizAnswers,
     };
   }
 
