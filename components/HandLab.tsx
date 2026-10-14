@@ -196,6 +196,18 @@ export default function HandLab() {
 
   const eng = useCallback(() => engineRef.current, []);
 
+  const getStudioEngine = useCallback(
+    () =>
+      engineRef.current as unknown as {
+        setWireframe?: (on: boolean) => void;
+        setMaterialMode?: (mode: "standard" | "clay" | "flat") => void;
+        setDetail?: (level: number) => void;
+        setClip?: (axis: "x" | "y" | "z" | null, pos: number) => void;
+        setSpawnScale?: (x: number, y: number, z: number) => void;
+      } | null,
+    [],
+  );
+
   const download = (name: string, url: string) => {
     const a = document.createElement("a");
     a.href = url;
@@ -516,7 +528,7 @@ export default function HandLab() {
         />
       </nav>
 
-      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} />
+      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} />
 
       <aside
         id="hint-panel"

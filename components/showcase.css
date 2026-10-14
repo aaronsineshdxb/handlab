@@ -76,6 +76,7 @@
 .solid-math__head{display:flex;justify-content:space-between;align-items:center}
 .solid-math__head b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#475569}
 .solid-math__head .mini{flex:0 0 auto;min-width:64px}
+.solid-math__h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#475569;margin:6px 0 0}
 .solid-math .sc-card{box-shadow:none}
 .solid-math .sc-slider{min-width:0}
 @media(max-width:900px){.solid-math{width:250px;right:8px}}
