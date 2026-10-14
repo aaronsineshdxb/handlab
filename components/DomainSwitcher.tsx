@@ -40,7 +40,7 @@ function DomainSwitcher({
             className={"domain-btn" + (current ? " active" : "")}
             aria-current={current ? "page" : undefined}
           >
-            {current && (
+            {current && !reduce && (
               <motion.span
                 className="seg__thumb"
                 layoutId={pillId}

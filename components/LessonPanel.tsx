@@ -111,8 +111,13 @@ function LessonPanel({
     onQuizAnswer?.(quizCheck, answerIndex);
   };
 
+  const isPreviouslyCompleted =
+    !!progress &&
+    (progress.stepIdx > stepIdx ||
+      (progress.stepIdx === stepIdx && progress.done));
   const quizComplete =
-    quizCheck?.kind === "quiz" && completedQuizKey === quizKey;
+    (quizCheck?.kind === "quiz" && completedQuizKey === quizKey) ||
+    isPreviouslyCompleted;
   const quizIncomplete = quizCheck?.kind === "quiz" && !quizComplete;
 
   // Scene checks are evaluated against the live scene. Without a snapshot

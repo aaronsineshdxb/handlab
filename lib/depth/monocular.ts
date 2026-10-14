@@ -147,6 +147,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
   private paused = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private scratch: HTMLCanvasElement | null = null;
+  private scratchCtx: CanvasRenderingContext2D | null = null;
   private infers = 0;
   private fpsT0 = 0;
   private onStatus: ((s: DepthStatus, detail: string) => void) | null = null;
@@ -235,13 +236,19 @@ export class DepthAnythingV2Provider implements DepthProvider {
     const video = this.video;
     const est = this.estimator;
     if (!video || !est || video.readyState < 2 || video.videoWidth === 0) return;
-    if (!this.scratch) this.scratch = document.createElement("canvas");
+    if (!this.scratch) {
+      this.scratch = document.createElement("canvas");
+      // getContext per inference is a (small) lookup + state reset; cache it.
+      this.scratchCtx =
+        this.scratch.getContext("2d", { willReadFrequently: true });
+      if (!this.scratchCtx) return;
+    }
     const scale = INFER_W / video.videoWidth;
     const w = INFER_W;
     const h = Math.max(16, Math.round(video.videoHeight * scale));
     this.scratch.width = w;
     this.scratch.height = h;
-    const g = this.scratch.getContext("2d", { willReadFrequently: true });
+    const g = this.scratchCtx;
     if (!g) return;
     g.drawImage(video, 0, 0, w, h);
     const out = await est(this.scratch);
@@ -249,7 +256,15 @@ export class DepthAnythingV2Provider implements DepthProvider {
     const H = dims[0];
     const W = dims[1];
     const src = out.predicted_depth.data;
-    this.map = { data: Float32Array.from(src), w: W, h: H, t: performance.now() };
+    // Transformers returns a Float32Array already; copying 65k floats every
+    // 400ms just to own the buffer is pure GC pressure. Copy only when the
+    // runtime hands us a plain array.
+    this.map = {
+      data: src instanceof Float32Array ? src : Float32Array.from(src),
+      w: W,
+      h: H,
+      t: performance.now(),
+    };
     // rolling fps over an 8-inference window
     this.infers++;
     if (this.infers % 8 === 1) this.fpsT0 = performance.now();
@@ -287,6 +302,8 @@ export class DepthAnythingV2Provider implements DepthProvider {
     this.map = null;
     this.anchorZ = null;
     this.video = null;
+    this.scratch = null;
+    this.scratchCtx = null;
     this.setStatus("off", "");
   }
 

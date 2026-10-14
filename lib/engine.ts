@@ -515,6 +515,11 @@ export class HandLabEngine {
   // frame / HUD
   private hudCache: Record<string, string> = {};
   private hudTick = 0;
+  // Hover + snap scans walk every object/vertex. At 60fps that is a full
+  // scene traversal per frame for a ring that humans read at ~20Hz, so
+  // recompute every 3rd frame and reuse the cached result in between.
+  private hoverTick = 0;
+  private cachedSnap: SnapTarget | null = null;
   private lastCur2dBorder = "";
   private prNow: number;
   private PR_MAX: number;
@@ -852,6 +857,18 @@ export class HandLabEngine {
     this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    delete (window as any).__lab;
+    Object.values(this.geoCache).forEach((g) => g?.dispose());
+    Object.values(this.matCache).forEach((m) => m.dispose());
+    this.spawnables.forEach((m) => m.geometry?.dispose());
+    this.SEG_GEO.dispose();
+    this.SEG_MAT.dispose();
+    this.HANDLE_GEO.dispose();
+    this.HANDLE_MAT.dispose();
+    this.floorMat.dispose();
+    this.boundsMat.dispose();
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
     this.controls.dispose();
     this.renderer.dispose();
   }
@@ -927,8 +944,39 @@ export class HandLabEngine {
   /* ---------- scene persistence + export ---------- */
 
   private shapeOf(m: THREE.Mesh): ShapeName {
+    const cached = m.userData.shape as ShapeName | undefined;
+    if (cached && SHAPES.includes(cached)) return cached;
     for (const s of SHAPES) if (this.geoFor(s) === m.geometry) return s;
     return "cube";
+  }
+
+  /**
+   * Direct check-only snapshot from the live scene graph.
+   *
+   * `exportScene()` + `toCheckSnap()` pays for a hex color string plus
+   * position/rotation arrays per object and then throws them away — the checks
+   * only read the shape name and chain coordinates. This reads the shape
+   * (O(1) via userData, set in placeAt) and chain points directly, so a
+   * 10Hz scene sync never touches getHexString or builds SceneData.
+   */
+  exportCheckSnap(
+    quizAnswers: Record<string, number> = {},
+  ): SceneSnap {
+    return {
+      // Fast path first: placeAt caches the shape in userData, so the common
+      // case never even calls shapeOf (which falls back to a geometry scan
+      // for meshes that predate the cache).
+      objects: this.spawnables.map((m) => {
+        const cached = m.userData.shape as ShapeName | undefined;
+        return {
+          s: cached && SHAPES.includes(cached) ? cached : this.shapeOf(m),
+        };
+      }),
+      chains: this.polylines.map((L) =>
+        L.pts.map((p) => [p.x, p.y, p.z] as [number, number, number]),
+      ),
+      quizAnswers,
+    };
   }
 
   exportScene(): SceneData {
@@ -1150,6 +1198,10 @@ export class HandLabEngine {
       }
     } catch (err) {
       if (stale()) return;
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      try { this.landmarker?.close(); } catch {}
+      this.landmarker = null;
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.camLive) {
@@ -1312,6 +1364,7 @@ export class HandLabEngine {
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
     m.userData.hr = this.hrFor(s);
+    m.userData.shape = s;
     this.scene.add(m);
     this.spawnables.push(m);
     this.shadowsDirty = true;
@@ -1321,11 +1374,13 @@ export class HandLabEngine {
 
   private nearestTo(p: THREE.Vector3, r = 1.0): THREE.Mesh | null {
     let best: THREE.Mesh | null = null;
-    let bd = r;
+    // Squared comparison: distanceTo does a sqrt per object, and this runs on
+    // the frame path. r <= 1 so r*r is exact for the radii we use.
+    let bd2 = r * r;
     for (const m of this.spawnables) {
-      const d = m.position.distanceTo(p);
-      if (d < bd) {
-        bd = d;
+      const d2 = m.position.distanceToSquared(p);
+      if (d2 < bd2) {
+        bd2 = d2;
         best = m;
       }
     }
@@ -1350,8 +1405,8 @@ export class HandLabEngine {
     this.pinchStartT = performance.now();
     this.pinchStartPos.copy(this.cursor.position);
     this.pinchMoved = false;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x3ddc84);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(0x3ddc84);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(this.cursorPinch);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(this.cursorPinch);
     this.grabbedHandle = this.nearestHandle(this.cursor.position, 1.0);
     if (this.grabbedHandle) {
       this.handleOffset
@@ -1432,7 +1487,8 @@ export class HandLabEngine {
       this.nearestTo(this.cursor.position, 1.0);
     if (v) {
       this.scene.remove(v);
-      this.spawnables.splice(this.spawnables.indexOf(v), 1);
+      const idx = this.spawnables.indexOf(v);
+      if (idx !== -1) this.spawnables.splice(idx, 1);
       this.shadowsDirty = true;
       this.setCount();
       if (this.grabbed === v) this.grabbed = null;
@@ -1753,14 +1809,14 @@ export class HandLabEngine {
   ): SnapTarget | null {
     if (!this.snapOn) return null;
     let best: SnapTarget | null = null;
-    let bd = this.SNAP_R;
+    let bd2 = this.SNAP_R * this.SNAP_R;
     // pass 1: existing vertices (preferred — chains share the exact point)
     this.polylines.forEach((L) =>
       L.pts.forEach((q, i) => {
         if (exclude && exclude.L === L && exclude.idx === i) return;
-        const d = p.distanceTo(q);
-        if (d < bd) {
-          bd = d;
+        const d2 = p.distanceToSquared(q);
+        if (d2 < bd2) {
+          bd2 = d2;
           best = { pos: q.clone(), L, idx: i, segIndex: null };
         }
       }),
@@ -1786,9 +1842,9 @@ export class HandLabEngine {
         const dx = p.x - cx;
         const dy = p.y - cy;
         const dz = p.z - cz;
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (d < bd) {
-          bd = d;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < bd2) {
+          bd2 = d2;
           best = { pos: new THREE.Vector3(cx, cy, cz), L, idx: -1, segIndex: i };
         }
       }
@@ -1798,12 +1854,12 @@ export class HandLabEngine {
 
   private nearestHandle(p: THREE.Vector3, r = 1.0): GrabbedHandle | null {
     let best: GrabbedHandle | null = null;
-    let bd = r;
+    let bd2 = r * r;
     this.polylines.forEach((L) =>
       L.pts.forEach((q, i) => {
-        const d = p.distanceTo(q);
-        if (d < bd) {
-          bd = d;
+        const d2 = p.distanceToSquared(q);
+        if (d2 < bd2) {
+          bd2 = d2;
           best = { L, idx: i };
         }
       }),
@@ -1870,6 +1926,15 @@ export class HandLabEngine {
   /* ---------- keyboard ---------- */
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
     if (
       (e.key >= "1" && e.key <= "9") ||
       e.key === "0"
@@ -1901,7 +1966,8 @@ export class HandLabEngine {
     ) {
       const v = (this.grabbed || this.hovered)!;
       this.scene.remove(v);
-      this.spawnables.splice(this.spawnables.indexOf(v), 1);
+      const idx = this.spawnables.indexOf(v);
+      if (idx !== -1) this.spawnables.splice(idx, 1);
       this.grabbed = null;
       this.hovered = null;
       if (this.selected === v) this.setSelected(null);
@@ -2231,13 +2297,21 @@ export class HandLabEngine {
     // line-mode previews: rubber band + snap ring. The ring shows whenever
     // the cursor is near a snappable point or line — even before the chain
     // starts — so you can see what a tap would connect to.
+    // Hover + snap walk the whole scene, so refresh every 3rd frame (~20Hz);
+    // the markers interpolate visually between refreshes.
     const chaining =
       this.lineMode && this.activeLine && this.activeLine.pts.length > 0;
     this.previewLine.visible = !!chaining;
-    const s =
-      this.lineMode && !this.pinchHeld
-        ? this.findSnapTarget(this.cursor.position, null, this.activeLine)
-        : null;
+    if (this.hoverTick++ % 3 === 0) {
+      this.cachedSnap =
+        this.lineMode && !this.pinchHeld
+          ? this.findSnapTarget(this.cursor.position, null, this.activeLine)
+          : null;
+      this.setHover(
+        this.pinchHeld ? this.hovered : this.nearestTo(this.cursor.position, 0.8),
+      );
+    }
+    const s = this.cachedSnap;
     if (chaining && this.activeLine) {
       const a = this.activeLine.pts[this.activeLine.pts.length - 1];
       const pp = this.previewLine.geometry.attributes
@@ -2254,9 +2328,6 @@ export class HandLabEngine {
       this.snapMarker.lookAt(this.camera.position);
     }
 
-    this.setHover(
-      this.pinchHeld ? this.hovered : this.nearestTo(this.cursor.position, 0.8),
-    );
     this.hoverRing.visible = !!this.hovered;
     if (this.hovered) {
       this.hoverRing.position.copy(this.hovered.position);

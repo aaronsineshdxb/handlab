@@ -41,6 +41,12 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // motion/react is only imported inside the lazy lab/VR chunks, but without
+  // this the bundler keeps the whole barrel available per importer. Measured
+  // win is small (~KBs); the flag is free and cannot change behaviour.
+  experimental: {
+    optimizePackageImports: ["motion"],
+  },
   async headers() {
     return [
       // Order matters: these specific rules must precede the /(.*) catch-all.
