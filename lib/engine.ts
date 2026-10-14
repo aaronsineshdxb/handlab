@@ -570,8 +570,8 @@ export class HandLabEngine {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false; // static scene: re-render shadows only when something moves
 
-    this.scene.background = new THREE.Color(0xFCFCF9);
-    this.scene.fog = new THREE.Fog(0xFCFCF9, 14, 30);
+    this.scene.background = new THREE.Color(0xF8FAFC);
+    this.scene.fog = new THREE.Fog(0xF8FAFC, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -599,7 +599,7 @@ export class HandLabEngine {
     this.rimLight.position.set(-5, 3, -4);
     this.scene.add(this.rimLight);
 
-    this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
+    this.grid = new THREE.GridHelper(14, 28, 0xCBD5E1, 0xE2E8F0);
     this.scene.add(this.grid);
     this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
     const floor = new THREE.Mesh(

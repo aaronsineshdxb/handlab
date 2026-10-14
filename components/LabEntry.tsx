@@ -3,15 +3,21 @@
 import dynamic from "next/dynamic";
 import Boot from "./Boot";
 
-// The lab is a WebGL canvas sitting behind a ~590KB Three.js bundle. Splitting
-// it keeps the renderer off the critical path so the shell paints first.
-// This wrapper exists because Next 15 forbids `ssr: false` in a Server
-// Component, and app/page.tsx needs to stay one to own its metadata.
+// Presentation default: the judging-panel showcase (light, maximised
+// viewport, collapsed chrome, live math, Learn/Studio toggle).
+// The hand-tracking sandbox is preserved at ?sandbox=1.
+const ShowcaseLab = dynamic(() => import("./ShowcaseLab"), {
+  ssr: false,
+  loading: () => <Boot />,
+});
 const HandLab = dynamic(() => import("./HandLab"), {
   ssr: false,
   loading: () => <Boot />,
 });
 
 export default function LabEntry() {
-  return <HandLab />;
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("sandbox") === "1") {
+    return <HandLab />;
+  }
+  return <ShowcaseLab />;
 }

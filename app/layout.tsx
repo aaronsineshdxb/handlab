@@ -3,6 +3,7 @@ import { Geist, Newsreader, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "../tokens.css";
 import "../components/bits/bits.css";
+import "../components/showcase.css";
 import "./globals.css";
 
 const sans = Geist({

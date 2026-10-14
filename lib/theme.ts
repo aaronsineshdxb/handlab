@@ -343,16 +343,16 @@ export function sceneThemeNow(): SceneTheme {
  *  touched here — only background, grid, lights, and the cursor. */
 export const SCENE_THEMES: Record<ThemeName, SceneTheme> = {
   light: {
-    bg: 0xFCFCF9,
-    gridCenter: 0xCFC9B8,
-    gridMain: 0xE3DED0,
-    bounds: 0xD8D2C2,
+    bg: 0xF8FAFC,
+    gridCenter: 0xCBD5E1,
+    gridMain: 0xE2E8F0,
+    bounds: 0xE2E8F0,
     cursor: 0x016A71,
     hemiSky: 0xffffff,
-    hemiGround: 0xd8cfb8,
+    hemiGround: 0xe2e8f0,
     rim: 0x016A71,
     rimIntensity: 0.7,
-    floorOpacity: 0.32,
+    floorOpacity: 0.18,
   },
   dark: {
     bg: 0x100E12,
