@@ -67,6 +67,8 @@ const PASTEL: Record<ShowcaseShapeId, number> = {
   triPrism: 0xfdba74,
   capsule: 0xbae6fd,
   icosa: 0xddd6fe,
+  tetra: 0xa5f3d6,
+  octa: 0xfbcfe8,
 };
 
 function makeTextSprite(): THREE.Sprite & { set(t: string): void; _last?: string } {
@@ -241,7 +243,7 @@ export class ShowcaseEngine {
     const d = withDims(this.settings.shape, this.settings.dims);
     let longest = 2;
     const s = this.settings.shape;
-    if (s === "cube" || s === "icosa") longest = d.a;
+    if (s === "cube" || s === "icosa" || s === "tetra" || s === "octa") longest = d.a;
     else if (s === "prism") longest = Math.max(d.w, d.h, d.d);
     else if (s === "sphere" || s === "dome") longest = d.r * 2;
     else if (s === "cylinder" || s === "cone") longest = Math.max(d.r * 2, d.h);
@@ -281,6 +283,8 @@ export class ShowcaseEngine {
       case "hexPrism": return new THREE.CylinderGeometry(S(d.a), S(d.a), S(d.h), 6);
       case "triPrism": return new THREE.CylinderGeometry(S(d.a), S(d.a), S(d.h), 3);
       case "capsule": return new THREE.CapsuleGeometry(S(d.r), S(d.h), 8, 28);
+      case "tetra": return new THREE.TetrahedronGeometry(S(d.a * 0.95));
+      case "octa": return new THREE.OctahedronGeometry(S(d.a * 0.95));
       case "icosa": return new THREE.IcosahedronGeometry(S(d.a * 0.95), det >= 2 ? 1 : 0);
     }
   }

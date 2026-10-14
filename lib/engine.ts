@@ -430,6 +430,9 @@ export class HandLabEngine {
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
   private color = "#016A71";
+  /** Scale applied to newly placed meshes (driven by the solid-math panel
+   *  sliders). Stored as ratios so defaults keep the exact legacy sizes. */
+  private spawnScale: [number, number, number] = [1, 1, 1];
   private geoCache: Partial<Record<ShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hrCache: Partial<Record<ShapeName, number>> = {};
@@ -885,6 +888,14 @@ export class HandLabEngine {
     this.emit();
   }
 
+  /** Scale for newly placed meshes. Clamped so sliders can't collapse or
+   *  blow up the scene. Existing meshes keep their scale. */
+  setSpawnScale(x: number, y: number, z: number): void {
+    const cl = (v: number): number =>
+      Number.isFinite(v) ? Math.min(4, Math.max(0.2, v)) : 1;
+    this.spawnScale = [cl(x), cl(y), cl(z)];
+  }
+
   setLineMode(on: boolean): void {
     this.lineMode = on;
     if (!on) {
@@ -1024,6 +1035,7 @@ export class HandLabEngine {
     }
     this.clearAll();
     this.clearLines();
+    this.spawnScale = [1, 1, 1];
     for (const o of data.objects) {
       this.placeAt(
         new THREE.Vector3(o.p[0], o.p[1], o.p[2]),
@@ -1361,9 +1373,11 @@ export class HandLabEngine {
     const m = new THREE.Mesh(this.geoFor(s), this.matFor(c));
     m.position.copy(p).clamp(this.PLACE_MIN, this.PLACE_MAX);
     m.castShadow = true;
+    m.scale.set(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
-    m.userData.hr = this.hrFor(s);
+    const maxK = Math.max(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
+    m.userData.hr = this.hrFor(s) * maxK;
     m.userData.shape = s;
     this.scene.add(m);
     this.spawnables.push(m);

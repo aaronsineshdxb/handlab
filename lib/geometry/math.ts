@@ -18,7 +18,9 @@ export type ComplexShapeId =
   | "hexPrism"
   | "triPrism"
   | "capsule"
-  | "icosa";
+  | "icosa"
+  | "tetra"
+  | "octa";
 
 export type ShowcaseShapeId = SimpleShapeId | ComplexShapeId;
 
@@ -161,6 +163,18 @@ export const SHAPE_DEFS: Record<ShowcaseShapeId, ShapeDef> = {
     defaults: D(3), faces: 20, vertices: 12, edges: 30, netKind: "none",
     blurb: "20 equilateral triangles. Golden-ratio vertices.",
   },
+  tetra: {
+    id: "tetra", label: "Tetrahedron", kind: "complex",
+    params: [{ key: "a", label: "edge a", min: 1, max: 6, step: 0.1 }],
+    defaults: D(3), faces: 4, vertices: 4, edges: 6, netKind: "none",
+    blurb: "4 equilateral triangles. Simplest Platonic solid.",
+  },
+  octa: {
+    id: "octa", label: "Octahedron", kind: "complex",
+    params: [{ key: "a", label: "edge a", min: 1, max: 6, step: 0.1 }],
+    defaults: D(3), faces: 8, vertices: 6, edges: 12, netKind: "none",
+    blurb: "8 equilateral triangles. Dual of the cube.",
+  },
 };
 
 export const SIMPLE_SHAPES: ShowcaseShapeId[] = ["cube", "prism", "sphere", "cylinder", "cone", "pyramid"];
@@ -277,6 +291,18 @@ export function metricsFor(id: ShowcaseShapeId, p: ShapeDims): SolidMetrics {
       areaSym = "A = 5√3·a²"; areaSub = `A = 5√3 × (${f2(a)})² ≈ ${f2(area)} cm²`;
       break;
     }
+    case "tetra": {
+      volume = (a ** 3) / (6 * Math.sqrt(2)); area = Math.sqrt(3) * a * a;
+      volumeSym = "V = a³ / 6√2"; volumeSub = `V = (${f2(a)})³ / 6√2 ≈ ${f2(volume)} cm³`;
+      areaSym = "A = √3·a²"; areaSub = `A = √3 × (${f2(a)})² ≈ ${f2(area)} cm²`;
+      break;
+    }
+    case "octa": {
+      volume = ((Math.sqrt(2) / 3) * a ** 3); area = 2 * Math.sqrt(3) * a * a;
+      volumeSym = "V = √2·a³ / 3"; volumeSub = `V = √2 × (${f2(a)})³ / 3 ≈ ${f2(volume)} cm³`;
+      areaSym = "A = 2√3·a²"; areaSub = `A = 2√3 × (${f2(a)})² ≈ ${f2(area)} cm²`;
+      break;
+    }
   }
 
   const def = SHAPE_DEFS[id];
@@ -291,6 +317,49 @@ export function metricsFor(id: ShowcaseShapeId, p: ShapeDims): SolidMetrics {
 export function goldenPair(span: number): { long: number; short: number; ratio: number } {
   const phi = (1 + Math.sqrt(5)) / 2;
   return { long: span, short: span / phi, ratio: phi };
+}
+
+/**
+ * Spawn scale for the hand-tracking sandbox: ratios of the live slider dims
+ * against each shape's defaults, so at defaults newly placed meshes keep
+ * their exact current size and dragging a slider grows the mesh in the scene
+ * in step with the math cards. Returns [sx, sy, sz].
+ */
+export function spawnScaleFor(id: ShowcaseShapeId, p: ShapeDims): [number, number, number] {
+  const d = withDims(id, p);
+  const base = SHAPE_DEFS[id].defaults;
+  const ratio = (v: number, b: number): number => {
+    if (!(b > 0)) return 1;
+    const k = v / b;
+    return Math.min(4, Math.max(0.2, k));
+  };
+  switch (id) {
+    case "cube":
+    case "icosa":
+    case "tetra":
+    case "octa": {
+      const k = ratio(d.a, base.a);
+      return [k, k, k];
+    }
+    case "sphere":
+    case "dome": {
+      const k = ratio(d.r, base.r);
+      return [k, k, k];
+    }
+    case "cylinder":
+    case "cone":
+      return [ratio(d.r, base.r), ratio(d.h, base.h), ratio(d.r, base.r)];
+    case "prism":
+      return [ratio(d.w, base.w), ratio(d.h, base.h), ratio(d.d, base.d)];
+    case "pyramid":
+    case "hexPrism":
+    case "triPrism":
+      return [ratio(d.a, base.a), ratio(d.h, base.h), ratio(d.a, base.a)];
+    case "torus":
+      return [ratio(d.R, base.R), ratio(d.R, base.R), ratio(d.r, base.r)];
+    case "capsule":
+      return [ratio(d.r, base.r), ratio(d.h, base.h), ratio(d.r, base.r)];
+  }
 }
 
 export const fmt = f2;

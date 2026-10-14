@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metricsFor } from "./math";
+import { metricsFor, spawnScaleFor } from "./math";
 
 describe("geometry math engine", () => {
   it("cube: V=s^3, A=6s^2, euler=2", () => {
@@ -30,5 +30,18 @@ describe("geometry math engine", () => {
     const m = metricsFor("sphere", { r: 2 });
     expect(m.volume).toBeCloseTo((4 / 3) * Math.PI * 8, 6);
     expect(m.area).toBeCloseTo(16 * Math.PI, 6);
+  });
+  it("tetra/octa euler = 2", () => {
+    const t = metricsFor("tetra", { a: 3 });
+    expect(t.volume).toBeCloseTo(27 / (6 * Math.sqrt(2)), 6);
+    expect(t.area).toBeCloseTo(Math.sqrt(3) * 9, 6);
+    expect(t.euler).toBe(2);
+    const o = metricsFor("octa", { a: 3 });
+    expect(o.volume).toBeCloseTo((Math.sqrt(2) / 3) * 27, 6);
+    expect(o.euler).toBe(2);
+  });
+  it("spawn scale is 1 at defaults", () => {
+    expect(spawnScaleFor("cylinder", { r: 2, h: 5 })).toEqual([1, 1, 1]);
+    expect(spawnScaleFor("cube", { a: 6 })).toEqual([2, 2, 2]);
   });
 });

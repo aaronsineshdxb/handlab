@@ -70,6 +70,16 @@
 .sc-net__head button{border:1px solid #E2E8F0;background:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer}
 .net-svg{width:100%;height:auto;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:12px}
 .net-empty{border:1px dashed #CBD5E1;border-radius:12px;padding:14px;background:#F8FAFC}
+
+/* ---------- solid-math panel (hand-tracking view, replaces lessons) ---------- */
+.solid-math{position:fixed;right:20px;top:92px;bottom:92px;z-index:var(--z-raised);width:308px;background:rgba(255,255,255,.96);border:1px solid #E2E8F0;border-radius:16px;padding:14px;box-shadow:0 18px 44px -16px rgb(15 23 42/.25);overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.solid-math__head{display:flex;justify-content:space-between;align-items:center}
+.solid-math__head b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#475569}
+.solid-math__head .mini{flex:0 0 auto;min-width:64px}
+.solid-math .sc-card{box-shadow:none}
+.solid-math .sc-slider{min-width:0}
+@media(max-width:900px){.solid-math{width:250px;right:8px}}
+@media(max-width:720px){.solid-math{display:none}}
 .net-empty b{display:block;font-size:13px}
 .net-empty span{display:block;font-size:12px;color:#64748B;margin-top:4px;line-height:1.5}
 
