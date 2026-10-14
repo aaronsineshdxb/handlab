@@ -47,7 +47,8 @@ export default function LabEntry() {
         title={view === "hand" ? "Back to geometry showcase" : "Open hand-tracking lab (webcam hand control)"}
         style={{
           position: "fixed",
-          right: 16,
+          left: "50%",
+          transform: "translateX(-50%)",
           top: 76,
           zIndex: 100,
           background: "#0F172A",
