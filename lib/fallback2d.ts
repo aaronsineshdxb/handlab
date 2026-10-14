@@ -480,6 +480,10 @@ export class HandLabFallbackEngine {
       this.handLoop(performance.now());
     } catch (err) {
       if (stale()) return;
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      try { this.landmarker?.close(); } catch {}
+      this.landmarker = null;
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.camLive) {
@@ -599,13 +603,26 @@ export class HandLabFallbackEngine {
       cy /= n;
     }
     const angles: number[] = [];
-    if (n >= 3) {
-      const seq = L.closed ? pts : pts;
-      const lim = L.closed ? n : n - 2;
-      for (let k = 0; k < lim; k++) {
-        const a = seq[(k + n - 1) % n];
-        const b = seq[k % n];
-        const c = seq[(k + 1) % n];
+    if (L.closed && n >= 3) {
+      for (let k = 0; k < n; k++) {
+        const a = pts[(k + n - 1) % n];
+        const b = pts[k];
+        const c = pts[(k + 1) % n];
+        const v1 = [a[0] - b[0], a[1] - b[1]];
+        const v2 = [c[0] - b[0], c[1] - b[1]];
+        const d1 = Math.hypot(v1[0], v1[1]) || 1e-9;
+        const d2 = Math.hypot(v2[0], v2[1]) || 1e-9;
+        const cos = Math.min(
+          1,
+          Math.max(-1, (v1[0] * v2[0] + v1[1] * v2[1]) / (d1 * d2)),
+        );
+        angles.push((Math.acos(cos) * 180) / Math.PI);
+      }
+    } else if (!L.closed && n >= 3) {
+      for (let k = 1; k + 1 < n; k++) {
+        const a = pts[k - 1];
+        const b = pts[k];
+        const c = pts[k + 1];
         const v1 = [a[0] - b[0], a[1] - b[1]];
         const v2 = [c[0] - b[0], c[1] - b[1]];
         const d1 = Math.hypot(v1[0], v1[1]) || 1e-9;
@@ -804,13 +821,23 @@ export class HandLabFallbackEngine {
   private onWheel = (_e: WheelEvent): void => {};
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
     if (e.key === "l" || e.key === "L") this.setLineMode(!this.lineMode);
     else if (e.key === "r" || e.key === "R") this.recenter();
     else if (e.key === "Escape") {
       this.activeLine = null;
       this.dragging = null;
     } else if ((e.key === "Delete" || e.key === "Backspace") && this.selected) {
-      this.objs.splice(this.objs.indexOf(this.selected), 1);
+      const idx = this.objs.indexOf(this.selected);
+      if (idx !== -1) this.objs.splice(idx, 1);
       this.selected = null;
       this.setCount();
     }

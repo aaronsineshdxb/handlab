@@ -857,6 +857,18 @@ export class HandLabEngine {
     this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    delete (window as any).__lab;
+    Object.values(this.geoCache).forEach((g) => g?.dispose());
+    Object.values(this.matCache).forEach((m) => m.dispose());
+    this.spawnables.forEach((m) => m.geometry?.dispose());
+    this.SEG_GEO.dispose();
+    this.SEG_MAT.dispose();
+    this.HANDLE_GEO.dispose();
+    this.HANDLE_MAT.dispose();
+    this.floorMat.dispose();
+    this.boundsMat.dispose();
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
     this.controls.dispose();
     this.renderer.dispose();
   }
@@ -1186,6 +1198,10 @@ export class HandLabEngine {
       }
     } catch (err) {
       if (stale()) return;
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      try { this.landmarker?.close(); } catch {}
+      this.landmarker = null;
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.camLive) {
@@ -1389,8 +1405,8 @@ export class HandLabEngine {
     this.pinchStartT = performance.now();
     this.pinchStartPos.copy(this.cursor.position);
     this.pinchMoved = false;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x3ddc84);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(0x3ddc84);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(this.cursorPinch);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(this.cursorPinch);
     this.grabbedHandle = this.nearestHandle(this.cursor.position, 1.0);
     if (this.grabbedHandle) {
       this.handleOffset
@@ -1471,7 +1487,8 @@ export class HandLabEngine {
       this.nearestTo(this.cursor.position, 1.0);
     if (v) {
       this.scene.remove(v);
-      this.spawnables.splice(this.spawnables.indexOf(v), 1);
+      const idx = this.spawnables.indexOf(v);
+      if (idx !== -1) this.spawnables.splice(idx, 1);
       this.shadowsDirty = true;
       this.setCount();
       if (this.grabbed === v) this.grabbed = null;
@@ -1909,6 +1926,15 @@ export class HandLabEngine {
   /* ---------- keyboard ---------- */
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
     if (
       (e.key >= "1" && e.key <= "9") ||
       e.key === "0"
@@ -1940,7 +1966,8 @@ export class HandLabEngine {
     ) {
       const v = (this.grabbed || this.hovered)!;
       this.scene.remove(v);
-      this.spawnables.splice(this.spawnables.indexOf(v), 1);
+      const idx = this.spawnables.indexOf(v);
+      if (idx !== -1) this.spawnables.splice(idx, 1);
       this.grabbed = null;
       this.hovered = null;
       if (this.selected === v) this.setSelected(null);

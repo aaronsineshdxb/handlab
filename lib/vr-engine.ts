@@ -178,6 +178,7 @@ export class VRHandLabEngine {
   private _v1 = new THREE.Vector3();
   private _v2 = new THREE.Vector3();
   private _v3 = new THREE.Vector3();
+  private _q1 = new THREE.Quaternion();
 
   constructor(opts: VrEngineOpts) {
     this.opts = opts;
@@ -388,7 +389,7 @@ export class VRHandLabEngine {
     const c = this.controllers[idx];
     this._v1.set(0, 0, 0);
     c.getWorldPosition(this._v1);
-    this._v2.set(0, 0, -1).applyQuaternion(c.getWorldQuaternion(new THREE.Quaternion()));
+    this._v2.set(0, 0, -1).applyQuaternion(c.getWorldQuaternion(this._q1));
     this.ray.set(this._v1, this._v2.normalize());
     this.ray.far = this.rayLength[idx];
     const hits = this.ray.intersectObjects(this.spawnables, false);
@@ -801,7 +802,7 @@ export class VRHandLabEngine {
       this.controls?.update();
     }
     this.cursor.position.copy(this.cursorPos);
-    this.cursor.quaternion.copy(this.camera.getWorldQuaternion(new THREE.Quaternion()));
+    this.cursor.quaternion.copy(this.camera.getWorldQuaternion(this._q1));
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -858,6 +859,15 @@ export class VRHandLabEngine {
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
     if (e.key === "Escape" || e.key === "Enter") {
       if (this.lineMode) this.finishLine();
     }
@@ -932,6 +942,8 @@ export class VRHandLabEngine {
 
   dispose(): void {
     this.disposed = true;
+    const session = this.renderer.xr.getSession();
+    if (session) void session.end().catch(() => undefined);
     this.themeOff?.();
     this.themeOff = null;
     this.renderer.setAnimationLoop(null);

@@ -83,12 +83,22 @@ export default function HandLabVR() {
     const e = eng();
     if (!e) return;
     setEntering(true);
-    await e.enterVR();
-    setEntering(false);
+    try {
+      await e.enterVR();
+    } catch (err) {
+      console.error("Failed to enter VR", err);
+    } finally {
+      setEntering(false);
+    }
   };
 
   const onImportFile = async (f: File) => {
-    eng()?.importSceneJson(await f.text());
+    try {
+      const text = await f.text();
+      eng()?.importSceneJson(text);
+    } catch {
+      console.error("Unable to read selected file");
+    }
   };
 
   const onExportFile = () => {
@@ -101,7 +111,9 @@ export default function HandLabVR() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `handlab-vr-scene-${Date.now()}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
@@ -169,7 +181,7 @@ export default function HandLabVR() {
         <button
           className="shape-btn"
           style={{ gridColumn: "1/-1", borderColor: "var(--good)" }}
-          disabled={supported === false || entering}
+          disabled={supported !== true || entering}
           title={supported === false ? supportHint() : "Request immersive-vr session"}
           onClick={() => void onEnterVR()}
         >
