@@ -348,7 +348,16 @@ function UnifiedLab() {
             <button className="sc-chip" onClick={() => engineRef.current?.clearLines?.()}>clear lines</button>
             <button className="sc-chip" onClick={() => engineRef.current?.clearAll?.()}>clear solids</button>
           </div>
-          <p className="sc-note">Tap points to measure — lengths, angles, area update live. Tap near dots to snap.</p>
+          <div className="sc-chips">
+            <button
+              className="sc-chip"
+              title="Place the current shape without leaving line mode (P / Shift+click)"
+              onClick={() => (engineRef.current as unknown as { placeCurrentShape?: () => void })?.placeCurrentShape?.()}
+            >
+              place {ui.shape} [P]
+            </button>
+          </div>
+          <p className="sc-note">Tap points to measure — lengths, angles, area update live. Tap near dots to snap. Solids stay creatable in line mode via place / P / Shift+click; tapping a solid selects it.</p>
         </aside>
       )}
 

@@ -72,6 +72,8 @@ the preview opens automatically after webcam permission succeeds.
 | Mouse move / wheel | Move on view plane (wheel zoom disabled) |
 | `1–0` | Select shape (10 shapes) |
 | `L` | Line mode |
+| `P` | Place current shape (works in line mode) |
+| `Shift+click` | Place current shape (works in line mode, mouse) |
 | `R` | Recenter hand control |
 | `Esc` / `Enter` | Finish line chain / exit line mode |
 | `Delete` | Delete hovered object |
@@ -92,6 +94,11 @@ input dead.
 Press `L`, then tap to drop points. Endpoints auto-snap when close (green ring,
 toggleable), and white dots can be dragged anytime. Press `Esc` or `Enter` to
 finish the current chain.
+
+Shapes stay creatable without leaving line mode: the toolbar `place` button,
+the `P` key, or `Shift+click` drops the current solid at the cursor, and
+tapping (or pinching) directly on a solid selects / drags it instead of
+adding a line point.
 
 ## Scene save / load / export
 
