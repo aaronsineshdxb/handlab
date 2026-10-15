@@ -1,10 +1,11 @@
 /**
  * Device capability probe.
  *
- * SCOPE: this module decides model sizes and inference cadence. It does NOT
- * decide whether to strip visual features — the product decision is that
- * HANDLAB looks the same on every machine, and we fix jank rather than
- * remove polish. Do not add shadow/AA/antialias downgrade logic here.
+ * SCOPE: this module decides model sizes and inference cadence. Visual
+ * downgrades (AA/pixel-ratio/shadows) stay off by default so HANDLAB looks
+ * the same on every machine — the single exception is iPadOS, where
+ * camera + WebGL + WASM together thermally throttle within minutes.
+ * isIPadOS() gates those downgrades; do not extend them to desktop.
  */
 
 export interface DeviceSignals {
@@ -29,12 +30,36 @@ export function readDeviceSignals(): DeviceSignals {
 }
 
 /**
+ * True on iPadOS. iPads report `MacIntel` + touch since iPadOS 13, so
+ * platform alone is not enough — require touch points as well. SSR-safe.
+ */
+export function isIPadOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const nav = navigator as Navigator & {
+    platform?: string;
+    maxTouchPoints?: number;
+    userAgent?: string;
+  };
+  const platform = nav.platform ?? "";
+  const ua = nav.userAgent ?? (typeof navigator.userAgent === "string" ? navigator.userAgent : "");
+  if (/iPad/i.test(platform) || /iPad/i.test(ua)) return true;
+  // iPadOS 13+ masquerades as MacIntel — desktop Macs rarely have touch.
+  if (platform === "MacIntel" && (nav.maxTouchPoints ?? 0) > 1) return true;
+  return false;
+}
+
+/**
  * True when the device looks genuinely constrained. Unknown signals resolve
  * to `false` on purpose: a browser that hides deviceMemory (Safari, Firefox)
  * is more likely mid-range than a 2-core machine, and wrongly degrading it
  * costs more than wrongly leaving it alone.
+ *
+ * Exception: iPadOS hides deviceMemory/hardware details but is thermally
+ * limited with camera + WebGL + WASM running together, so iPads always
+ * count as constrained (cheaper inference cadence, depth opt-in).
  */
 export function isConstrainedDevice(s: DeviceSignals): boolean {
+  if (isIPadOS()) return true;
   if (s.saveData === true) return true;
   if (s.effectiveType === "slow-2g" || s.effectiveType === "2g") return true;
   if (typeof s.hardwareConcurrency === "number" && s.hardwareConcurrency <= 2)

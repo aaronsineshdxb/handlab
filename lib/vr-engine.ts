@@ -25,6 +25,7 @@ import {
   stickToDepthDZ,
   type Vec3,
 } from "./xr/input";
+import { isIPadOS } from "./caps";
 
 export type VrShapeName =
   | "cube"
@@ -182,10 +183,11 @@ export class VRHandLabEngine {
 
   constructor(opts: VrEngineOpts) {
     this.opts = opts;
+    const ipad = isIPadOS();
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: opts.canvas,
-        antialias: true,
+        antialias: !ipad,
       });
     } catch (err) {
       throw new Error(
@@ -193,7 +195,7 @@ export class VRHandLabEngine {
         { cause: err },
       );
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, ipad ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186; see lib/engine.ts.
@@ -293,6 +295,8 @@ export class VRHandLabEngine {
     this.setupXRInput();
 
     window.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("pointermove", this.onPointerMove);
     opts.canvas.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -950,6 +954,8 @@ export class VRHandLabEngine {
     this.themeOff = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.opts.canvas.removeEventListener("pointerdown", this.onPointerDown);
     window.removeEventListener("pointerup", this.onPointerUp);

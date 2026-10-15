@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Newsreader, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "../tokens.css";
@@ -36,6 +36,16 @@ export const metadata: Metadata = {
   description:
     "Webcam hand tracking → floating 3D cursor (x / y / z). Move your index finger, pinch to click, grab and place objects in 3D space.",
   icons: { icon: ICON_SVG },
+};
+
+// iPad: Safari toolbar show/hide + rotation resize the fixed fullscreen
+// canvas. viewportFit=cover keeps it edge-to-edge; the engines also listen
+// to visualViewport.resize (see lib/engine.ts). themeColor lives here
+// (not in metadata) per Next.js viewport API.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#FCFCF9" },
     { media: "(prefers-color-scheme: dark)", color: "#100E12" },

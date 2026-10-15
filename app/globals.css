@@ -13,7 +13,7 @@ html{overflow-x:clip}
 body{overflow-x:clip}
 html,body{height:100%;overflow-y:hidden;background:var(--color-paper);color:var(--color-ink);font-family:var(--font-body);font-weight:400;-webkit-font-smoothing:antialiased}
 h1,h2,h3,.brand h1,.nf-code{font-family:var(--font-display);font-weight:500;letter-spacing:var(--tracking-display);font-style:normal;overflow-wrap:anywhere;min-width:0}
-#scene{position:fixed;inset:0;display:block}
+#scene{position:fixed;inset:0;display:block;touch-action:none;overscroll-behavior:none}
 .hud-top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:var(--space-xs);padding:var(--space-sm) var(--space-md);pointer-events:none;z-index:var(--z-sticky-nav)}
 .brand h1{font-size:22px;font-weight:600;letter-spacing:-0.01em;text-transform:lowercase}
 .brand h1 span{color:var(--color-ink)}

@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { isConstrainedDevice, pickDepthDtype, type DeviceSignals } from "./caps";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  isConstrainedDevice,
+  isIPadOS,
+  pickDepthDtype,
+  type DeviceSignals,
+} from "./caps";
 
 const decide = (s: DeviceSignals) => isConstrainedDevice(s);
 
@@ -39,7 +44,60 @@ describe("isConstrainedDevice", () => {
   it("defaults to unconstrained when nothing is knowable", () => {
     // Safari/Firefox expose neither deviceMemory nor saveData. Assume capable
     // rather than degrading a device that might be fine.
+    // (iPads bypass this via isIPadOS — see below.)
     expect(decide({})).toBe(false);
+  });
+
+  it("treats iPads as constrained even with no other signals", () => {
+    vi.stubGlobal("navigator", {
+      platform: "iPad",
+      maxTouchPoints: 5,
+      userAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)",
+    });
+    try {
+      expect(isIPadOS()).toBe(true);
+      expect(decide({})).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("isIPadOS", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("detects classic iPad platform", () => {
+    vi.stubGlobal("navigator", {
+      platform: "iPad",
+      maxTouchPoints: 5,
+      userAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)",
+    });
+    expect(isIPadOS()).toBe(true);
+  });
+
+  it("detects iPadOS 13+ masquerading as MacIntel with touch", () => {
+    vi.stubGlobal("navigator", {
+      platform: "MacIntel",
+      maxTouchPoints: 5,
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15",
+    });
+    expect(isIPadOS()).toBe(true);
+  });
+
+  it("does not flag a touch-less Mac as iPad", () => {
+    vi.stubGlobal("navigator", {
+      platform: "MacIntel",
+      maxTouchPoints: 0,
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15",
+    });
+    expect(isIPadOS()).toBe(false);
+  });
+
+  it("is SSR-safe", () => {
+    vi.stubGlobal("navigator", undefined);
+    expect(isIPadOS()).toBe(false);
   });
 });
 

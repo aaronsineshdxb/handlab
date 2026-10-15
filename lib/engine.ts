@@ -9,6 +9,7 @@ import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
+import { isIPadOS } from "./caps";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -549,6 +550,7 @@ export class HandLabEngine {
   private PR_MAX: number;
   private emaDt = 16;
   private prTick = 0;
+  private isIPad = false;
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private frames = 0;
   private fT = 0;
@@ -559,15 +561,25 @@ export class HandLabEngine {
 
   constructor(opts: EngineOpts) {
     this.opts = opts;
+    // iPadOS thermally throttles with camera + WebGL + WASM together, so
+    // start cheaper there (no AA, 1.5x PR cap, 1024 shadows). Desktop keeps
+    // full fidelity. See lib/caps.ts — iPad is the only visual-downgrade
+    // exception.
+    const ipad = isIPadOS();
+    this.isIPad = ipad;
     const dpr = window.devicePixelRatio || 1;
-    this.prNow = Math.min(dpr, PR_MAX_CAP);
-    this.PR_MAX = Math.min(dpr, PR_MAX_CAP);
+    this.prNow = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
+    this.PR_MAX = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
+    if (ipad) {
+      this.depthOn = false;
+      this.depthStatus = "off — tap depth v2 to enable (iPad saves ~50MB)";
+    }
 
     /* ---------- renderer / scene ---------- */
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: opts.canvas,
-        antialias: true,
+        antialias: !ipad,
       });
     } catch {
       // second chance: minimal context (no AA) for locked-down GPUs
@@ -585,7 +597,7 @@ export class HandLabEngine {
         );
       }
     }
-    this.renderer.setPixelRatio(Math.min(dpr, 2));
+    this.renderer.setPixelRatio(Math.min(dpr, ipad ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186 and is silently coerced to
@@ -618,7 +630,7 @@ export class HandLabEngine {
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(ipad ? 1024 : 2048, ipad ? 1024 : 2048);
     this.scene.add(key);
     this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
     this.rimLight.position.set(-5, 3, -4);
@@ -748,6 +760,10 @@ export class HandLabEngine {
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    // iPad Safari toolbar show/hide + rotation don't always fire resize —
+    // visualViewport does. orientationchange covers older iPads.
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("webglcontextlost", this.onCtxLost);
 
     this.sctx = opts.skel.getContext("2d");
@@ -875,6 +891,8 @@ export class HandLabEngine {
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener("webglcontextlost", this.onCtxLost);
     if (this.toastT) clearTimeout(this.toastT);
     this.landmarker?.close();
@@ -2609,9 +2627,11 @@ export class HandLabEngine {
       }
     }
 
-    // adaptive resolution: hold frame time near 60fps by scaling pixel ratio
+    // adaptive resolution: hold frame time near 60fps by scaling pixel ratio.
+    // iPad reacts every ~1s (60 frames) instead of ~2s — Safari kills
+    // backgrounded/thermal tabs fast, so shed pixels before it does.
     this.emaDt = this.emaDt * 0.95 + dt * 1000 * 0.05;
-    if (++this.prTick >= 120) {
+    if (++this.prTick >= (this.isIPad ? 60 : 120)) {
       this.prTick = 0;
             const next = nextPixelRatio(this.prNow, this.emaDt, this.PR_MAX);
       if (next !== this.prNow) {

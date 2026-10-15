@@ -204,6 +204,8 @@ export class HandLabFallbackEngine {
     // Zoom disabled: no wheel listener.
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
 
     // Start with an empty scene — user places shapes.
@@ -225,6 +227,8 @@ export class HandLabFallbackEngine {
     // No wheel listener (zoom disabled) — nothing to remove.
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener(
       "pointerdown",
       this.onCanvasPointerDown,
@@ -1266,7 +1270,9 @@ export class HandLabFallbackEngine {
         break;
       case "cylinder":
         g.beginPath();
-        (g as CanvasRenderingContext2D).roundRect(-r, -r * 0.7, r * 2, r * 1.4, 6);
+        if (typeof (g as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function")
+          (g as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(-r, -r * 0.7, r * 2, r * 1.4, 6);
+        else g.rect(-r, -r * 0.7, r * 2, r * 1.4);
         g.fill();
         g.stroke();
         break;
@@ -1286,7 +1292,9 @@ export class HandLabFallbackEngine {
         break;
       case "capsule":
         g.beginPath();
-        (g as CanvasRenderingContext2D).roundRect(-r * 0.6, -r, r * 1.2, r * 2, r * 0.6);
+        if (typeof (g as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function")
+          (g as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(-r * 0.6, -r, r * 1.2, r * 2, r * 0.6);
+        else g.rect(-r * 0.6, -r, r * 1.2, r * 2);
         g.fill();
         g.stroke();
         break;

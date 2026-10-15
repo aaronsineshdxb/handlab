@@ -606,7 +606,7 @@ export default function HandLab() {
           </span>
         </div>
         <div style={{ position: "relative" }}>
-          <video id="cam" ref={videoRef} playsInline muted aria-label="Webcam preview"></video>
+          <video id="cam" ref={videoRef} playsInline muted autoPlay disablePictureInPicture aria-label="Webcam preview"></video>
           <canvas id="skel" ref={skelRef} width={248} height={140} aria-hidden="true"></canvas>
         </div>
       </div>
