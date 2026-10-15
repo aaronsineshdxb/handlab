@@ -452,6 +452,7 @@ export class HandLabEngine {
   private detail = 1;
   private clipAxis: ClipAxis = null;
   private clipPos = 0;
+  private clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
   private clipHelper: THREE.Mesh | null = null;
   private geoCache: Partial<Record<ShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
@@ -881,10 +882,61 @@ export class HandLabEngine {
     this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    if (this.opts.video.srcObject) this.opts.video.srcObject = null;
     delete (window as any).__lab;
+    // Lines / junctions own label sprites + CanvasTextures — dispose those,
+    // but shared SEG/HANDLE meshes are flagged userData.shared and skipped.
+    for (const L of this.polylines) {
+      this.scene.remove(L.group);
+      disposeGroup(L.group);
+    }
+    this.polylines.length = 0;
+    this.activeLine = null;
+    disposeGroup(this.junctionGroup);
+    this.scene.remove(this.junctionGroup);
+    const disposeObj = (o: THREE.Object3D): void => {
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else if (mat) {
+        const sm = mat as THREE.SpriteMaterial;
+        if (sm.map) sm.map.dispose();
+        mat.dispose();
+      }
+      this.scene.remove(o);
+    };
+    disposeObj(this.previewLine);
+    disposeObj(this.snapMarker);
+    disposeObj(this.hoverRing);
+    disposeObj(this.selectRing);
+    this.cursor.traverse((o) => {
+      if (o === this.cursor) return;
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const mat = mesh.material as THREE.Material | undefined;
+      mat?.dispose?.();
+    });
+    this.scene.remove(this.cursor);
+    // Floor / bounds geometries were never disposed (only materials).
+    this.scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (
+        mesh.geometry &&
+        (mesh.geometry.type === "PlaneGeometry" ||
+          mesh.geometry.type === "EdgesGeometry" ||
+          mesh.geometry.type === "BoxGeometry")
+      ) {
+        // Floor + bounds live directly on the scene (not in caches).
+        if (o.parent === this.scene) mesh.geometry.dispose();
+      }
+    });
     Object.values(this.geoCache).forEach((g) => g?.dispose());
     Object.values(this.matCache).forEach((m) => m.dispose());
-    this.spawnables.forEach((m) => m.geometry?.dispose());
+    this.geoCache = {};
+    this.matCache = {};
+    for (const m of this.spawnables) this.scene.remove(m);
+    this.spawnables.length = 0;
     this.SEG_GEO.dispose();
     this.SEG_MAT.dispose();
     this.HANDLE_GEO.dispose();
@@ -1408,9 +1460,12 @@ export class HandLabEngine {
 
   private clipPlanesList(): THREE.Plane[] {
     if (!this.clipAxis) return [];
-    if (this.clipAxis === "x") return [new THREE.Plane(new THREE.Vector3(-1, 0, 0), this.clipPos)];
-    if (this.clipAxis === "y") return [new THREE.Plane(new THREE.Vector3(0, -1, 0), this.clipPos)];
-    return [new THREE.Plane(new THREE.Vector3(0, 0, -1), this.clipPos)];
+    // Reuse one Plane instead of allocating per material per slider tick.
+    if (this.clipAxis === "x") this.clipPlane.normal.set(-1, 0, 0);
+    else if (this.clipAxis === "y") this.clipPlane.normal.set(0, -1, 0);
+    else this.clipPlane.normal.set(0, 0, -1);
+    this.clipPlane.constant = this.clipPos;
+    return [this.clipPlane];
   }
 
   private matFor(c: string): THREE.MeshStandardMaterial {

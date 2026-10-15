@@ -22,7 +22,12 @@ import {
 } from "./engine";
 import type { SceneSnap } from "./lessons/checks";
 import { shouldDetect } from "./handRate";
-import { ACCENTS, isAccentName, isValidCustomHex } from "./theme";
+import {
+  ACCENTS,
+  isAccentName,
+  isValidCustomHex,
+  onThemeChange,
+} from "./theme";
 
 export { SHAPES, initialUiState };
 export type { CamState, EngineOpts, HudNodes, Measurement, SceneData, ShapeName, UiState };
@@ -142,6 +147,26 @@ export class HandLabFallbackEngine {
   private zoom = 1;
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private hudCache = {} as Record<keyof HudNodes, string>;
+  // Perf: canvas is position:fixed inset:0 with style w/h synced to the
+  // viewport in onResize, so getBoundingClientRect() is stable between
+  // resizes. Cache it (and the derived world scale + theme palette) instead
+  // of forcing layout + style recalc per object per frame.
+  private viewW = 0;
+  private viewH = 0;
+  private viewBase = 1;
+  private themeOff: (() => void) | null = null;
+  private cachedC: {
+    bg: string;
+    gridFaint: string;
+    grid: string;
+    snap: string;
+    line: string;
+    vertex: string;
+    unselected: string;
+    cursor: string;
+    pinch: string;
+    halo: string;
+  } | null = null;
 
   // webcam / hand tracking
   private landmarker: HandLandmarker | null = null;
@@ -172,6 +197,8 @@ export class HandLabFallbackEngine {
     this.sctx = opts.skel.getContext("2d");
 
     this.onResize();
+    this.refreshTheme();
+    this.themeOff = onThemeChange(() => this.refreshTheme());
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     // Zoom disabled: no wheel listener.
@@ -191,6 +218,8 @@ export class HandLabFallbackEngine {
     this.camRequest++;
     cancelAnimationFrame(this.raf);
     cancelAnimationFrame(this.handRaf);
+    this.themeOff?.();
+    this.themeOff = null;
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
     // No wheel listener (zoom disabled) — nothing to remove.
@@ -658,13 +687,59 @@ export class HandLabFallbackEngine {
     return { s: s * 60, ox: w / 2, oy: h / 2 };
   }
 
+  private updateViewCache(): void {
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    this.viewW = w;
+    this.viewH = h;
+    this.viewBase = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+  }
+
+  private refreshTheme(): void {
+    // Mirrors sceneAccentFor() in lib/theme.ts — keep the preset/custom
+    // mapping in sync if that function changes.
+    const dark = document.documentElement.dataset.theme === "dark";
+    const rawScheme = document.documentElement.dataset.accent ?? "teal";
+    const scheme = isAccentName(rawScheme) ? rawScheme : "teal";
+    let accentNum: number;
+    if (scheme === "custom") {
+      const inline = document.documentElement.style
+        .getPropertyValue("--color-accent")
+        .trim();
+      accentNum = isValidCustomHex(inline)
+        ? parseInt(inline.slice(1), 16)
+        : dark
+          ? ACCENTS.teal.dark.scene
+          : ACCENTS.teal.light.scene;
+    } else {
+      accentNum = dark ? ACCENTS[scheme].dark.scene : ACCENTS[scheme].light.scene;
+    }
+    const accentCss = `#${accentNum.toString(16).padStart(6, "0")}`;
+    const ar = (accentNum >> 16) & 255;
+    const ag = (accentNum >> 8) & 255;
+    const ab = accentNum & 255;
+    this.cachedC = {
+      bg: dark ? "#100E12" : "#FCFCF9",
+      gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
+      grid: dark ? "#2A2721" : "#CFC9B8",
+      snap: dark ? "#3ddc84" : "#2E7D46",
+      line: dark ? "#ffb224" : "#B26A00",
+      vertex: dark ? "#ffd76a" : "#9B6C22",
+      unselected: dark ? "#ffe27a" : "#9B6C22",
+      cursor: accentCss,
+      pinch: dark ? "#3ddc84" : "#2E7D46",
+      halo: `rgba(${ar},${ag},${ab},${dark ? ".4" : ".35"})`,
+    };
+  }
+
   private toWorld(clientX: number, clientY: number): { x: number; y: number } {
-    const r = this.opts.canvas.getBoundingClientRect();
-    const px = clientX - r.left;
-    const py = clientY - r.top;
-    const w = r.width || 1;
-    const h = r.height || 1;
-    const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+    // Cached viewport (see updateViewCache): canvas is fullscreen fixed.
+    const w = this.viewW || window.innerWidth || 1;
+    const h = this.viewH || window.innerHeight || 1;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
+    const px = clientX;
+    const py = clientY;
+    // Canvas origin is at viewport origin (fixed inset:0, same size).
     return {
       x: (px - w / 2) / base,
       y: -(py - h / 2) / base,
@@ -672,10 +747,9 @@ export class HandLabFallbackEngine {
   }
 
   private toScreen(x: number, y: number): { x: number; y: number } {
-    const r = this.opts.canvas.getBoundingClientRect();
-    const w = r.width || 1;
-    const h = r.height || 1;
-    const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+    const w = this.viewW || window.innerWidth || 1;
+    const h = this.viewH || window.innerHeight || 1;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
     return { x: w / 2 + x * base, y: h / 2 - y * base };
   }
 
@@ -764,6 +838,7 @@ export class HandLabFallbackEngine {
     cv.style.height = `${h}px`;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
+    this.updateViewCache();
   };
 
   private onPointerMove = (e: PointerEvent): void => {
@@ -877,6 +952,7 @@ export class HandLabFallbackEngine {
   private handLoop = (now: number): void => {
     if (this.disposed) return;
     this.handRaf = requestAnimationFrame(this.handLoop);
+    if (document.hidden) return;
     this.frames++;
     if (now - this.fT > 1000) {
       this.setText("t-fps", this.frames + " fps (2D)");
@@ -1015,6 +1091,7 @@ export class HandLabFallbackEngine {
   private loop = (now: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
+    if (document.hidden) return;
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
     if (this.spin) {
@@ -1034,8 +1111,9 @@ export class HandLabFallbackEngine {
     const cv = this.opts.canvas;
     const g = this.ctx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = this.viewW || window.innerWidth;
+    const h = this.viewH || window.innerHeight;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
     if (cv.style.width !== `${w}px` || cv.style.height !== `${h}px`) {
       cv.style.width = `${w}px`;
       cv.style.height = `${h}px`;
@@ -1045,42 +1123,9 @@ export class HandLabFallbackEngine {
       cv.height = Math.round(h * dpr);
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Scene chrome follows the UI theme + colour scheme; placed objects
-    // are user data. DOM-only read (no localStorage) to stay cheap per frame.
-    // NOTE: mirrors sceneAccentFor() in lib/theme.ts by hand — keep the
-    // preset/custom mapping in sync if that function changes.
-    const dark = document.documentElement.dataset.theme === "dark";
-    const rawScheme = document.documentElement.dataset.accent ?? "teal";
-    const scheme = isAccentName(rawScheme) ? rawScheme : "teal";
-    let accentNum: number;
-    if (scheme === "custom") {
-      const inline = document.documentElement.style
-        .getPropertyValue("--color-accent")
-        .trim();
-      accentNum = isValidCustomHex(inline)
-        ? parseInt(inline.slice(1), 16)
-        : dark
-          ? ACCENTS.teal.dark.scene
-          : ACCENTS.teal.light.scene;
-    } else {
-      accentNum = dark ? ACCENTS[scheme].dark.scene : ACCENTS[scheme].light.scene;
-    }
-    const accentCss = `#${accentNum.toString(16).padStart(6, "0")}`;
-    const ar = (accentNum >> 16) & 255;
-    const ag = (accentNum >> 8) & 255;
-    const ab = accentNum & 255;
-    const C = {
-      bg: dark ? "#100E12" : "#FCFCF9",
-      gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
-      grid: dark ? "#2A2721" : "#CFC9B8",
-      snap: dark ? "#3ddc84" : "#2E7D46",
-      line: dark ? "#ffb224" : "#B26A00",
-      vertex: dark ? "#ffd76a" : "#9B6C22",
-      unselected: dark ? "#ffe27a" : "#9B6C22",
-      cursor: accentCss,
-      pinch: dark ? "#3ddc84" : "#2E7D46",
-      halo: `rgba(${ar},${ag},${ab},${dark ? ".4" : ".35"})`,
-    };
+    // Cached palette (refreshed via onThemeChange, not per frame).
+    if (!this.cachedC) this.refreshTheme();
+    const C = this.cachedC!;
     g.fillStyle = C.bg;
     g.fillRect(0, 0, w, h);
 
@@ -1132,7 +1177,6 @@ export class HandLabFallbackEngine {
     // objects
     for (const o of this.objs) {
       const s = this.toScreen(o.x, o.y);
-      const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
       const r = base * 0.32;
       this.paintShape(g, o.s, s.x, s.y, r, o.c, o.rot);
       if (o === this.hovered || o === this.selected) {

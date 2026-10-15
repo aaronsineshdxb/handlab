@@ -50,7 +50,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       // Order matters: these specific rules must precede the /(.*) catch-all.
-      // The vendored MediaPipe runtime (11.8MB), hand model (7.8MB), ORT
+      // The vendored MediaPipe runtime (22MB: 11MB simd + 10MB nosimd;
+      // module_internal duplicate removed — FilesetResolver uses the
+      // non-module build by default), hand model (7.8MB), ORT
       // runtime (26.8MB) and Depth Anything V2 weights (50MB fp16 / 27MB q8)
       // are content-stable and never change in place, so they are safe to
       // cache immutably. Without this, every cold session pays a
