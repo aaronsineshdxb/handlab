@@ -69,6 +69,8 @@ export interface VrSceneObjectData {
   c: string;
   p: [number, number, number];
   r: [number, number, number];
+  /** Optional mesh scale so desktop two-hand scaling survives route transfer. */
+  k?: [number, number, number];
 }
 
 export interface VrSceneData {
@@ -127,7 +129,7 @@ export class VRHandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: VrShapeName = "cube";
-  private color = "#016A71";
+  private color = "#5EEAD4";
   private geoCache: Partial<Record<VrShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hovered: THREE.Mesh | null = null;
@@ -415,13 +417,13 @@ export class VRHandLabEngine {
     this.pressPos.set(id, this.cursorPos.clone());
     this.pressMoved.set(id, false);
     (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x3ddc84);
-    // grab candidate unless in line mode
-    if (!this.lineMode) {
-      const g = this.nearestTo(this.cursorPos, 1.0);
-      if (g) {
-        this.grabbed = g;
-        this.grabOffset.copy(g.position).sub(this.cursorPos);
-      }
+    // Shapes stay grabbable in line mode so solids can be moved without
+    // leaving line mode. Empty taps still drop line points (see tapAction);
+    // placeCurrentShape() creates solids in any mode.
+    const g = this.nearestTo(this.cursorPos, 1.0);
+    if (g) {
+      this.grabbed = g;
+      this.grabOffset.copy(g.position).sub(this.cursorPos);
     }
   }
 
@@ -461,6 +463,13 @@ export class VRHandLabEngine {
 
   private tapAction(): void {
     if (this.lineMode) {
+      const hit = this.nearestTo(this.cursorPos, 0.8);
+      if (hit) {
+        // Tapped a solid in line mode — select it instead of dropping a
+        // line point, so shapes stay usable without leaving line mode.
+        this.toast("selected");
+        return;
+      }
       this.dropLinePoint(this.cursorPos);
       return;
     }
@@ -512,11 +521,17 @@ export class VRHandLabEngine {
     s: VrShapeName = this.shape,
     c: string = this.color,
     rot?: [number, number, number],
+    scale?: [number, number, number],
   ): THREE.Mesh {
     const m = new THREE.Mesh(this.geoFor(s), this.matFor(c));
     const [x, y, z] = clampTarget([p.x, p.y, p.z], PLACE_MIN, PLACE_MAX);
     m.position.set(x, y, z);
     m.castShadow = true;
+    if (scale) {
+      const cl = (v: number): number =>
+        Number.isFinite(v) ? Math.min(4, Math.max(0.2, v)) : 1;
+      m.scale.set(cl(scale[0]), cl(scale[1]), cl(scale[2]));
+    }
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
     this.scene.add(m);
@@ -601,6 +616,12 @@ export class VRHandLabEngine {
 
   setShape(s: VrShapeName): void { this.shape = s; this.emit(); }
   setColor(c: string): void { this.color = c; this.emit(); }
+  /** Place the current shape at the cursor — works in any mode, including
+   *  line mode, so solids stay creatable while drawing chains. */
+  placeCurrentShape(): void {
+    this.placeAt(this.cursorPos);
+    this.toast(`placed ${this.shape}`);
+  }
   setLineMode(on: boolean): void {
     this.lineMode = on;
     if (!on) this.activeChain = null;
@@ -644,6 +665,7 @@ export class VRHandLabEngine {
         c: `#${(m.material as THREE.MeshStandardMaterial).color.getHexString()}`,
         p: [m.position.x, m.position.y, m.position.z],
         r: [m.rotation.x, m.rotation.y, m.rotation.z],
+        k: [m.scale.x, m.scale.y, m.scale.z],
       })),
       chains: this.chains.map((ch) =>
         ch.map((p) => [p.x, p.y, p.z] as [number, number, number]),
@@ -677,7 +699,7 @@ export class VRHandLabEngine {
     this.clearAll();
     this.clearLines();
     for (const o of data.objects)
-      this.placeAt(new THREE.Vector3(o.p[0], o.p[1], o.p[2]), o.s, o.c, o.r);
+      this.placeAt(new THREE.Vector3(o.p[0], o.p[1], o.p[2]), o.s, o.c, o.r, o.k);
     for (const ch of data.chains) {
       if (!ch.length) continue;
       const chain = ch.map((p) => new THREE.Vector3(p[0], p[1], p[2]));

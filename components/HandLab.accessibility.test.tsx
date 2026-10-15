@@ -36,8 +36,8 @@ describe("HandLab accessibility", () => {
     const well = markup.match(/<input[^>]*type="color"[^>]*>/)?.[0] ?? "";
 
     expect(well).toContain('aria-label="Shape color"');
-    expect(well).toContain('value="#016A71"');
-    expect(markup).toContain("#016A71");
+    expect(well).toContain('value="#5EEAD4"');
+    expect(markup).toContain("#5EEAD4");
     expect(elementById(markup, "hint-panel")).toContain("gesture-help");
   });
 });
@@ -59,7 +59,7 @@ describe("HandLabVR accessibility", () => {
     const well = markup.match(/<input[^>]*type="color"[^>]*>/)?.[0] ?? "";
 
     expect(well).toContain('aria-label="Shape color"');
-    expect(well).toContain('value="#016A71"');
+    expect(well).toContain('value="#5EEAD4"');
     expect(markup).toMatch(/<b aria-live="polite"[^>]*>0<\/b>/);
     expect(markup).toMatch(/line mode: (on|off)/);
     expect(markup).toMatch(/<button[^>]*aria-live="polite"[^>]*aria-atomic="true"[^>]*>/);

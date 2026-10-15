@@ -23,6 +23,13 @@ import {
 import type { SceneSnap } from "./lessons/checks";
 import { shouldDetect } from "./handRate";
 import {
+  SCALE_MAX,
+  SCALE_MIN,
+  interHandDist,
+  pinchMid,
+  scaleFactorForDist,
+} from "./twoHandScale";
+import {
   ACCENTS,
   isAccentName,
   isValidCustomHex,
@@ -86,6 +93,8 @@ interface Obj2D {
   x: number;
   y: number;
   rot: number;
+  /** Uniform scale (two-hand pinch). Defaults to 1 for legacy objects. */
+  k: number;
 }
 
 interface Chain2D {
@@ -181,9 +190,17 @@ export class HandLabFallbackEngine {
   private fT = performance.now();
   private lostFrames = 0;
   private pinchState = false;
+  private pinchState2 = false;
   private handActive = false;
   private anchor: { hx: number; hy: number; bx: number; by: number } | null =
     null;
+  // two-hand pinch-scale (mirrors the WebGL engine gesture)
+  private twoHandScaling = false;
+  private scaleTarget: Obj2D | null = null;
+  private scaleStartK = 1;
+  private pinchDist0 = 0;
+  private pinchDistSmooth = 0;
+  private scaleFactor = 1;
 
   constructor(opts: EngineOpts) {
     this.opts = opts;
@@ -286,6 +303,11 @@ export class HandLabFallbackEngine {
     this.anchor = null;
     this.toast("recentered — hold hand still, move from here");
   }
+  /** Place the current shape at the live cursor — works in any mode,
+   *  including line mode, so solids stay creatable while drawing chains. */
+  placeCurrentShape(): void {
+    this.placeShapeAt({ x: this.cursor.x, y: this.cursor.y });
+  }
   toggleSpin(): void {
     this.spin = !this.spin;
     this.emit();
@@ -308,6 +330,7 @@ export class HandLabFallbackEngine {
         c: o.c,
         p: [o.x, o.y, 0],
         r: [0, 0, o.rot],
+        k: [o.k, o.k, 1],
       })),
       chains: this.chains.map((L) =>
         L.pts.map((p) => [p.x, p.y, 0] as [number, number, number]),
@@ -367,6 +390,7 @@ export class HandLabFallbackEngine {
         x: o.p[0],
         y: o.p[1],
         rot: o.r[2] ?? 0,
+        k: o.k?.[0] && Number.isFinite(o.k[0]) ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, o.k[0])) : 1,
       });
     }
     for (const ch of data.chains) {
@@ -871,8 +895,23 @@ export class HandLabFallbackEngine {
     this.downPos = { ...p };
     this.pinchDownAt = performance.now();
     this.pinchHeld = true;
-    if (this.lineMode) {
+    if (this.lineMode && !e.shiftKey) {
+      const hit = this.nearestObj(p.x, p.y, 0.5);
+      if (hit) {
+        // Press started on a solid — grab it so shapes stay movable
+        // without leaving line mode. Empty space still drops line points;
+        // Shift+click forces shape creation (see below).
+        this.selected = hit;
+        this.dragging = hit;
+        return;
+      }
       this.placeLinePoint(p);
+      this.pinchHeld = false;
+      return;
+    }
+    if (this.lineMode && e.shiftKey) {
+      // Shift+click forces shape creation even in line mode.
+      this.placeShapeAt(p);
       this.pinchHeld = false;
       return;
     }
@@ -881,18 +920,7 @@ export class HandLabFallbackEngine {
       this.selected = hit;
       this.dragging = hit;
     } else {
-      const o: Obj2D = {
-        id: this.idSeq++,
-        s: this.shape,
-        c: this.color,
-        x: p.x,
-        y: p.y,
-        rot: 0,
-      };
-      this.objs.push(o);
-      this.selected = o;
-      this.setCount();
-      this.toast("placed " + this.shape + " (2D)");
+      this.placeShapeAt(p);
     }
   };
 
@@ -900,6 +928,23 @@ export class HandLabFallbackEngine {
     this.pinchHeld = false;
     this.dragging = null;
   };
+
+  /** Shared shape spawn (mouse Shift+click, keyboard P, toolbar place). */
+  private placeShapeAt(p: { x: number; y: number }): void {
+    const o: Obj2D = {
+      id: this.idSeq++,
+      s: this.shape,
+      c: this.color,
+      x: p.x,
+      y: p.y,
+      rot: 0,
+      k: 1,
+    };
+    this.objs.push(o);
+    this.selected = o;
+    this.setCount();
+    this.toast("placed " + this.shape + " (2D)");
+  }
 
   // Zoom disabled: view scale stays fixed — wheel does nothing.
   private onWheel = (_e: WheelEvent): void => {};
@@ -916,6 +961,7 @@ export class HandLabFallbackEngine {
     }
     if (e.key === "l" || e.key === "L") this.setLineMode(!this.lineMode);
     else if (e.key === "r" || e.key === "R") this.recenter();
+    else if (e.key === "p" || e.key === "P") this.placeCurrentShape();
     else if (e.key === "Escape") {
       this.activeLine = null;
       this.dragging = null;
@@ -988,12 +1034,15 @@ export class HandLabFallbackEngine {
       return;
     }
     const hands = res.landmarks ?? [];
-    this.drawSkel(hands, this.pinchState);
+    this.drawSkel(hands, this.pinchState || this.pinchState2);
     if (!hands.length) {
       if (++this.lostFrames >= 4) {
         this.handActive = false;
         this.pinchState = false;
+        this.pinchState2 = false;
+        this.endTwoHandScale(true);
         this.pinchHeld = false;
+        this.dragging = null;
         this.anchor = null;
         this.opts.hud["d-hand"].className = "dot off";
         this.opts.hud["t-hand"].textContent = "none";
@@ -1006,10 +1055,66 @@ export class HandLabFallbackEngine {
     this.opts.hud["d-hand"].className = "dot on";
     this.opts.hud["t-hand"].textContent =
       hands.length + (hands.length > 1 ? " hands" : " hand");
-    this.drive(hands[0]);
+    this.drive(hands);
   };
 
-  private drive(lm: NormalizedLandmark[]): void {
+  private interPinchDist2D(
+    a: NormalizedLandmark[],
+    b: NormalizedLandmark[],
+  ): number {
+    return interHandDist(pinchMid(a[4], a[8]), pinchMid(b[4], b[8]));
+  }
+
+  private endTwoHandScale(silent = false): void {
+    if (!this.twoHandScaling) return;
+    const done = this.scaleTarget;
+    const f = this.scaleFactor;
+    this.twoHandScaling = false;
+    this.scaleTarget = null;
+    this.pinchDist0 = 0;
+    this.pinchDistSmooth = 0;
+    this.scaleFactor = 1;
+    if (done && !silent) this.toast(`scaled x${f.toFixed(2)} (2D)`);
+  }
+
+  private updateTwoHandScale2D(
+    main: NormalizedLandmark[],
+    other: NormalizedLandmark[],
+  ): boolean {
+    const cur = this.interPinchDist2D(main, other);
+    if (!Number.isFinite(cur)) return this.twoHandScaling;
+    if (!this.twoHandScaling) {
+      const target =
+        this.dragging ?? this.selected ?? this.hovered ?? this.nearestObj(this.cursor.x, this.cursor.y, 0.5);
+      if (!target) return false;
+      if (cur < 0.02) return false;
+      this.twoHandScaling = true;
+      this.scaleTarget = target;
+      this.scaleStartK = target.k ?? 1;
+      this.pinchDist0 = cur;
+      this.pinchDistSmooth = cur;
+      this.scaleFactor = 1;
+      this.toast("scaling — spread to enlarge, close to shrink (2D)");
+      return true;
+    }
+    if (!this.scaleTarget || !this.objs.includes(this.scaleTarget)) {
+      this.endTwoHandScale(true);
+      return false;
+    }
+    this.pinchDistSmooth += (cur - this.pinchDistSmooth) * 0.5;
+    const factor = scaleFactorForDist(this.pinchDistSmooth, this.pinchDist0);
+    if (Math.abs(factor - this.scaleFactor) < 0.005) return true;
+    this.scaleFactor = factor;
+    this.scaleTarget.k = Math.min(
+      SCALE_MAX,
+      Math.max(SCALE_MIN, this.scaleStartK * factor),
+    );
+    return true;
+  }
+
+  private drive(hands: NormalizedLandmark[][]): void {
+    const lm = hands[0];
+    const other = hands[1] as NormalizedLandmark[] | undefined;
     const tip = lm[8];
     const thumb = lm[4];
     if (!this.anchor) {
@@ -1028,37 +1133,70 @@ export class HandLabFallbackEngine {
     this.cursor.y = Math.max(-WORLD_H / 2, Math.min(WORLD_H / 2, this.cursor.y));
 
     const d = Math.hypot(thumb.x - tip.x, thumb.y - tip.y);
+    // second-hand pinch (same absolute thresholds as the 2D main latch)
+    if (other) {
+      const od = Math.hypot(
+        other[4].x - other[8].x,
+        other[4].y - other[8].y,
+      );
+      if (!this.pinchState2 && od < 0.045) this.pinchState2 = true;
+      else if (this.pinchState2 && od > 0.065) this.pinchState2 = false;
+    } else {
+      if (this.pinchState2 && this.twoHandScaling) this.endTwoHandScale();
+      this.pinchState2 = false;
+    }
     if (!this.pinchState && d < 0.045) {
       this.pinchState = true;
       this.setText("t-pinch", "pinch");
-      // treat as click at cursor
-      if (this.lineMode) this.placeLinePoint({ ...this.cursor });
-      else {
-        const hit = this.nearestObj(this.cursor.x, this.cursor.y, 0.5);
-        if (hit) {
-          this.selected = hit;
-          this.dragging = hit;
+      // treat as click at cursor — suppressed while two-hand scaling owns it
+      if (!this.pinchState2) {
+        if (this.lineMode) {
+          const hit = this.nearestObj(this.cursor.x, this.cursor.y, 0.5);
+          if (hit) {
+            // Pinched on a solid in line mode — select/drag it instead of
+            // dropping a line point. Empty space still draws lines; the
+            // toolbar place button (or P key) creates solids.
+            this.selected = hit;
+            this.dragging = hit;
+          } else {
+            this.placeLinePoint({ ...this.cursor });
+          }
         } else {
-          const o: Obj2D = {
-            id: this.idSeq++,
-            s: this.shape,
-            c: this.color,
-            x: this.cursor.x,
-            y: this.cursor.y,
-            rot: 0,
-          };
-          this.objs.push(o);
-          this.selected = o;
-          this.setCount();
+          const hit = this.nearestObj(this.cursor.x, this.cursor.y, 0.5);
+          if (hit) {
+            this.selected = hit;
+            this.dragging = hit;
+          } else {
+            const o: Obj2D = {
+              id: this.idSeq++,
+              s: this.shape,
+              c: this.color,
+              x: this.cursor.x,
+              y: this.cursor.y,
+              rot: 0,
+              k: 1,
+            };
+            this.objs.push(o);
+            this.selected = o;
+            this.setCount();
+          }
         }
       }
     } else if (this.pinchState && d > 0.065) {
       this.pinchState = false;
       this.dragging = null;
+      if (this.twoHandScaling) this.endTwoHandScale();
       this.setText("t-pinch", "open");
       this.emitMath();
     }
-    if (this.dragging) {
+    const bothPinched = !!(other && this.pinchState && this.pinchState2);
+    if (bothPinched) {
+      this.updateTwoHandScale2D(lm, other!);
+      this.setText("t-pinch", `SCALE x${this.scaleFactor.toFixed(2)}`);
+    } else if (this.twoHandScaling) {
+      this.endTwoHandScale();
+    }
+    if (this.dragging && !this.twoHandScaling) {
       this.dragging.x = this.cursor.x;
       this.dragging.y = this.cursor.y;
     }
@@ -1211,7 +1349,7 @@ export class HandLabFallbackEngine {
     // objects
     for (const o of this.objs) {
       const s = this.toScreen(o.x, o.y);
-      const r = base * 0.32;
+      const r = base * 0.32 * (o.k ?? 1);
       this.paintShape(g, o.s, s.x, s.y, r, o.c, o.rot);
       if (o === this.hovered || o === this.selected) {
         g.strokeStyle = o === this.selected ? "#ff5d7a" : C.unselected;

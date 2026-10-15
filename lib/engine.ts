@@ -10,6 +10,15 @@ import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
+import {
+  SCALE_MAX,
+  SCALE_MIN,
+  clampedUniformScale,
+  interHandDist,
+  nextPinchState,
+  pinchMid,
+  scaleFactorForDist,
+} from "./twoHandScale";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -58,7 +67,7 @@ export interface UiState {
 
 export const initialUiState: UiState = {
   shape: "cube",
-  color: "#016A71",
+  color: "#5EEAD4",
   lineMode: false,
   snapOn: true,
   spin: false,
@@ -119,6 +128,8 @@ export interface SceneObjectData {
   c: string;
   p: [number, number, number];
   r: [number, number, number];
+  /** Uniform/non-uniform mesh scale. Optional so pre-scale saves still load. */
+  k?: [number, number, number];
 }
 
 export interface SceneData {
@@ -443,7 +454,7 @@ export class HandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
-  private color = "#016A71";
+  private color = "#5EEAD4";
   /** Scale applied to newly placed meshes (driven by the solid-math panel
    *  sliders). Stored as ratios so defaults keep the exact legacy sizes. */
   private spawnScale: [number, number, number] = [1, 1, 1];
@@ -464,6 +475,15 @@ export class HandLabEngine {
   private pinchStartPos = new THREE.Vector3();
   private pinchMoved = false;
   private uiDownEl: Element | null = null;
+
+  // two-hand pinch-scale: both hands pinched -> spread/shrink to scale shape
+  private pinchState2 = false;
+  private twoHandScaling = false;
+  private scaleTarget: THREE.Mesh | null = null;
+  private scaleStart = new THREE.Vector3(1, 1, 1);
+  private pinchDist0 = 0;
+  private pinchDistSmooth = 0;
+  private scaleFactor = 1;
 
   // lines + measurement
   private lineMode = false;
@@ -499,6 +519,8 @@ export class HandLabEngine {
   private PLACE_MIN = new THREE.Vector3(-4, -2.5, -3.9);
   private PLACE_MAX = new THREE.Vector3(4, 2.5, 3.9);
   private mouseDown = false;
+  /** Shift held at press time — Shift+click places a shape even in line mode. */
+  private shiftAtDown = false;
 
   // hand tracking
   private handActive = false;
@@ -997,6 +1019,14 @@ export class HandLabEngine {
     this.setSelected(this.placeAt(new THREE.Vector3(0, 0.2, 0)));
   }
 
+  /** Place the current shape at the live cursor — works in any mode,
+   *  including line mode, so solids stay creatable while drawing chains. */
+  placeCurrentShape(): void {
+    this.setSelected(this.placeAt(this.cursor.position));
+    this.toast("placed " + this.shape);
+    this.emitMath();
+  }
+
   /** Dolly the camera along its current orbit direction (showcase framing).
    *  OrbitControls limits (3–16) still apply. */
   setCameraDistance(d: number): void {
@@ -1109,6 +1139,7 @@ export class HandLabEngine {
         c: `#${(m.material as THREE.MeshStandardMaterial).color.getHexString()}`,
         p: [m.position.x, m.position.y, m.position.z],
         r: [m.rotation.x, m.rotation.y, m.rotation.z],
+        k: [m.scale.x, m.scale.y, m.scale.z],
       })),
       chains: this.polylines.map((L) =>
         L.pts.map((p) => [p.x, p.y, p.z] as [number, number, number]),
@@ -1136,7 +1167,9 @@ export class HandLabEngine {
         typeof o.c !== "string" ||
         !/^#[0-9a-fA-F]{6}$/.test(o.c) ||
         !isNum3(o.p) ||
-        !isNum3(o.r)
+        !isNum3(o.r) ||
+        (o.k !== undefined &&
+          !(Array.isArray(o.k) && o.k.length === 3 && o.k.every((v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= SCENE_COORD_LIMIT)))
       )
         return bad();
     }
@@ -1153,6 +1186,7 @@ export class HandLabEngine {
         o.s,
         o.c,
         o.r,
+        o.k,
       );
     }
     for (const ch of data.chains) {
@@ -1610,14 +1644,19 @@ export class HandLabEngine {
     s: ShapeName = this.shape,
     c: string = this.color,
     rot?: [number, number, number],
+    scale?: [number, number, number],
   ): THREE.Mesh {
     const m = new THREE.Mesh(this.geoFor(s), this.matFor(c));
     m.position.copy(p).clamp(this.PLACE_MIN, this.PLACE_MAX);
     m.castShadow = true;
-    m.scale.set(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
+    const k = scale ?? this.spawnScale;
+    const cl = (v: number): number =>
+      Number.isFinite(v) ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, v)) : 1;
+    const ks: [number, number, number] = [cl(k[0]), cl(k[1]), cl(k[2])];
+    m.scale.set(ks[0], ks[1], ks[2]);
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
-    const maxK = Math.max(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
+    const maxK = Math.max(ks[0], ks[1], ks[2]);
     m.userData.hr = this.hrFor(s) * maxK;
     m.userData.shape = s;
     this.scene.add(m);
@@ -1669,8 +1708,10 @@ export class HandLabEngine {
         .sub(this.cursor.position);
       this.grabbed = null;
     } else {
+      // Shapes stay grabbable in line mode so solids can be moved/selected
+      // without leaving line mode. Empty-space taps still drop line points
+      // (see onPinchUp); Shift+tap or placeCurrentShape() creates solids.
       this.grabbed = this.nearestTo(this.cursor.position, 1.0);
-      if (this.lineMode) this.grabbed = null;
     }
     if (this.grabbed)
       this.grabOffset.copy(this.grabbed.position).sub(this.cursor.position);
@@ -1693,8 +1734,25 @@ export class HandLabEngine {
       if (!this.pressUIAtCursor(false)) {
         if (this.grabbedHandle) {
           /* tapped a vertex — nothing to place */
+        } else if (this.shiftAtDown) {
+          // Shift+tap forces shape creation even in line mode.
+          const hit = this.nearestTo(this.cursor.position, 0.8);
+          if (!hit) {
+            this.setSelected(this.placeAt(this.cursor.position));
+            this.toast("placed " + this.shape);
+          } else {
+            this.setSelected(hit);
+            this.toast("selected");
+          }
         } else if (this.lineMode) {
-          this.placeLinePoint(this.cursor.position);
+          if (this.grabbed) {
+            // Press started on a solid — select it instead of dropping a
+            // line point, so shapes stay usable without leaving line mode.
+            this.setSelected(this.grabbed);
+            this.toast("selected");
+          } else {
+            this.placeLinePoint(this.cursor.position);
+          }
         } else {
           const hit = this.nearestTo(this.cursor.position, 0.8);
           if (!hit) {
@@ -1709,12 +1767,16 @@ export class HandLabEngine {
       this.grabbed = null;
       this.grabbedHandle = null;
     }
+    this.shiftAtDown = false;
     this.emitMath();
   }
 
   private onPinchMove(): void {
     if (this.pinchStartPos.distanceTo(this.cursor.position) > 0.45)
       this.pinchMoved = true;
+    // Two-hand scale owns the gesture: freeze drag so spread maps to size,
+    // not position. pinchMoved still updates so a scale never becomes a tap.
+    if (this.twoHandScaling) return;
     if (this.grabbed)
       this.grabbed.position.copy(this.cursor.position).add(this.grabOffset);
     if (this.grabbedHandle) {
@@ -1733,6 +1795,87 @@ export class HandLabEngine {
     }
   }
 
+  /* ---------- two-hand pinch-scale = enlarge / shrink ---------- */
+
+  private interPinchDist(
+    a: NormalizedLandmark[],
+    b: NormalizedLandmark[],
+  ): number {
+    return interHandDist(pinchMid(a[4], a[8]), pinchMid(b[4], b[8]));
+  }
+
+  private pickScaleTarget(): THREE.Mesh | null {
+    return (
+      this.grabbed ??
+      this.selected ??
+      this.hovered ??
+      this.nearestTo(this.cursor.position, 1.0)
+    );
+  }
+
+  private applyScaleToTarget(target: THREE.Mesh, factor: number): void {
+    const start: [number, number, number] = [
+      this.scaleStart.x,
+      this.scaleStart.y,
+      this.scaleStart.z,
+    ];
+    const [x, y, z] = clampedUniformScale(start, factor);
+    target.scale.set(x, y, z);
+    const s = this.shapeOf(target);
+    const maxK = Math.max(x, y, z);
+    target.userData.hr = this.hrFor(s) * maxK;
+    this.shadowsDirty = true;
+  }
+
+  /** Returns true while the two-hand scale gesture owns the frame. */
+  private updateTwoHandScale(
+    main: NormalizedLandmark[],
+    other: NormalizedLandmark[],
+  ): boolean {
+    const cur = this.interPinchDist(main, other);
+    if (!Number.isFinite(cur)) return this.twoHandScaling;
+    if (!this.twoHandScaling) {
+      const target = this.pickScaleTarget();
+      if (!target) return false;
+      if (cur < 0.02) return false;
+      this.twoHandScaling = true;
+      this.scaleTarget = target;
+      this.scaleStart.copy(target.scale);
+      this.pinchDist0 = cur;
+      this.pinchDistSmooth = cur;
+      this.scaleFactor = 1;
+      this.toast("scaling — spread to enlarge, close to shrink");
+      return true;
+    }
+    if (!this.scaleTarget || !this.spawnables.includes(this.scaleTarget)) {
+      this.endTwoHandScale(true);
+      return false;
+    }
+    // Light smoothing so sensor jitter doesn't shimmer the mesh.
+    this.pinchDistSmooth += (cur - this.pinchDistSmooth) * 0.5;
+    const factor = scaleFactorForDist(this.pinchDistSmooth, this.pinchDist0);
+    // Deadzone: ignore sub-percent tremor around the arming spread.
+    if (Math.abs(factor - this.scaleFactor) < 0.005) return true;
+    this.scaleFactor = factor;
+    this.applyScaleToTarget(this.scaleTarget, factor);
+    return true;
+  }
+
+  private endTwoHandScale(silent = false): void {
+    if (!this.twoHandScaling) return;
+    const done = this.scaleTarget;
+    const finishedFactor = this.scaleFactor;
+    this.twoHandScaling = false;
+    this.scaleTarget = null;
+    this.pinchDist0 = 0;
+    this.pinchDistSmooth = 0;
+    this.scaleFactor = 1;
+    if (done && !silent) {
+      this.toast(`scaled x${finishedFactor.toFixed(2)}`);
+      this.opts.onScene?.();
+    }
+  }
+
   /* ---------- fist = right-click/delete ---------- */
 
   private onFistHold(): void {
@@ -1747,6 +1890,7 @@ export class HandLabEngine {
       this.shadowsDirty = true;
       this.setCount();
       if (this.grabbed === v) this.grabbed = null;
+      if (this.scaleTarget === v) this.endTwoHandScale(true);
       this.hovered = null;
       if (this.selected === v) this.setSelected(null);
       this.toast("deleted");
@@ -1814,9 +1958,10 @@ export class HandLabEngine {
   // Zoom disabled: camera stays fixed — wheel does nothing.
   private onWheel = (_e: WheelEvent): void => {};
 
-  private onCanvasPointerDown = (): void => {
+  private onCanvasPointerDown = (e: PointerEvent): void => {
     if (this.handActive) return;
     this.mouseDown = true;
+    this.shiftAtDown = e.shiftKey;
     this.onPinchDown();
   };
 
@@ -2199,6 +2344,9 @@ export class HandLabEngine {
     }
     if (e.key === "r" || e.key === "R") this.recenter();
     if (e.key === "l" || e.key === "L") this.setLineMode(!this.lineMode);
+    // Place the current solid without leaving line mode (same as the
+    // toolbar "place" button; Shift+click is the mouse equivalent).
+    if (e.key === "p" || e.key === "P") this.placeCurrentShape();
     if (e.key === "Escape") {
       if (this.lineMode) {
         if (this.activeLine && this.activeLine.pts.length > 1) {
@@ -2386,6 +2534,9 @@ export class HandLabEngine {
       // and report waiting instead of a stale pinch state
       this.handActive = false;
       this.pinchState = false;
+      this.pinchState2 = false;
+      this.endTwoHandScale(true);
+      this.scaleFactor = 1;
       this.pinchHeld = false;
       this.grabbed = null;
       if (this.grabbedHandle) {
@@ -2450,6 +2601,21 @@ export class HandLabEngine {
     const tipY = this.fTipY;
     const size = this.fSize;
 
+    // Second-hand pinch latch (same palm-normalized hysteresis as main).
+    // Computed before the cursor target so the depth slider can yield to
+    // the two-hand scale gesture on the same frame the second pinch lands.
+    let otherRatio = Infinity;
+    if (other) {
+      const oSize = Math.max(D(other[0], other[9]), 1e-4);
+      const oPd = dist(other[4], other[8]);
+      otherRatio = oPd / oSize;
+      this.pinchState2 = nextPinchState(this.pinchState2, otherRatio, oSize);
+    } else {
+      if (this.pinchState2 && this.twoHandScaling) this.endTwoHandScale();
+      this.pinchState2 = false;
+    }
+    const bothHeld = !!(other && this.pinchState && this.pinchState2);
+
     // CAMERA-RELATIVE control: displacement from the anchored hand pose,
     // projected onto the camera's own right / up / view axes.
     if (!this.anchor)
@@ -2482,8 +2648,9 @@ export class HandLabEngine {
       .addScaledVector(this._camR, dx)
       .addScaledVector(this._camU, dy)
       .addScaledVector(this._camF, -this.smoothZ);
-    if (other) {
-      // second hand height = depth slider along view axis
+    if (other && !bothHeld) {
+      // second hand height = depth slider along view axis.
+      // Suspended while both hands are pinched — that spread owns scaling.
       const oy = other[8].y;
       const fOy = Number.isFinite(oy) ? oy : 0.5;
       this.target
@@ -2502,12 +2669,22 @@ export class HandLabEngine {
     const farGate = size > 0.035;
     if (!this.pinchState && farGate && ratio < 0.32) {
       this.pinchState = true;
+      this.shiftAtDown = false; // hand taps never carry the mouse Shift modifier
       this.onPinchDown();
     } else if (this.pinchState && (ratio > 0.42 || !farGate)) {
       this.pinchState = false;
       this.onPinchUp();
     }
-    if (this.pinchState) this.onPinchMove();
+    const bothPinched = !!(other && this.pinchState && this.pinchState2);
+    if (bothPinched && other) {
+      this.updateTwoHandScale(main, other);
+      // While scaling, the single-hand drag path stays frozen (see
+      // onPinchMove early-return + tick guard) so spread maps to size only.
+      if (!this.twoHandScaling && this.pinchState) this.onPinchMove();
+    } else {
+      if (this.twoHandScaling) this.endTwoHandScale();
+      if (this.pinchState) this.onPinchMove();
+    }
 
     // fist: no fingers extended — require 3 stable frames before arming the timer
     const open = [
@@ -2532,13 +2709,15 @@ export class HandLabEngine {
     const handOpen = open === 4 && thumbOpen;
     this.setText(
       "t-pinch",
-      this.pinchState
-        ? `PINCH ${ratio.toFixed(2)}`
-        : this.fistSince
-          ? "fist…"
-          : handOpen
-            ? "open"
-            : "track",
+      this.twoHandScaling
+        ? `SCALE x${this.scaleFactor.toFixed(2)}`
+        : this.pinchState
+          ? `PINCH ${ratio.toFixed(2)}`
+          : this.fistSince
+            ? "fist…"
+            : handOpen
+              ? "open"
+              : "track",
     );
   }
 
@@ -2630,11 +2809,12 @@ export class HandLabEngine {
         ((this.selected.userData.hr as number | undefined) || 1) * 1.12,
       );
     }
-    if (this.grabbed) {
+    if (this.grabbed && !this.twoHandScaling) {
       this.grabbed.position.copy(this.cursor.position).add(this.grabOffset);
       this.shadowsDirty = true;
     }
     if (this.grabbedHandle) this.shadowsDirty = true;
+    if (this.twoHandScaling) this.shadowsDirty = true;
 
     if (this.handActive) {
       const s = this.screenOf(this.cursor.position);

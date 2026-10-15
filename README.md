@@ -68,7 +68,7 @@ the preview opens automatically after webcam permission succeeds.
 | Pinch tap | Click / place object / drop line point |
 | Pinch hold | Grab + drag objects or line vertices in 3D |
 | Fist (hold 0.6s) | Delete hovered object |
-| Two-hand spread | Disabled — camera stays fixed |
+| Two-hand pinch + spread/close | Pinch both hands, spread to enlarge / close to shrink shape |
 | Mouse move / wheel | Move on view plane (wheel zoom disabled) |
 | `1–0` | Select shape (10 shapes) |
 | `L` | Line mode |

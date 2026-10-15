@@ -29,7 +29,7 @@ const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
 
 const initial: VrUiState = {
   shape: "cube",
-  color: "#016A71",
+  color: "#5EEAD4",
   lineMode: false,
   grid: true,
   xr: "ready",
@@ -239,6 +239,21 @@ export default function HandLabVR() {
           <button className="mini" onClick={() => eng()?.clearLines()}>
             clear lines
           </button>
+        </div>
+        <div className="tool-row">
+          <button
+            className="mini"
+            style={{ width: "100%" }}
+            title="Place the current shape without leaving line mode"
+            onClick={() => eng()?.placeCurrentShape()}
+          >
+            place {ui.shape}
+          </button>
+        </div>
+        <div className="m-sub">
+          {ui.lineMode
+            ? "line mode: trigger = point, solid tap = select, place button = new solid"
+            : "place button works in any mode"}
         </div>
         <div className="tool-row">
           <button className="mini" onClick={() => eng()?.undo()}>

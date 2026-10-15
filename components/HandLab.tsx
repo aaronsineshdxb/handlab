@@ -465,6 +465,21 @@ export default function HandLab() {
           </Magnet>
         </div>
         <div className="tool-row">
+          <button
+            className="mini"
+            style={{ width: "100%" }}
+            title="Place the current shape at the cursor without leaving line mode (P / Shift+click)"
+            onClick={() => eng()?.placeCurrentShape()}
+          >
+            place {ui.shape} [P]
+          </button>
+        </div>
+        <div className="m-sub" style={{ marginBottom: 4 }}>
+          {ui.lineMode
+            ? "line mode: tap = point, shape tap = select, Shift+click / P = place solid"
+            : "P / Shift+click places the current solid in any mode"}
+        </div>
+        <div className="tool-row">
           <button className="mini" onClick={() => eng()?.toggleSnap()}>
             snap: {ui.snapOn ? "on" : "off"}
           </button>
@@ -575,13 +590,18 @@ export default function HandLab() {
           <kbd>L</kbd> line mode — tap points, tap last dot to finish
         </div>
         <div>
+          <kbd>P</kbd> place current solid (works in line mode) ·{" "}
+          <kbd>Shift+click</kbd> same for mouse
+        </div>
+        <div>
           <kbd>drag dots</kbd> move vertices, lengths + angles update
         </div>
         <div>
           <kbd>snap</kbd> tap near a point or line to snap + connect (green ring)
         </div>
         <div>
-          <kbd>2-hand spread</kbd> zoom disabled — camera stays fixed
+          <kbd>2-hand pinch + spread</kbd> pinch both hands, then spread to
+          enlarge / close to shrink
         </div>
         <div style={{ marginTop: 8, color: "var(--muted)" }}>
           No webcam? Mouse moves on your view plane (wheel zoom disabled),
