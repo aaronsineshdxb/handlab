@@ -276,6 +276,7 @@ function UnifiedLab() {
         <div className="sc-brand">
           <b>handlab <span>· geometry</span></b>
           <i>pinch to place · drag sliders for live math</i>
+          <div className="sc-domains"><DomainSwitcher active="geometry" /></div>
         </div>
         <div className="sc-mode" role="tablist" aria-label="Learning mode">
           <button role="tab" aria-selected={!studio} className={!studio ? "on" : ""} onClick={() => setMode(false)}>Simple · Learn</button>
@@ -407,7 +408,6 @@ function UnifiedLab() {
 
       <span id="t-xyz" ref={tXyzRef} className="sr-only">0, 0, 0</span>
       <div id="toast" ref={toastRef} role="status" aria-live="polite" aria-atomic="true"></div>
-      <div className="sc-domains"><DomainSwitcher active="geometry" /></div>
     </div>
   );
 }
