@@ -25,6 +25,7 @@ import {
   stickToDepthDZ,
   type Vec3,
 } from "./xr/input";
+import { isIPadOS } from "./caps";
 
 export type VrShapeName =
   | "cube"
@@ -182,10 +183,11 @@ export class VRHandLabEngine {
 
   constructor(opts: VrEngineOpts) {
     this.opts = opts;
+    const ipad = isIPadOS();
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: opts.canvas,
-        antialias: true,
+        antialias: !ipad,
       });
     } catch (err) {
       throw new Error(
@@ -193,7 +195,7 @@ export class VRHandLabEngine {
         { cause: err },
       );
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, ipad ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186; see lib/engine.ts.
@@ -293,6 +295,8 @@ export class VRHandLabEngine {
     this.setupXRInput();
 
     window.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("pointermove", this.onPointerMove);
     opts.canvas.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -568,6 +572,7 @@ export class VRHandLabEngine {
       const o = this.chainGroup.children.pop() as THREE.Object3D;
       this.chainGroup.remove(o);
     }
+    this._v1.set(0, 1, 0);
     for (const chain of this.chains) {
       for (let i = 0; i + 1 < chain.length; i++) {
         const a = chain[i];
@@ -578,7 +583,7 @@ export class VRHandLabEngine {
         seg.position.copy(a).lerp(b, 0.5);
         seg.scale.set(1, len, 1);
         seg.quaternion.setFromUnitVectors(
-          new THREE.Vector3(0, 1, 0),
+          this._v1,
           this._v3.copy(b).sub(a).normalize(),
         );
         this.chainGroup.add(seg);
@@ -781,6 +786,7 @@ export class VRHandLabEngine {
 
   private tick = (): void => {
     if (this.disposed) return;
+    if (document.hidden && !this.presenting) return;
     const dt = Math.min(this.clock.getDelta(), 0.1);
     if (this.presenting) {
       this.setCursorFromController(0);
@@ -948,6 +954,8 @@ export class VRHandLabEngine {
     this.themeOff = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.opts.canvas.removeEventListener("pointerdown", this.onPointerDown);
     window.removeEventListener("pointerup", this.onPointerUp);
@@ -956,6 +964,62 @@ export class VRHandLabEngine {
     this.renderer.xr.removeEventListener("sessionstart", this.onSessionStart);
     this.renderer.xr.removeEventListener("sessionend", this.onSessionEnd);
     if (this.toastT) clearTimeout(this.toastT);
+    // Spawnables share geoCache/matCache — remove from scene, then dispose caches.
+    for (const m of this.spawnables) this.scene.remove(m);
+    this.spawnables.length = 0;
+    Object.values(this.geoCache).forEach((g) => g?.dispose());
+    this.geoCache = {};
+    Object.values(this.matCache).forEach((m) => m.dispose());
+    this.matCache = {};
+    // Chain segments/handles share segGeo/segMat/handleGeo/handleMat.
+    while (this.chainGroup.children.length) {
+      const o = this.chainGroup.children.pop() as THREE.Object3D;
+      this.chainGroup.remove(o);
+    }
+    this.scene.remove(this.chainGroup);
+    this.chains.length = 0;
+    this.activeChain = null;
+    this.segGeo.dispose();
+    this.segMat.dispose();
+    this.handleGeo.dispose();
+    this.handleMat.dispose();
+    // Cursor / hover / floor / bounds / lasers own their geometry.
+    for (const o of [this.core, this.ring, this.hoverRing]) {
+      (o.geometry as THREE.BufferGeometry)?.dispose?.();
+      (o.material as THREE.Material)?.dispose?.();
+      this.scene.remove(o);
+    }
+    this.scene.remove(this.cursor);
+    this.floorMat.dispose();
+    this.boundsMat.dispose();
+    this.scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (
+        o.parent === this.scene &&
+        mesh.geometry &&
+        (mesh.geometry.type === "PlaneGeometry" ||
+          mesh.geometry.type === "EdgesGeometry" ||
+          mesh.geometry.type === "BoxGeometry")
+      ) {
+        mesh.geometry.dispose();
+      }
+    });
+    // Lasers share one BufferGeometry across both controllers.
+    const laserGeo = this.lasers[0]?.geometry as THREE.BufferGeometry | undefined;
+    for (const l of this.lasers) {
+      (l.material as THREE.Material)?.dispose?.();
+      this.scene.remove(l);
+    }
+    laserGeo?.dispose?.();
+    // XR hand meshes are owned by XRHandModelFactory.
+    for (const h of this.hands) {
+      h.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const mat = mesh.material as THREE.Material | undefined;
+        mat?.dispose?.();
+      });
+    }
     this.controls?.dispose();
     this.renderer.dispose();
   }

@@ -9,6 +9,7 @@ import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
+import { isIPadOS } from "./caps";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -452,6 +453,7 @@ export class HandLabEngine {
   private detail = 1;
   private clipAxis: ClipAxis = null;
   private clipPos = 0;
+  private clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
   private clipHelper: THREE.Mesh | null = null;
   private geoCache: Partial<Record<ShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
@@ -548,6 +550,7 @@ export class HandLabEngine {
   private PR_MAX: number;
   private emaDt = 16;
   private prTick = 0;
+  private isIPad = false;
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private frames = 0;
   private fT = 0;
@@ -558,15 +561,25 @@ export class HandLabEngine {
 
   constructor(opts: EngineOpts) {
     this.opts = opts;
+    // iPadOS thermally throttles with camera + WebGL + WASM together, so
+    // start cheaper there (no AA, 1.5x PR cap, 1024 shadows). Desktop keeps
+    // full fidelity. See lib/caps.ts — iPad is the only visual-downgrade
+    // exception.
+    const ipad = isIPadOS();
+    this.isIPad = ipad;
     const dpr = window.devicePixelRatio || 1;
-    this.prNow = Math.min(dpr, PR_MAX_CAP);
-    this.PR_MAX = Math.min(dpr, PR_MAX_CAP);
+    this.prNow = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
+    this.PR_MAX = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
+    if (ipad) {
+      this.depthOn = false;
+      this.depthStatus = "off — tap depth v2 to enable (iPad saves ~50MB)";
+    }
 
     /* ---------- renderer / scene ---------- */
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: opts.canvas,
-        antialias: true,
+        antialias: !ipad,
       });
     } catch {
       // second chance: minimal context (no AA) for locked-down GPUs
@@ -584,7 +597,7 @@ export class HandLabEngine {
         );
       }
     }
-    this.renderer.setPixelRatio(Math.min(dpr, 2));
+    this.renderer.setPixelRatio(Math.min(dpr, ipad ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186 and is silently coerced to
@@ -617,7 +630,7 @@ export class HandLabEngine {
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(ipad ? 1024 : 2048, ipad ? 1024 : 2048);
     this.scene.add(key);
     this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
     this.rimLight.position.set(-5, 3, -4);
@@ -747,6 +760,10 @@ export class HandLabEngine {
     window.addEventListener("pointerup", this.onPointerUp);
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    // iPad Safari toolbar show/hide + rotation don't always fire resize —
+    // visualViewport does. orientationchange covers older iPads.
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("webglcontextlost", this.onCtxLost);
 
     this.sctx = opts.skel.getContext("2d");
@@ -874,6 +891,8 @@ export class HandLabEngine {
     window.removeEventListener("pointerup", this.onPointerUp);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener("webglcontextlost", this.onCtxLost);
     if (this.toastT) clearTimeout(this.toastT);
     this.landmarker?.close();
@@ -881,10 +900,61 @@ export class HandLabEngine {
     this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    if (this.opts.video.srcObject) this.opts.video.srcObject = null;
     delete (window as any).__lab;
+    // Lines / junctions own label sprites + CanvasTextures — dispose those,
+    // but shared SEG/HANDLE meshes are flagged userData.shared and skipped.
+    for (const L of this.polylines) {
+      this.scene.remove(L.group);
+      disposeGroup(L.group);
+    }
+    this.polylines.length = 0;
+    this.activeLine = null;
+    disposeGroup(this.junctionGroup);
+    this.scene.remove(this.junctionGroup);
+    const disposeObj = (o: THREE.Object3D): void => {
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else if (mat) {
+        const sm = mat as THREE.SpriteMaterial;
+        if (sm.map) sm.map.dispose();
+        mat.dispose();
+      }
+      this.scene.remove(o);
+    };
+    disposeObj(this.previewLine);
+    disposeObj(this.snapMarker);
+    disposeObj(this.hoverRing);
+    disposeObj(this.selectRing);
+    this.cursor.traverse((o) => {
+      if (o === this.cursor) return;
+      const mesh = o as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+      const mat = mesh.material as THREE.Material | undefined;
+      mat?.dispose?.();
+    });
+    this.scene.remove(this.cursor);
+    // Floor / bounds geometries were never disposed (only materials).
+    this.scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (
+        mesh.geometry &&
+        (mesh.geometry.type === "PlaneGeometry" ||
+          mesh.geometry.type === "EdgesGeometry" ||
+          mesh.geometry.type === "BoxGeometry")
+      ) {
+        // Floor + bounds live directly on the scene (not in caches).
+        if (o.parent === this.scene) mesh.geometry.dispose();
+      }
+    });
     Object.values(this.geoCache).forEach((g) => g?.dispose());
     Object.values(this.matCache).forEach((m) => m.dispose());
-    this.spawnables.forEach((m) => m.geometry?.dispose());
+    this.geoCache = {};
+    this.matCache = {};
+    for (const m of this.spawnables) this.scene.remove(m);
+    this.spawnables.length = 0;
     this.SEG_GEO.dispose();
     this.SEG_MAT.dispose();
     this.HANDLE_GEO.dispose();
@@ -1408,9 +1478,12 @@ export class HandLabEngine {
 
   private clipPlanesList(): THREE.Plane[] {
     if (!this.clipAxis) return [];
-    if (this.clipAxis === "x") return [new THREE.Plane(new THREE.Vector3(-1, 0, 0), this.clipPos)];
-    if (this.clipAxis === "y") return [new THREE.Plane(new THREE.Vector3(0, -1, 0), this.clipPos)];
-    return [new THREE.Plane(new THREE.Vector3(0, 0, -1), this.clipPos)];
+    // Reuse one Plane instead of allocating per material per slider tick.
+    if (this.clipAxis === "x") this.clipPlane.normal.set(-1, 0, 0);
+    else if (this.clipAxis === "y") this.clipPlane.normal.set(0, -1, 0);
+    else this.clipPlane.normal.set(0, 0, -1);
+    this.clipPlane.constant = this.clipPos;
+    return [this.clipPlane];
   }
 
   private matFor(c: string): THREE.MeshStandardMaterial {
@@ -2244,7 +2317,38 @@ export class HandLabEngine {
     if (sig === this.lastSkelSig) return;
     this.lastSkelSig = sig;
     const g = this.sctx;
-    g.clearRect(0, 0, 248, 140);
+    const canvas = this.opts.skel;
+    // Match the overlay to the displayed video box: the canvas is absolutely
+    // positioned over #cam (inset:0, 100%x100%), so use its CSS size, not the
+    // hardcoded 248x140. Sync the backing store for crisp lines on hidpi.
+    const W = canvas.clientWidth || 248;
+    const H = canvas.clientHeight || 140;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const needW = Math.max(1, Math.round(W * dpr));
+    const needH = Math.max(1, Math.round(H * dpr));
+    if (canvas.width !== needW || canvas.height !== needH) {
+      canvas.width = needW;
+      canvas.height = needH;
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    // #cam uses object-fit:cover + scaleX(-1) mirror. A 640x480 stream in a
+    // ~16:9 box crops top/bottom, so naive (1-x)*W / y*H drifts vertically.
+    // Reproduce the cover crop here so the skeleton lands on the hand.
+    const vw = this.opts.video.videoWidth || 0;
+    const vh = this.opts.video.videoHeight || 0;
+    let s = 1;
+    let cropX = 0;
+    let cropY = 0;
+    if (vw > 0 && vh > 0) {
+      s = Math.max(W / vw, H / vh);
+      cropX = (vw * s - W) / 2;
+      cropY = (vh * s - H) / 2;
+    }
+    const mapX = (nx: number): number =>
+      vw > 0 && vh > 0 ? W - (nx * vw * s - cropX) : (1 - nx) * W;
+    const mapY = (ny: number): number =>
+      vw > 0 && vh > 0 ? ny * vh * s - cropY : ny * H;
     (all || []).forEach((lm) => {
       g.strokeStyle = pinched
         ? "rgba(61,220,132,.95)"
@@ -2252,15 +2356,15 @@ export class HandLabEngine {
       g.lineWidth = 1.4;
       g.beginPath();
       EDGES.forEach(([a, b]) => {
-        g.moveTo((1 - lm[a].x) * 248, lm[a].y * 140);
-        g.lineTo((1 - lm[b].x) * 248, lm[b].y * 140);
+        g.moveTo(mapX(lm[a].x), mapY(lm[a].y));
+        g.lineTo(mapX(lm[b].x), mapY(lm[b].y));
       });
       g.stroke();
       g.fillStyle = pinched ? "#3ddc84" : "#9cc6ff";
       lm.forEach((p, i) => {
         if (i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20) {
           g.beginPath();
-          g.arc((1 - p.x) * 248, p.y * 140, i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
+          g.arc(mapX(p.x), mapY(p.y), i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
           g.fill();
         }
       });
@@ -2554,9 +2658,11 @@ export class HandLabEngine {
       }
     }
 
-    // adaptive resolution: hold frame time near 60fps by scaling pixel ratio
+    // adaptive resolution: hold frame time near 60fps by scaling pixel ratio.
+    // iPad reacts every ~1s (60 frames) instead of ~2s — Safari kills
+    // backgrounded/thermal tabs fast, so shed pixels before it does.
     this.emaDt = this.emaDt * 0.95 + dt * 1000 * 0.05;
-    if (++this.prTick >= 120) {
+    if (++this.prTick >= (this.isIPad ? 60 : 120)) {
       this.prTick = 0;
             const next = nextPixelRatio(this.prNow, this.emaDt, this.PR_MAX);
       if (next !== this.prNow) {

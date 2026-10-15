@@ -22,7 +22,12 @@ import {
 } from "./engine";
 import type { SceneSnap } from "./lessons/checks";
 import { shouldDetect } from "./handRate";
-import { ACCENTS, isAccentName, isValidCustomHex } from "./theme";
+import {
+  ACCENTS,
+  isAccentName,
+  isValidCustomHex,
+  onThemeChange,
+} from "./theme";
 
 export { SHAPES, initialUiState };
 export type { CamState, EngineOpts, HudNodes, Measurement, SceneData, ShapeName, UiState };
@@ -142,6 +147,26 @@ export class HandLabFallbackEngine {
   private zoom = 1;
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private hudCache = {} as Record<keyof HudNodes, string>;
+  // Perf: canvas is position:fixed inset:0 with style w/h synced to the
+  // viewport in onResize, so getBoundingClientRect() is stable between
+  // resizes. Cache it (and the derived world scale + theme palette) instead
+  // of forcing layout + style recalc per object per frame.
+  private viewW = 0;
+  private viewH = 0;
+  private viewBase = 1;
+  private themeOff: (() => void) | null = null;
+  private cachedC: {
+    bg: string;
+    gridFaint: string;
+    grid: string;
+    snap: string;
+    line: string;
+    vertex: string;
+    unselected: string;
+    cursor: string;
+    pinch: string;
+    halo: string;
+  } | null = null;
 
   // webcam / hand tracking
   private landmarker: HandLandmarker | null = null;
@@ -172,11 +197,15 @@ export class HandLabFallbackEngine {
     this.sctx = opts.skel.getContext("2d");
 
     this.onResize();
+    this.refreshTheme();
+    this.themeOff = onThemeChange(() => this.refreshTheme());
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     // Zoom disabled: no wheel listener.
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    window.visualViewport?.addEventListener("resize", this.onResize);
+    window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
 
     // Start with an empty scene — user places shapes.
@@ -191,11 +220,15 @@ export class HandLabFallbackEngine {
     this.camRequest++;
     cancelAnimationFrame(this.raf);
     cancelAnimationFrame(this.handRaf);
+    this.themeOff?.();
+    this.themeOff = null;
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
     // No wheel listener (zoom disabled) — nothing to remove.
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
+    window.visualViewport?.removeEventListener("resize", this.onResize);
+    window.removeEventListener("orientationchange", this.onResize);
     this.opts.canvas.removeEventListener(
       "pointerdown",
       this.onCanvasPointerDown,
@@ -658,13 +691,59 @@ export class HandLabFallbackEngine {
     return { s: s * 60, ox: w / 2, oy: h / 2 };
   }
 
+  private updateViewCache(): void {
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    this.viewW = w;
+    this.viewH = h;
+    this.viewBase = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+  }
+
+  private refreshTheme(): void {
+    // Mirrors sceneAccentFor() in lib/theme.ts — keep the preset/custom
+    // mapping in sync if that function changes.
+    const dark = document.documentElement.dataset.theme === "dark";
+    const rawScheme = document.documentElement.dataset.accent ?? "teal";
+    const scheme = isAccentName(rawScheme) ? rawScheme : "teal";
+    let accentNum: number;
+    if (scheme === "custom") {
+      const inline = document.documentElement.style
+        .getPropertyValue("--color-accent")
+        .trim();
+      accentNum = isValidCustomHex(inline)
+        ? parseInt(inline.slice(1), 16)
+        : dark
+          ? ACCENTS.teal.dark.scene
+          : ACCENTS.teal.light.scene;
+    } else {
+      accentNum = dark ? ACCENTS[scheme].dark.scene : ACCENTS[scheme].light.scene;
+    }
+    const accentCss = `#${accentNum.toString(16).padStart(6, "0")}`;
+    const ar = (accentNum >> 16) & 255;
+    const ag = (accentNum >> 8) & 255;
+    const ab = accentNum & 255;
+    this.cachedC = {
+      bg: dark ? "#100E12" : "#FCFCF9",
+      gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
+      grid: dark ? "#2A2721" : "#CFC9B8",
+      snap: dark ? "#3ddc84" : "#2E7D46",
+      line: dark ? "#ffb224" : "#B26A00",
+      vertex: dark ? "#ffd76a" : "#9B6C22",
+      unselected: dark ? "#ffe27a" : "#9B6C22",
+      cursor: accentCss,
+      pinch: dark ? "#3ddc84" : "#2E7D46",
+      halo: `rgba(${ar},${ag},${ab},${dark ? ".4" : ".35"})`,
+    };
+  }
+
   private toWorld(clientX: number, clientY: number): { x: number; y: number } {
-    const r = this.opts.canvas.getBoundingClientRect();
-    const px = clientX - r.left;
-    const py = clientY - r.top;
-    const w = r.width || 1;
-    const h = r.height || 1;
-    const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+    // Cached viewport (see updateViewCache): canvas is fullscreen fixed.
+    const w = this.viewW || window.innerWidth || 1;
+    const h = this.viewH || window.innerHeight || 1;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
+    const px = clientX;
+    const py = clientY;
+    // Canvas origin is at viewport origin (fixed inset:0, same size).
     return {
       x: (px - w / 2) / base,
       y: -(py - h / 2) / base,
@@ -672,10 +751,9 @@ export class HandLabFallbackEngine {
   }
 
   private toScreen(x: number, y: number): { x: number; y: number } {
-    const r = this.opts.canvas.getBoundingClientRect();
-    const w = r.width || 1;
-    const h = r.height || 1;
-    const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
+    const w = this.viewW || window.innerWidth || 1;
+    const h = this.viewH || window.innerHeight || 1;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
     return { x: w / 2 + x * base, y: h / 2 - y * base };
   }
 
@@ -764,6 +842,7 @@ export class HandLabFallbackEngine {
     cv.style.height = `${h}px`;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
+    this.updateViewCache();
   };
 
   private onPointerMove = (e: PointerEvent): void => {
@@ -877,6 +956,7 @@ export class HandLabFallbackEngine {
   private handLoop = (now: number): void => {
     if (this.disposed) return;
     this.handRaf = requestAnimationFrame(this.handLoop);
+    if (document.hidden) return;
     this.frames++;
     if (now - this.fT > 1000) {
       this.setText("t-fps", this.frames + " fps (2D)");
@@ -987,7 +1067,32 @@ export class HandLabFallbackEngine {
   private drawSkel(all: NormalizedLandmark[][] | undefined, pinched = false): void {
     if (!this.sctx) return;
     const g = this.sctx;
-    g.clearRect(0, 0, 248, 140);
+    const canvas = this.opts.skel;
+    const W = canvas.clientWidth || 248;
+    const H = canvas.clientHeight || 140;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const needW = Math.max(1, Math.round(W * dpr));
+    const needH = Math.max(1, Math.round(H * dpr));
+    if (canvas.width !== needW || canvas.height !== needH) {
+      canvas.width = needW;
+      canvas.height = needH;
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    const vw = this.opts.video.videoWidth || 0;
+    const vh = this.opts.video.videoHeight || 0;
+    let s = 1;
+    let cropX = 0;
+    let cropY = 0;
+    if (vw > 0 && vh > 0) {
+      s = Math.max(W / vw, H / vh);
+      cropX = (vw * s - W) / 2;
+      cropY = (vh * s - H) / 2;
+    }
+    const mapX = (nx: number): number =>
+      vw > 0 && vh > 0 ? W - (nx * vw * s - cropX) : (1 - nx) * W;
+    const mapY = (ny: number): number =>
+      vw > 0 && vh > 0 ? ny * vh * s - cropY : ny * H;
     (all || []).forEach((lm) => {
       g.strokeStyle = pinched
         ? "rgba(61,220,132,.95)"
@@ -995,15 +1100,15 @@ export class HandLabFallbackEngine {
       g.lineWidth = 1.4;
       g.beginPath();
       EDGES.forEach(([a, b]) => {
-        g.moveTo((1 - lm[a].x) * 248, lm[a].y * 140);
-        g.lineTo((1 - lm[b].x) * 248, lm[b].y * 140);
+        g.moveTo(mapX(lm[a].x), mapY(lm[a].y));
+        g.lineTo(mapX(lm[b].x), mapY(lm[b].y));
       });
       g.stroke();
       g.fillStyle = pinched ? "#3ddc84" : "#9cc6ff";
       lm.forEach((p, i) => {
         if (i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20) {
           g.beginPath();
-          g.arc((1 - p.x) * 248, p.y * 140, i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
+          g.arc(mapX(p.x), mapY(p.y), i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
           g.fill();
         }
       });
@@ -1015,6 +1120,7 @@ export class HandLabFallbackEngine {
   private loop = (now: number): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
+    if (document.hidden) return;
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
     if (this.spin) {
@@ -1034,8 +1140,9 @@ export class HandLabFallbackEngine {
     const cv = this.opts.canvas;
     const g = this.ctx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = this.viewW || window.innerWidth;
+    const h = this.viewH || window.innerHeight;
+    const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
     if (cv.style.width !== `${w}px` || cv.style.height !== `${h}px`) {
       cv.style.width = `${w}px`;
       cv.style.height = `${h}px`;
@@ -1045,42 +1152,9 @@ export class HandLabFallbackEngine {
       cv.height = Math.round(h * dpr);
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Scene chrome follows the UI theme + colour scheme; placed objects
-    // are user data. DOM-only read (no localStorage) to stay cheap per frame.
-    // NOTE: mirrors sceneAccentFor() in lib/theme.ts by hand — keep the
-    // preset/custom mapping in sync if that function changes.
-    const dark = document.documentElement.dataset.theme === "dark";
-    const rawScheme = document.documentElement.dataset.accent ?? "teal";
-    const scheme = isAccentName(rawScheme) ? rawScheme : "teal";
-    let accentNum: number;
-    if (scheme === "custom") {
-      const inline = document.documentElement.style
-        .getPropertyValue("--color-accent")
-        .trim();
-      accentNum = isValidCustomHex(inline)
-        ? parseInt(inline.slice(1), 16)
-        : dark
-          ? ACCENTS.teal.dark.scene
-          : ACCENTS.teal.light.scene;
-    } else {
-      accentNum = dark ? ACCENTS[scheme].dark.scene : ACCENTS[scheme].light.scene;
-    }
-    const accentCss = `#${accentNum.toString(16).padStart(6, "0")}`;
-    const ar = (accentNum >> 16) & 255;
-    const ag = (accentNum >> 8) & 255;
-    const ab = accentNum & 255;
-    const C = {
-      bg: dark ? "#100E12" : "#FCFCF9",
-      gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
-      grid: dark ? "#2A2721" : "#CFC9B8",
-      snap: dark ? "#3ddc84" : "#2E7D46",
-      line: dark ? "#ffb224" : "#B26A00",
-      vertex: dark ? "#ffd76a" : "#9B6C22",
-      unselected: dark ? "#ffe27a" : "#9B6C22",
-      cursor: accentCss,
-      pinch: dark ? "#3ddc84" : "#2E7D46",
-      halo: `rgba(${ar},${ag},${ab},${dark ? ".4" : ".35"})`,
-    };
+    // Cached palette (refreshed via onThemeChange, not per frame).
+    if (!this.cachedC) this.refreshTheme();
+    const C = this.cachedC!;
     g.fillStyle = C.bg;
     g.fillRect(0, 0, w, h);
 
@@ -1132,7 +1206,6 @@ export class HandLabFallbackEngine {
     // objects
     for (const o of this.objs) {
       const s = this.toScreen(o.x, o.y);
-      const base = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
       const r = base * 0.32;
       this.paintShape(g, o.s, s.x, s.y, r, o.c, o.rot);
       if (o === this.hovered || o === this.selected) {
@@ -1222,7 +1295,9 @@ export class HandLabFallbackEngine {
         break;
       case "cylinder":
         g.beginPath();
-        (g as CanvasRenderingContext2D).roundRect(-r, -r * 0.7, r * 2, r * 1.4, 6);
+        if (typeof (g as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function")
+          (g as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(-r, -r * 0.7, r * 2, r * 1.4, 6);
+        else g.rect(-r, -r * 0.7, r * 2, r * 1.4);
         g.fill();
         g.stroke();
         break;
@@ -1242,7 +1317,9 @@ export class HandLabFallbackEngine {
         break;
       case "capsule":
         g.beginPath();
-        (g as CanvasRenderingContext2D).roundRect(-r * 0.6, -r, r * 1.2, r * 2, r * 0.6);
+        if (typeof (g as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function")
+          (g as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(-r * 0.6, -r, r * 1.2, r * 2, r * 0.6);
+        else g.rect(-r * 0.6, -r, r * 1.2, r * 2);
         g.fill();
         g.stroke();
         break;
