@@ -93,3 +93,13 @@
   .sc-rail{top:auto;bottom:170px;transform:none;flex-direction:row}
   .sc-params{bottom:8px;border-radius:16px}
 }
+
+/* ---------- unified view: status pill, video dock, fallback, domains ---------- */
+.sc-status{position:absolute;left:16px;bottom:16px;z-index:20;display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.93);border:1px solid #E2E8F0;border-radius:999px;padding:8px 16px;font-size:12px;color:#475569;box-shadow:0 10px 24px -14px rgb(15 23 42/.25);white-space:nowrap}
+.sc-status b{color:#0F172A;font-variant-numeric:tabular-nums}
+.sc-viddock{right:348px !important;bottom:16px !important}
+.sc-fallback-note{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:30;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;font-size:12px;padding:8px 16px;border-radius:999px;white-space:nowrap}
+.sc-domains{position:absolute;left:16px;top:14px;z-index:19;opacity:.95}
+.sc-domains .domain-switch{margin-top:0}
+.sc-drawer kbd{font-family:var(--font-mono);background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:1px 6px;font-size:11px;color:#0F172A}
+@media(max-width:900px){.sc-viddock{right:8px !important}.sc-status{display:none}.sc-domains{display:none}}

@@ -35,6 +35,8 @@ interface SolidMathProps {
   getEngine: () => StudioEngine | null;
   /** Bumped when the async engine becomes ready; re-runs the push effects. */
   readyRev: number;
+  studio: boolean;
+  onStudio: (v: boolean) => void;
 }
 
 function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => void; children: React.ReactNode; label?: string }) {
@@ -45,9 +47,8 @@ function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => v
   );
 }
 
-function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev }: SolidMathProps) {
+function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio, onStudio }: SolidMathProps) {
   const id = mathIdFor(shape);
-  const [studio, setStudio] = useState(false);
   const [wireframe, setWireframe] = useState(false);
   const [matMode, setMatMode] = useState<StudioMaterial>("standard");
   const [detail, setDetail] = useState(1);
@@ -76,8 +77,8 @@ function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev }: SolidM
         <button className="mini" onClick={onReset} title="Reset dimensions to defaults">reset</button>
       </div>
       <div className="sc-chips" role="tablist" aria-label="Learning mode">
-        <Chip on={!studio} onClick={() => setStudio(false)}>Learn</Chip>
-        <Chip on={studio} onClick={() => setStudio(true)}>Studio</Chip>
+        <Chip on={!studio} onClick={() => onStudio(false)}>Learn</Chip>
+        <Chip on={studio} onClick={() => onStudio(true)}>Studio</Chip>
       </div>
 
       {id === "knot" ? (

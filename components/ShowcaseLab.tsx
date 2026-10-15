@@ -1,288 +1,417 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  COMPLEX_SHAPES,
+  HandLabEngine,
+  SHAPES,
+  initialUiState,
+  type HudNodes,
+  type ShapeName,
+  type UiState,
+} from "../lib/engine";
+import SolidMath, { mathIdFor } from "./SolidMath";
+import type { StudioEngine } from "./SolidMath";
+import {
   SHAPE_DEFS,
-  goldenPair,
-  metricsFor,
+  spawnScaleFor,
   type ShapeDims,
-  type ShowcaseShapeId,
 } from "../lib/geometry/math";
-import { ShowcaseEngine, type ClipAxis, type MaterialMode } from "../lib/geometry/viewport";
-import {
-  INITIAL_UI,
-  lockLightTheme,
-  visibleShapes,
-  type ShowcaseUI,
-} from "../lib/geometry/showcase-state";
-import NetSvg from "./NetSvg";
+import { lockLightTheme } from "../lib/geometry/showcase-state";
+import ColorWell from "./bits/ColorWell";
+import DomainSwitcher from "./DomainSwitcher";
 
-/* ---------- small UI atoms ---------- */
+const GLYPHS: Record<ShapeName, { g: string; label: string }> = {
+  cube: { g: "◼", label: "cube" },
+  sphere: { g: "●", label: "sphere" },
+  cone: { g: "▲", label: "cone" },
+  torus: { g: "◎", label: "torus" },
+  cylinder: { g: "⬢", label: "cyl" },
+  icosa: { g: "⬣", label: "gem" },
+  knot: { g: "∿", label: "knot" },
+  tetra: { g: "△", label: "tetra" },
+  octa: { g: "◇", label: "octa" },
+  capsule: { g: "⬯", label: "capsule" },
+  prism: { g: "▭", label: "prism" },
+  pyramid: { g: "◭", label: "pyramid" },
+  dome: { g: "◠", label: "dome" },
+  hexPrism: { g: "⬡", label: "hex" },
+  triPrism: { g: "▽", label: "wedge" },
+};
 
-function IconBtn({ label, active, onClick, children, title }: { label: string; active?: boolean; onClick: () => void; children: React.ReactNode; title?: string }) {
-  return (
-    <button
-      className={"sc-fab" + (active ? " active" : "")}
-      onClick={onClick}
-      aria-pressed={!!active}
-      aria-label={label}
-      title={title ?? label}
-    >
-      {children}
-    </button>
-  );
+const FOUNDATIONS: ShapeName[] = ["cube", "prism", "sphere", "cylinder", "cone", "pyramid"];
+
+function defaultsFor(shape: ShapeName): ShapeDims {
+  const mid = mathIdFor(shape);
+  if (mid === "knot") return { a: 1 };
+  return { ...SHAPE_DEFS[mid].defaults };
 }
 
-function Row({ label, value, onChange, min, max, step }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number }) {
-  return (
-    <label className="sc-slider">
-      <span className="sc-slider__head"><span>{label}</span><b>{value.toFixed(2)} cm</b></span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label} />
-    </label>
-  );
-}
+type FullEngine = StudioEngine & {
+  setSpawnScale?: (x: number, y: number, z: number) => void;
+  setShape?: (s: ShapeName) => void;
+  setColor?: (c: string) => void;
+  setLineMode?: (on: boolean) => void;
+  toggleSnap?: () => void;
+  clearLines?: () => void;
+  undo?: () => void;
+  clearAll?: () => void;
+  recenter?: () => void;
+  toggleSpin?: () => void;
+  toggleGrid?: () => void;
+  saveToStorage?: () => void;
+  loadFromStorage?: () => void;
+  exportPNG?: () => string | null;
+  exportScene?: () => { objects: unknown[] };
+  importSceneJson?: (text: string) => boolean;
+  enableWebcam?: () => void;
+  cancelWebcamLoad?: () => void;
+  setDepthEnabled?: (on: boolean) => void;
+  setCameraDistance?: (d: number) => void;
+  placeCenter?: () => void;
+  dispose?: () => void;
+};
 
-function Toggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
-  return (
-    <button className={"sc-chip" + (on ? " on" : "")} aria-pressed={on} onClick={onClick}>{label}: {on ? "on" : "off"}</button>
-  );
-}
-
-/* ---------- main showcase ---------- */
-
-export default function ShowcaseLab() {
-  const [ui, setUi] = useState<ShowcaseUI>(INITIAL_UI);
+function UnifiedLab() {
+  const [ui, setUi] = useState<UiState>(initialUiState);
   const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cylinder.defaults });
-  const [meshInfo, setMeshInfo] = useState<{ v: number; f: number; e: number; euler: number } | null>(null);
+  const [studio, setStudio] = useState(false);
+  const [drawer, setDrawer] = useState<"shapes" | "line" | "help" | null>(null);
+  const [mathOpen, setMathOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [is2D, setIs2D] = useState(false);
+  const [fatal, setFatal] = useState<string | null>(null);
+  const [engineRev, setEngineRev] = useState(0);
+  const engineRef = useRef<FullEngine | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<ShowcaseEngine | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const skelRef = useRef<HTMLCanvasElement>(null);
+  const cursor2dRef = useRef<HTMLDivElement>(null);
+  const toastRef = useRef<HTMLDivElement>(null);
+  const dHandRef = useRef<HTMLSpanElement>(null);
+  const tHandRef = useRef<HTMLSpanElement>(null);
+  const tPinchRef = useRef<HTMLElement>(null);
+  const tXyzRef = useRef<HTMLSpanElement>(null);
+  const tCountRef = useRef<HTMLElement>(null);
+  const tModelRef = useRef<HTMLSpanElement>(null);
+  const tFpsRef = useRef<HTMLSpanElement>(null);
+  const tPrRef = useRef<HTMLSpanElement>(null);
+  const tZRef = useRef<HTMLSpanElement>(null);
+  const depthiRef = useRef<HTMLElement>(null);
 
-  const patch = (p: Partial<ShowcaseUI>) => setUi((u) => ({ ...u, ...p }));
-  const toggleDrawer = (d: ShowcaseUI["drawer"]) =>
-    setUi((u) => ({ ...u, drawer: u.drawer === d ? null : d }));
-
-  // Judging panel: always open in the polished light theme.
-  useEffect(() => lockLightTheme(), []);
-
-  // Engine lifecycle — OrbitControls + scene persist across renders.
+  // ---- engine lifecycle (sandbox scene, hand tracking, lines, depth) ----
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const eng = new ShowcaseEngine(canvasRef.current);
-    engineRef.current = eng;
-    setMeshInfo(eng.meshStats());
+    if (
+      !canvasRef.current || !videoRef.current || !skelRef.current ||
+      !cursor2dRef.current || !toastRef.current || !dHandRef.current ||
+      !tHandRef.current || !tPinchRef.current || !tXyzRef.current ||
+      !tCountRef.current || !tModelRef.current || !tFpsRef.current ||
+      !tPrRef.current || !tZRef.current || !depthiRef.current
+    )
+      return;
+    const hud: HudNodes = {
+      "d-hand": dHandRef.current, "t-hand": tHandRef.current,
+      "t-pinch": tPinchRef.current, "t-xyz": tXyzRef.current,
+      "t-count": tCountRef.current, "t-model": tModelRef.current,
+      "t-fps": tFpsRef.current, "t-pr": tPrRef.current,
+      "t-z": tZRef.current, depthi: depthiRef.current,
+    };
+    let engine: FullEngine | null = null;
+    let disposed = false;
+    const opts = {
+      canvas: canvasRef.current, video: videoRef.current, skel: skelRef.current,
+      cursor2d: cursor2dRef.current, toast: toastRef.current, hud,
+      emit: setUi,
+      onCamLive: () => setPreviewOpen(true),
+      onFatal: (msg: string) => setFatal(msg),
+    };
+    void (async () => {
+      try {
+        engine = new HandLabEngine(opts) as unknown as FullEngine;
+      } catch (webglErr) {
+        if (disposed) return;
+        try {
+          const { HandLabFallbackEngine: Fallback } = await import("../lib/fallback2d");
+          if (disposed) return;
+          engine = new Fallback(opts) as unknown as FullEngine;
+          setIs2D(true);
+        } catch (err2) {
+          if (disposed) return;
+          console.error(webglErr);
+          setFatal(err2 instanceof Error ? err2.message : String(err2));
+          return;
+        }
+      }
+      if (disposed) {
+        engine?.dispose?.();
+        engine = null;
+        return;
+      }
+      engineRef.current = engine;
+      setEngineRev((r) => r + 1);
+      // Showcase first paint: closer camera + hero solid at the centre.
+      engine.setCameraDistance?.(5.8);
+      engine.setShape?.("cylinder");
+      if ((engine.exportScene?.().objects.length ?? 0) === 0) engine.placeCenter?.();
+    })();
     return () => {
-      eng.dispose();
+      disposed = true;
+      engine?.dispose?.();
       engineRef.current = null;
     };
   }, []);
 
-  const metrics = useMemo(() => metricsFor(ui.shape, dims), [ui.shape, dims]);
-  const def = SHAPE_DEFS[ui.shape];
-  const shapes = visibleShapes(ui.mode);
+  const getEngine = useCallback((): StudioEngine | null => engineRef.current, []);
 
-  // Push React state → viewport (shape scale, overlays, clipping, materials).
+  // Judging panel: polished light theme, restored on unmount.
+  useEffect(() => lockLightTheme(), []);
+
+  const setDim = useCallback((key: keyof ShapeDims, value: number) => {
+    setDims((d) => ({ ...d, [key]: value }));
+  }, []);
+
+  const resetDims = useCallback(() => {
+    setDims(defaultsFor(ui.shape));
+  }, [ui.shape]);
+
+  // Live spawn size (ratios vs defaults keep legacy mesh sizes at defaults).
   useEffect(() => {
-    engineRef.current?.set({
-      shape: ui.shape,
-      dims,
-      wireframe: ui.wireframe,
-      showNormals: ui.showNormals,
-      showVertices: ui.showVertices,
-      detail: ui.detail,
-      clipAxis: ui.clipAxis,
-      clipPos: ui.clipPos,
-      material: ui.material,
-      spin: ui.spin,
-      grid: ui.grid,
-      showDims: ui.showDims,
-    });
-    // meshStats is synchronous after rebuild — refresh the Studio readout.
-    const t = setTimeout(() => setMeshInfo(engineRef.current?.meshStats() ?? null), 30);
-    return () => clearTimeout(t);
-  }, [ui.shape, ui.wireframe, ui.showNormals, ui.showVertices, ui.detail, ui.clipAxis, ui.clipPos, ui.material, ui.spin, ui.grid, ui.showDims, dims]);
+    const eng = engineRef.current;
+    if (!eng?.setSpawnScale) return;
+    const mid = mathIdFor(ui.shape);
+    if (mid === "knot") {
+      const k = dims.a ?? 1;
+      eng.setSpawnScale(k, k, k);
+      return;
+    }
+    const [x, y, z] = spawnScaleFor(mid, dims);
+    eng.setSpawnScale(x, y, z);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.shape, dims, engineRev]);
 
-  const selectShape = (id: ShowcaseShapeId) => {
-    setDims({ ...SHAPE_DEFS[id].defaults });
-    patch({ shape: id, drawer: null });
-  };
+  // Switching solids resets the math panel to that solid's reference dims.
+  const shapeRef = useRef<ShapeName>(initialUiState.shape);
+  useEffect(() => {
+    if (shapeRef.current === ui.shape) return;
+    shapeRef.current = ui.shape;
+    setDims(defaultsFor(ui.shape));
+  }, [ui.shape]);
 
-  const setDim = (key: keyof ShapeDims, v: number) =>
-    setDims((d) => ({ ...d, [key]: v }));
+  const selectShape = useCallback((s: ShapeName) => {
+    engineRef.current?.setShape?.(s);
+    setDrawer(null);
+  }, []);
 
-  const onPhoto = () => {
-    const url = engineRef.current?.exportPNG();
-    if (!url) return;
+  const setMode = useCallback((next: boolean) => {
+    setStudio(next);
+    setDrawer(null);
+    if (!next) {
+      const cur = engineRef.current;
+      // leaving studio clears advanced inspection state
+      cur?.setWireframe?.(false);
+      cur?.setClip?.(null, 0);
+    }
+  }, []);
+
+  const download = (name: string, url: string) => {
     const a = document.createElement("a");
     a.href = url;
-    a.download = `geometry-${ui.shape}-${Date.now()}.png`;
+    a.download = name;
     a.click();
   };
 
-  const golden = useMemo(() => goldenPair(Number(dims.w ?? dims.a ?? 4)), [dims.w, dims.a]);
-  const phi = (1 + Math.sqrt(5)) / 2;
+  const onPhoto = useCallback(() => {
+    const url = engineRef.current?.exportPNG?.();
+    if (url) download(`geometry-${Date.now()}.png`, url);
+  }, []);
+
+  const onExportFile = useCallback(() => {
+    const data = (engineRef.current as unknown as { exportScene?: () => object })?.exportScene?.();
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    download(`handlab-scene-${Date.now()}.json`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, []);
+
+  const onImportFile = useCallback(async (f: File) => {
+    engineRef.current?.importSceneJson?.(await f.text());
+  }, []);
+
+  const shapes = useMemo(
+    () => (studio ? [...SHAPES] : FOUNDATIONS),
+    [studio],
+  );
+  const mid = mathIdFor(ui.shape);
+  const shapeLabel = mid === "knot" ? "knot" : SHAPE_DEFS[mid].label.toLowerCase();
+  const params = mid === "knot" ? [] : SHAPE_DEFS[mid].params;
+  const paramDefault = (key: keyof ShapeDims): number =>
+    mid === "knot" ? 1 : Number(SHAPE_DEFS[mid].defaults[key] ?? 0);
+
+  if (fatal) {
+    return (
+      <div className="vr-fatal">
+        <div>
+          <h1>hand<span>lab</span></h1>
+          <p>{fatal}</p>
+          <p><button className="btn" onClick={() => window.location.reload()}>Retry</button></p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sc-root">
       <div className="sc-stage">
-        <canvas ref={canvasRef} className="sc-canvas" aria-label={`Interactive 3D ${def.label}`} role="img" />
+        <canvas ref={canvasRef} id="scene" className="sc-canvas" role="img" aria-label="Interactive 3D hand-lab workspace" />
         <div className="sc-grid-overlay" aria-hidden="true" />
       </div>
+      <div id="cursor2d" ref={cursor2dRef}></div>
+      {is2D && (
+        <div className="sc-fallback-note">2D fallback mode — WebGL unavailable. Shapes, lines, webcam + save/load still work.</div>
+      )}
 
-      {/* Top header — minimalist, mode toggle centred */}
       <header className="sc-header">
         <div className="sc-brand">
           <b>handlab <span>· geometry</span></b>
-          <i>presentation build · light · orbit to inspect</i>
+          <i>pinch to place · drag sliders for live math</i>
         </div>
         <div className="sc-mode" role="tablist" aria-label="Learning mode">
-          <button role="tab" aria-selected={ui.mode === "learn"} className={ui.mode === "learn" ? "on" : ""} onClick={() => {
-            const firstSimple = "cylinder" as ShowcaseShapeId;
-            patch({ mode: "learn", drawer: null, clipAxis: null, showNormals: false, showVertices: false, material: "pastel" });
-            if (COMPLEX_SHAPES.includes(ui.shape)) selectShape(firstSimple);
-          }}>Simple · Learn</button>
-          <button role="tab" aria-selected={ui.mode === "studio"} className={ui.mode === "studio" ? "on" : ""} onClick={() => patch({ mode: "studio", drawer: "studio" })}>Complex · Studio</button>
+          <button role="tab" aria-selected={!studio} className={!studio ? "on" : ""} onClick={() => setMode(false)}>Simple · Learn</button>
+          <button role="tab" aria-selected={studio} className={studio ? "on" : ""} onClick={() => setMode(true)}>Complex · Studio</button>
         </div>
         <div className="sc-header__actions">
-          <button className="sc-btn ghost" onClick={() => engineRef.current?.resetView()}>Reset view</button>
+          <button
+            className="sc-btn ghost"
+            onClick={() => (ui.cam === "loading" ? engineRef.current?.cancelWebcamLoad?.() : engineRef.current?.enableWebcam?.())}
+          >
+            {ui.cam === "live" ? "Restart hand" : ui.cam === "loading" ? "Cancel" : "✋ Enable hand"}
+          </button>
           <button className="sc-btn" onClick={onPhoto}>Export PNG</button>
         </div>
       </header>
 
-      {/* Floating icon rail — collapsed by default, canvas stays unobstructed */}
       <nav className="sc-rail" aria-label="Showcase controls">
-        <IconBtn label="Shapes" active={ui.drawer === "shapes"} onClick={() => toggleDrawer("shapes")} title="Shape library">
-          <span aria-hidden="true">▦</span>
-        </IconBtn>
-        <IconBtn label="Measurements" active={ui.drawer === "math"} onClick={() => toggleDrawer("math")} title="Surface area · volume · Euler">
-          <span aria-hidden="true">∑</span>
-        </IconBtn>
-        <IconBtn label="Unfold net" active={ui.netOpen} onClick={() => patch({ netOpen: !ui.netOpen })} title="Unfold / 2D net">
-          <span aria-hidden="true">⤢</span>
-        </IconBtn>
-        <IconBtn label="Studio tools" active={ui.drawer === "studio"} onClick={() => toggleDrawer("studio")} title="Wireframe · clipping · materials">
-          <span aria-hidden="true">◈</span>
-        </IconBtn>
+        <button className={"sc-fab" + (drawer === "shapes" ? " active" : "")} aria-pressed={drawer === "shapes"} aria-label="Shapes" title="Shape library" onClick={() => setDrawer((d) => (d === "shapes" ? null : "shapes"))}><span aria-hidden="true">▦</span></button>
+        <button className={"sc-fab" + (drawer === "line" ? " active" : "")} aria-pressed={drawer === "line"} aria-label="Line tools" title="Line + measure tools" onClick={() => setDrawer((d) => (d === "line" ? null : "line"))}><span aria-hidden="true">╱</span></button>
+        <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">✋</span></button>
+        <button className={"sc-fab" + (drawer === "help" ? " active" : "")} aria-pressed={drawer === "help"} aria-label="Gestures" title="Gesture map" onClick={() => setDrawer((d) => (d === "help" ? null : "help"))}><span aria-hidden="true">?</span></button>
+        <button className={"sc-fab" + (mathOpen ? " active" : "")} aria-pressed={mathOpen} aria-label="Math panel" title="Live mathematics" onClick={() => setMathOpen((v) => !v)}><span aria-hidden="true">∑</span></button>
       </nav>
 
-      {/* Fly-out drawers */}
-      {ui.drawer === "shapes" && (
+      {drawer === "shapes" && (
         <aside className="sc-drawer" aria-label="Shape library">
-          <div className="sc-drawer__head"><b>{ui.mode === "learn" ? "Foundations (6)" : "Full library (12)"}</b><button aria-label="Close" onClick={() => patch({ drawer: null })}>×</button></div>
+          <div className="sc-drawer__head"><b>{studio ? "Full library" : "Foundations"}</b><button aria-label="Close" onClick={() => setDrawer(null)}>×</button></div>
           <div className="sc-shape-grid">
             {shapes.map((id) => (
               <button key={id} className={"sc-shape" + (ui.shape === id ? " on" : "")} aria-pressed={ui.shape === id} onClick={() => selectShape(id)}>
-                <b>{SHAPE_DEFS[id].label}</b><i>{SHAPE_DEFS[id].blurb}</i>
+                <b>{GLYPHS[id].g} {GLYPHS[id].label}</b>
               </button>
             ))}
           </div>
-          {ui.mode === "learn" && <p className="sc-note">Studio unlocks torus · dome · prisms · capsule · icosahedron.</p>}
+          <h4 className="solid-math__h">Color</h4>
+          <ColorWell color={ui.color} onChange={(c) => engineRef.current?.setColor?.(c)} />
+          <h4 className="solid-math__h">View</h4>
+          <div className="sc-chips">
+            <button className={"sc-chip" + (ui.spin ? " on" : "")} aria-pressed={ui.spin} onClick={() => engineRef.current?.toggleSpin?.()}>spin</button>
+            <button className={"sc-chip" + (ui.grid ? " on" : "")} aria-pressed={ui.grid} onClick={() => engineRef.current?.toggleGrid?.()}>grid</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.recenter?.()}>recenter</button>
+          </div>
+          <h4 className="solid-math__h">Depth AI</h4>
+          <div className="sc-chips">
+            <button className={"sc-chip" + (ui.depthOn ? " on" : "")} aria-pressed={ui.depthOn} onClick={() => void engineRef.current?.setDepthEnabled?.(!ui.depthOn)}>depth v2</button>
+          </div>
+          <p className="sc-note">{ui.depth}</p>
+          <h4 className="solid-math__h">Scene</h4>
+          <div className="sc-chips">
+            <button className="sc-chip" onClick={() => engineRef.current?.saveToStorage?.()}>save</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.loadFromStorage?.()}>load</button>
+            <button className="sc-chip" onClick={onPhoto}>photo</button>
+            <button className="sc-chip" onClick={onExportFile}>file ↓</button>
+            <button className="sc-chip" onClick={() => fileRef.current?.click()}>file ↑</button>
+          </div>
+          <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImportFile(f); e.target.value = ""; }} />
         </aside>
       )}
 
-      {ui.drawer === "math" && (
-        <aside className="sc-drawer sc-drawer--wide" aria-label="Live mathematics">
-          <div className="sc-drawer__head"><b>Live mathematics</b><button aria-label="Close" onClick={() => patch({ drawer: null })}>×</button></div>
-          <MathCards shape={ui.shape} dims={dims} />
+      {drawer === "line" && (
+        <aside className="sc-drawer" aria-label="Line tools">
+          <div className="sc-drawer__head"><b>Measure · lines [L]</b><button aria-label="Close" onClick={() => setDrawer(null)}>×</button></div>
+          <div className="sc-chips">
+            <button className={"sc-chip" + (ui.lineMode ? " on" : "")} aria-pressed={ui.lineMode} onClick={() => engineRef.current?.setLineMode?.(!ui.lineMode)}>line: {ui.lineMode ? "on" : "off"}</button>
+            <button className={"sc-chip" + (ui.snapOn ? " on" : "")} aria-pressed={ui.snapOn} onClick={() => engineRef.current?.toggleSnap?.()}>snap</button>
+          </div>
+          <div className="sc-chips">
+            <button className="sc-chip" onClick={() => engineRef.current?.undo?.()}>undo</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.clearLines?.()}>clear lines</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.clearAll?.()}>clear solids</button>
+          </div>
+          <p className="sc-note">Tap points to measure — lengths, angles, area update live. Tap near dots to snap.</p>
         </aside>
       )}
 
-      {ui.drawer === "studio" && (
-        <aside className="sc-drawer sc-drawer--wide" aria-label="Studio tools">
-          <div className="sc-drawer__head"><b>Studio · architect tools</b><button aria-label="Close" onClick={() => patch({ drawer: null })}>×</button></div>
-          {ui.mode === "learn" ? (
-            <div className="sc-upsell">
-              <p>Studio is locked in Learn mode to keep the panel focused.</p>
-              <button className="sc-btn" onClick={() => patch({ mode: "studio" })}>Unlock Complex · Studio</button>
-            </div>
-          ) : (
-            <div className="sc-studio">
-              <h4>Mesh &amp; topology</h4>
-              <div className="sc-chips">
-                <Toggle label="Wireframe" on={ui.wireframe} onClick={() => patch({ wireframe: !ui.wireframe })} />
-                <Toggle label="Normals" on={ui.showNormals} onClick={() => patch({ showNormals: !ui.showNormals })} />
-                <Toggle label="Vertices" on={ui.showVertices} onClick={() => patch({ showVertices: !ui.showVertices })} />
-                <Toggle label="Spin" on={ui.spin} onClick={() => patch({ spin: !ui.spin })} />
-                <Toggle label="Dims" on={ui.showDims} onClick={() => patch({ showDims: !ui.showDims })} />
-              </div>
-              <Row label={`Tessellation (detail ${ui.detail})`} value={ui.detail} min={0} max={2} step={1} onChange={(v) => patch({ detail: Math.round(v) })} />
-              {meshInfo && <p className="sc-note mono">mesh V {meshInfo.v} · E {meshInfo.e} · F {meshInfo.f} → χ = {meshInfo.euler}</p>}
-
-              <h4>Cross-section · slicing plane</h4>
-              <div className="sc-chips">
-                {(["x", "y", "z"] as ClipAxis[]).map((ax) => (
-                  <button key={String(ax)} className={"sc-chip" + (ui.clipAxis === ax ? " on" : "")} aria-pressed={ui.clipAxis === ax} onClick={() => patch({ clipAxis: ui.clipAxis === ax ? null : ax })}>{String(ax).toUpperCase()}</button>
-                ))}
-                <button className="sc-chip" onClick={() => patch({ clipAxis: null })}>off</button>
-              </div>
-              <Row label="Slice position" value={ui.clipPos} min={-2} max={2} step={0.05} onChange={(v) => patch({ clipPos: v, clipAxis: ui.clipAxis ?? "y" })} />
-
-              <h4>Material / lighting</h4>
-              <div className="sc-chips">
-                {(["pastel", "clay", "cad", "flat"] as MaterialMode[]).map((m) => (
-                  <button key={m} className={"sc-chip" + (ui.material === m ? " on" : "")} aria-pressed={ui.material === m} onClick={() => patch({ material: m })}>{m === "pastel" ? "pastel" : m === "clay" ? "clay" : m === "cad" ? "CAD edges" : "flat"}</button>
-                ))}
-              </div>
-
-              <h4>Golden ratio · aspect check</h4>
-              <p className="sc-note">φ = {phi.toFixed(5)} · span {golden.long.toFixed(2)} → short {golden.short.toFixed(2)} cm. Set prism w to {golden.short.toFixed(2)} for a golden plan.</p>
-            </div>
-          )}
+      {drawer === "help" && (
+        <aside className="sc-drawer" aria-label="Gesture map">
+          <div className="sc-drawer__head"><b>Gesture map</b><button aria-label="Close" onClick={() => setDrawer(null)}>×</button></div>
+          <p className="sc-note"><kbd>move index</kbd> cursor follows your view</p>
+          <p className="sc-note"><kbd>push in-out</kbd> depth along view axis</p>
+          <p className="sc-note"><kbd>pinch tap</kbd> place / select · <kbd>hold</kbd> grab + drag</p>
+          <p className="sc-note"><kbd>fist 0.6s</kbd> delete hovered · <kbd>L</kbd> line mode · <kbd>R</kbd> recenter</p>
+          <p className="sc-note">No webcam? Mouse moves on your view plane, click = place, drag = move.</p>
         </aside>
       )}
 
-      {/* Bottom param bar — always visible, compact */}
       <div className="sc-params" aria-label="Dimensions">
-        <b className="sc-params__shape">{def.label}</b>
-        {def.params.map((p) => (
-          <Row key={p.key} label={p.label} value={Number(dims[p.key] ?? SHAPE_DEFS[ui.shape].defaults[p.key])} min={p.min} max={p.max} step={p.step} onChange={(v) => setDim(p.key, v)} />
-        ))}
-        <button className="sc-btn ghost" onClick={() => patch({ netOpen: !ui.netOpen })} aria-pressed={ui.netOpen}>{ui.netOpen ? "Hide net" : "Unfold net"}</button>
+        <b className="sc-params__shape">{shapeLabel}</b>
+        {params.map((p) => {
+          const v = Number(dims[p.key] ?? paramDefault(p.key));
+          return (
+            <label className="sc-slider" key={p.key}>
+              <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)} cm</b></span>
+              <input type="range" min={p.min} max={p.max} step={p.step} value={v} onChange={(e) => setDim(p.key, Number(e.target.value))} aria-label={p.label} />
+            </label>
+          );
+        })}
       </div>
 
-      {/* Live metric cards — big, clear for judges */}
-      <section className="sc-metrics" aria-label="Surface area and volume">
-        <article className="sc-card sc-card--vol">
-          <label>Volume V</label>
-          <b>{metrics.volume.toFixed(2)} <span>cm³</span></b>
-          <code>{metrics.volumeSym}</code>
-          <code className="sub">{metrics.volumeSub}</code>
-        </article>
-        <article className="sc-card sc-card--area">
-          <label>Surface area A</label>
-          <b>{metrics.area.toFixed(2)} <span>cm²</span></b>
-          <code>{metrics.areaSym}</code>
-          <code className="sub">{metrics.areaSub}</code>
-        </article>
-        <article className="sc-card sc-card--euler">
-          <label>Faces · Edges · Vertices</label>
-          <b>{metrics.faces ?? "mesh"} <span>F</span> · {metrics.edges ?? "mesh"} <span>E</span> · {metrics.vertices ?? "mesh"} <span>V</span></b>
-          <code>{metrics.euler != null ? `V − E + F = ${metrics.vertices} − ${metrics.edges} + ${metrics.faces} = ${metrics.euler}` : "V − E + F → see Studio mesh χ"}</code>
-          {def.eulerNote && <code className="sub">{def.eulerNote}</code>}
-        </article>
-      </section>
+      <div className="sc-status" aria-label="Hand status">
+        <span id="d-hand" className="dot off" ref={dHandRef}></span>
+        <span id="t-hand" ref={tHandRef}>none</span>
+        <span aria-hidden="true">·</span>
+        <span id="t-pinch" ref={tPinchRef}>open</span>
+        <span aria-hidden="true">·</span>
+        <span><b id="t-count" ref={tCountRef}>0</b> solids</span>
+      </div>
 
-      {/* 2D net overlay */}
-      {ui.netOpen && (
-        <section className="sc-net" aria-label="2D net unfolding">
-          <div className="sc-net__head"><b>{def.label} · 2D net</b><button aria-label="Close net" onClick={() => patch({ netOpen: false })}>×</button></div>
-          <NetSvg shape={ui.shape} unfold={ui.unfold} />
-          <label className="sc-slider"><span className="sc-slider__head"><span>Unfold</span><b>{Math.round(ui.unfold * 100)}%</b></span>
-            <input type="range" min={0} max={1} step={0.01} value={ui.unfold} onChange={(e) => patch({ unfold: Number(e.target.value) })} aria-label="Unfold amount" />
-          </label>
-        </section>
+      {mathOpen && (
+        <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getEngine} readyRev={engineRev} studio={studio} onStudio={setMode} />
       )}
+
+      <div id="video-dock" className={"video-dock sc-viddock" + (previewOpen ? "" : " is-collapsed")} aria-hidden={!previewOpen}>
+        <div className="bar">
+          <span id="t-model" ref={tModelRef}>hand model: loading…</span>
+          <span id="t-fps" ref={tFpsRef}>— fps</span>
+          <span id="t-pr" ref={tPrRef}>render —</span>
+        </div>
+        <div style={{ position: "relative" }}>
+          <video id="cam" ref={videoRef} playsInline muted aria-label="Webcam preview"></video>
+          <canvas id="skel" ref={skelRef} width={248} height={140} aria-hidden="true"></canvas>
+        </div>
+      </div>
+
+      <div id="depthbar">
+        DEPTH (Z) <span id="t-z" ref={tZRef}>0.0</span>
+        <div id="depthfill"><i id="depthi" ref={depthiRef}></i></div>
+      </div>
+
+      <span id="t-xyz" ref={tXyzRef} className="sr-only">0, 0, 0</span>
+      <div id="toast" ref={toastRef} role="status" aria-live="polite" aria-atomic="true"></div>
+      <div className="sc-domains"><DomainSwitcher active="geometry" /></div>
     </div>
   );
 }
 
-function MathCards({ shape, dims }: { shape: ShowcaseShapeId; dims: ShapeDims }) {
-  const m = metricsFor(shape, dims);
-  return (
-    <div className="sc-mathcards">
-      <article><label>Volume</label><b>{m.volume.toFixed(2)} cm³</b><code>{m.volumeSym}</code><code className="sub">{m.volumeSub}</code></article>
-      <article><label>Surface area</label><b>{m.area.toFixed(2)} cm²</b><code>{m.areaSym}</code><code className="sub">{m.areaSub}</code></article>
-      <article><label>Euler</label><b>{m.euler != null ? `χ = ${m.euler}` : "smooth / mesh"}</b><code>{m.euler != null ? `${m.vertices} − ${m.edges} + ${m.faces} = ${m.euler}` : SHAPE_DEFS[shape].eulerNote ?? "See Studio mesh χ"}</code></article>
-    </div>
-  );
-}
+// The unified lab owns Three.js — LabEntry loads this chunk lazily (ssr: false)
+// so the static shell paints first.
+export default UnifiedLab;

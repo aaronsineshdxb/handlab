@@ -31,7 +31,12 @@ export type ShapeName =
   | "knot"
   | "tetra"
   | "octa"
-  | "capsule";
+  | "capsule"
+  | "prism"
+  | "pyramid"
+  | "dome"
+  | "hexPrism"
+  | "triPrism";
 
 export type CamState = "idle" | "loading" | "live";
 
@@ -73,6 +78,11 @@ export const SHAPES: ShapeName[] = [
   "tetra",
   "octa",
   "capsule",
+  "prism",
+  "pyramid",
+  "dome",
+  "hexPrism",
+  "triPrism",
 ];
 
 export interface HudNodes {
@@ -911,6 +921,22 @@ export class HandLabEngine {
     this.spawnScale = [cl(x), cl(y), cl(z)];
   }
 
+  /** Place the current shape at the scene centre — the hero solid that
+   *  gives first paint a finished look. */
+  placeCenter(): void {
+    this.setSelected(this.placeAt(new THREE.Vector3(0, 0.2, 0)));
+  }
+
+  /** Dolly the camera along its current orbit direction (showcase framing).
+   *  OrbitControls limits (3–16) still apply. */
+  setCameraDistance(d: number): void {
+    const dist = Math.min(16, Math.max(3, Number.isFinite(d) ? d : 8.5));
+    this._v1.copy(this.camera.position).sub(this.controls.target);
+    if (this._v1.lengthSq() < 1e-6) this._v1.set(0, 0.3, 1);
+    this._v1.setLength(dist);
+    this.camera.position.copy(this.controls.target).add(this._v1);
+  }
+
   setLineMode(on: boolean): void {
     this.lineMode = on;
     if (!on) {
@@ -1356,6 +1382,24 @@ export class HandLabEngine {
         break;
       case "capsule":
         g = new THREE.CapsuleGeometry(0.28, 0.5, Math.max(2, Math.round(seg(6) / 2)), seg(14));
+        break;
+      case "prism":
+        g = new THREE.BoxGeometry(0.55, 0.6, 0.5);
+        break;
+      case "pyramid": {
+        const pg = new THREE.ConeGeometry(0.42, 0.7, 4);
+        pg.rotateY(Math.PI / 4);
+        g = pg;
+        break;
+      }
+      case "dome":
+        g = new THREE.SphereGeometry(0.4, seg(24), 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        break;
+      case "hexPrism":
+        g = new THREE.CylinderGeometry(0.36, 0.36, 0.6, 6);
+        break;
+      case "triPrism":
+        g = new THREE.CylinderGeometry(0.4, 0.4, 0.6, 3);
         break;
     }
     this.geoCache[s] = g;

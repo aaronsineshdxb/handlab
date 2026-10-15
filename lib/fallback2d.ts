@@ -1246,6 +1246,40 @@ export class HandLabFallbackEngine {
         g.fill();
         g.stroke();
         break;
+      case "prism":
+        g.fillRect(-r, -r * 0.7, r * 2, r * 1.4);
+        g.strokeRect(-r, -r * 0.7, r * 2, r * 1.4);
+        break;
+      case "pyramid":
+      case "triPrism":
+        g.beginPath();
+        g.moveTo(0, -r);
+        g.lineTo(r * 0.9, r * 0.8);
+        g.lineTo(-r * 0.9, r * 0.8);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        break;
+      case "dome":
+        g.beginPath();
+        g.arc(0, r * 0.4, r, Math.PI, 0);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        break;
+      case "hexPrism":
+        g.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+          const px = Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (i === 0) g.moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.closePath();
+        g.fill();
+        g.stroke();
+        break;
     }
     g.restore();
   }

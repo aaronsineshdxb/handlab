@@ -30,6 +30,11 @@ const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   tetra: { g: "△", label: "tetra" },
   octa: { g: "◇", label: "octa" },
   capsule: { g: "⬯", label: "capsule" },
+  prism: { g: "▭", label: "prism" },
+  pyramid: { g: "◭", label: "pyramid" },
+  dome: { g: "◠", label: "dome" },
+  hexPrism: { g: "⬡", label: "hex" },
+  triPrism: { g: "▽", label: "wedge" },
 };
 
 export default function HandLab() {
@@ -39,6 +44,7 @@ export default function HandLab() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
   const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cube.defaults });
+  const [studio, setStudio] = useState(false);
   /** Bumped when the async engine is assigned, so settings effects re-run
    *  and re-apply anything the user changed before init completed. */
   const [engineRev, setEngineRev] = useState(0);
@@ -532,7 +538,7 @@ export default function HandLab() {
         />
       </nav>
 
-      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} readyRev={engineRev} />
+      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} readyRev={engineRev} studio={studio} onStudio={setStudio} />
 
       <aside
         id="hint-panel"
