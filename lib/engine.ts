@@ -1267,7 +1267,12 @@ export class HandLabEngine {
       }
       const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, facingMode: "user" },
+          video: {
+            width: 640,
+            height: 480,
+            facingMode: "user",
+            frameRate: { max: 45 },
+          },
         }),
         30000,
         "camera",

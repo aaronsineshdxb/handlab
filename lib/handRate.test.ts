@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HAND_DETECT_MS, shouldDetect } from "./handRate";
 
 describe("HAND_DETECT_MS", () => {
-  it("caps hand detection at 30Hz", () => {
-    expect(HAND_DETECT_MS).toBeCloseTo(33.33, 1);
+  it("caps hand detection at 45Hz", () => {
+    expect(HAND_DETECT_MS).toBeCloseTo(22.22, 1);
   });
 });
 
@@ -36,7 +36,7 @@ describe("shouldDetect", () => {
     expect(shouldDetect(5000, 0)).toBe(true);
   });
 
-  it("never allows more than 30 detections per simulated second", () => {
+  it("never allows more than 45 detections per simulated second", () => {
     let last = -Infinity;
     let count = 0;
     for (let t = 0; t < 1000; t += 4) {
@@ -45,9 +45,9 @@ describe("shouldDetect", () => {
         count++;
       }
     }
-    // 33.33ms interval quantised to a 4ms sample grid lands on 36ms, so the
-    // achieved rate is ~27.8Hz — deliberately on the safe side of the cap.
-    expect(count).toBeLessThanOrEqual(30);
-    expect(count).toBeGreaterThanOrEqual(27);
+    // 22.22ms interval quantised to a 4ms sample grid lands on 24ms, so the
+    // achieved rate is ~41.7Hz — deliberately on the safe side of the cap.
+    expect(count).toBeLessThanOrEqual(45);
+    expect(count).toBeGreaterThanOrEqual(38);
   });
 });
