@@ -1067,7 +1067,32 @@ export class HandLabFallbackEngine {
   private drawSkel(all: NormalizedLandmark[][] | undefined, pinched = false): void {
     if (!this.sctx) return;
     const g = this.sctx;
-    g.clearRect(0, 0, 248, 140);
+    const canvas = this.opts.skel;
+    const W = canvas.clientWidth || 248;
+    const H = canvas.clientHeight || 140;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const needW = Math.max(1, Math.round(W * dpr));
+    const needH = Math.max(1, Math.round(H * dpr));
+    if (canvas.width !== needW || canvas.height !== needH) {
+      canvas.width = needW;
+      canvas.height = needH;
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    const vw = this.opts.video.videoWidth || 0;
+    const vh = this.opts.video.videoHeight || 0;
+    let s = 1;
+    let cropX = 0;
+    let cropY = 0;
+    if (vw > 0 && vh > 0) {
+      s = Math.max(W / vw, H / vh);
+      cropX = (vw * s - W) / 2;
+      cropY = (vh * s - H) / 2;
+    }
+    const mapX = (nx: number): number =>
+      vw > 0 && vh > 0 ? W - (nx * vw * s - cropX) : (1 - nx) * W;
+    const mapY = (ny: number): number =>
+      vw > 0 && vh > 0 ? ny * vh * s - cropY : ny * H;
     (all || []).forEach((lm) => {
       g.strokeStyle = pinched
         ? "rgba(61,220,132,.95)"
@@ -1075,15 +1100,15 @@ export class HandLabFallbackEngine {
       g.lineWidth = 1.4;
       g.beginPath();
       EDGES.forEach(([a, b]) => {
-        g.moveTo((1 - lm[a].x) * 248, lm[a].y * 140);
-        g.lineTo((1 - lm[b].x) * 248, lm[b].y * 140);
+        g.moveTo(mapX(lm[a].x), mapY(lm[a].y));
+        g.lineTo(mapX(lm[b].x), mapY(lm[b].y));
       });
       g.stroke();
       g.fillStyle = pinched ? "#3ddc84" : "#9cc6ff";
       lm.forEach((p, i) => {
         if (i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20) {
           g.beginPath();
-          g.arc((1 - p.x) * 248, p.y * 140, i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
+          g.arc(mapX(p.x), mapY(p.y), i === 8 || i === 4 ? 3.2 : 2.2, 0, 7);
           g.fill();
         }
       });
