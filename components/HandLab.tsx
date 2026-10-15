@@ -9,19 +9,14 @@ import {
   type ShapeName,
   type UiState,
 } from "../lib/engine";
-import LessonPanel from "./LessonPanel";
+import SolidMath, { mathIdFor } from "./SolidMath";
+import { SHAPE_DEFS, spawnScaleFor, type ShapeDims } from "../lib/geometry/math";
 import DomainSwitcher from "./DomainSwitcher";
 import Dock from "./bits/Dock";
 import Magnet from "./bits/Magnet";
 import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
 import { AccentSection } from "./bits/AccentPicker";
-import { LESSONS } from "../lib/lessons/lessons.geometry";
-import { loadProgress, saveStep } from "../lib/lessons/store";
-import { evalChecks, type SceneSnap } from "../lib/lessons/checks";
-import type { Lesson, Progress, QuizCheck } from "../lib/lessons/types";
-import { addImportedLesson } from "../lib/lessons/validation";
-import { createSceneSync } from "../lib/sceneSync";
 import type { HandLabFallbackEngine } from "../lib/fallback2d";
 
 const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
@@ -35,6 +30,11 @@ const SHAPE_GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   tetra: { g: "△", label: "tetra" },
   octa: { g: "◇", label: "octa" },
   capsule: { g: "⬯", label: "capsule" },
+  prism: { g: "▭", label: "prism" },
+  pyramid: { g: "◭", label: "pyramid" },
+  dome: { g: "◠", label: "dome" },
+  hexPrism: { g: "⬡", label: "hex" },
+  triPrism: { g: "▽", label: "wedge" },
 };
 
 export default function HandLab() {
@@ -43,20 +43,15 @@ export default function HandLab() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
-  const [lessons, setLessons] = useState<Lesson[]>(LESSONS);
-  const lessonsRef = useRef<Lesson[]>(LESSONS);
-  const [lessonId, setLessonId] = useState<string | null>(null);
-  const [lessonStepIdx, setLessonStepIdx] = useState(0);
-  const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
-  const progressRef = useRef<Record<string, Progress>>({});
-  progressRef.current = progressMap;
-  const [sceneRev, setSceneRev] = useState(0);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cube.defaults });
+  const [studio, setStudio] = useState(false);
+  /** Bumped when the async engine is assigned, so settings effects re-run
+   *  and re-apply anything the user changed before init completed. */
+  const [engineRev, setEngineRev] = useState(0);
   const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const lessonFileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const skelRef = useRef<HTMLCanvasElement>(null);
   const cursor2dRef = useRef<HTMLDivElement>(null);
@@ -73,16 +68,54 @@ export default function HandLab() {
   const tZRef = useRef<HTMLSpanElement>(null);
   const depthiRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    setProgressMap(loadProgress());
-  }, []);
-
   useEffect(
     () => () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     },
     [],
   );
+
+  // Live solid math: sliders drive the cards and the spawn size of newly
+  // placed meshes (as ratios against each shape's defaults, so defaults
+  // keep the exact legacy mesh sizes). Knot scales uniformly by its size.
+  const setDim = useCallback((key: keyof ShapeDims, value: number) => {
+    setDims((d) => ({ ...d, [key]: value }));
+  }, []);
+
+  const resetDims = useCallback(() => {
+    const mid = mathIdFor(ui.shape);
+    if (mid === "knot") {
+      setDims({ a: 1 });
+      return;
+    }
+    setDims({ ...SHAPE_DEFS[mid].defaults });
+  }, [ui.shape]);
+
+  useEffect(() => {
+    const eng = engineRef.current as unknown as {
+      setSpawnScale?: (x: number, y: number, z: number) => void;
+    } | null;
+    if (!eng?.setSpawnScale) return;
+    const mid = mathIdFor(ui.shape);
+    if (mid === "knot") {
+      const k = dims.a ?? 1;
+      eng.setSpawnScale(k, k, k);
+      return;
+    }
+    const [x, y, z] = spawnScaleFor(mid, dims);
+    eng.setSpawnScale(x, y, z);
+  }, [ui.shape, dims, engineRev]);
+
+  // Switching solids resets the math panel to that solid's reference dims,
+  // mirroring the showcase behaviour.
+  const shapeRef = useRef(ui.shape);
+  useEffect(() => {
+    if (shapeRef.current === ui.shape) return;
+    shapeRef.current = ui.shape;
+    const mid = mathIdFor(ui.shape);
+    if (mid === "knot") setDims({ a: 1 });
+    else setDims({ ...SHAPE_DEFS[mid].defaults });
+  }, [ui.shape]);
 
   useEffect(() => {
     if (
@@ -117,12 +150,6 @@ export default function HandLab() {
     };
     let engine: HandLabEngine | HandLabFallbackEngine | null = null;
     let disposed = false;
-    // Lesson checks re-evaluate off this. Scene mutations arrive in bursts
-    // (place, then a drag emitting math every 6th frame), so coalesce to one
-    // React update per 100ms. See lib/sceneSync.ts — reconciling the HUD
-    // once per animation frame was the largest source of drag jank.
-    const sceneSync = createSceneSync(() => setSceneRev((rev) => rev + 1));
-    const onScene = () => sceneSync();
     const opts = {
       canvas: canvasRef.current,
       video: videoRef.current,
@@ -131,7 +158,6 @@ export default function HandLab() {
       toast: toastRef.current,
       hud,
       emit: setUi,
-      onScene,
       onCamLive: () => setPreviewOpen(true),
       onFatal: (msg: string) => setFatal(msg),
     };
@@ -168,11 +194,11 @@ export default function HandLab() {
         return;
       }
       engineRef.current = engine;
+      setEngineRev((r) => r + 1);
     })();
 
     return () => {
       disposed = true;
-      sceneSync.dispose();
       engine?.dispose();
       engineRef.current = null;
     };
@@ -180,31 +206,17 @@ export default function HandLab() {
 
   const eng = useCallback(() => engineRef.current, []);
 
-  const showToast = useCallback((message: string) => {
-    const toast = toastRef.current;
-    if (!toast) return;
-    toast.textContent = message;
-    toast.style.opacity = "1";
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => {
-      toast.style.opacity = "0";
-    }, 1400);
-  }, []);
-
-  // Recomputed only when the engine reports a scene change (throttled to
-  // 10Hz by sceneSync), so this stays off the render hot path.
-  // exportCheckSnap reads shape names + chain points straight off the live
-  // scene graph — no getHexString, no position/rotation arrays, no throwaway
-  // SceneData (see lib/engine.ts). toCheckSnap remains for pure-data callers.
-  const snap = useMemo<SceneSnap>(() => {
-    return (
-      eng()?.exportCheckSnap(quizAnswers) ?? {
-        objects: [],
-        chains: [],
-        quizAnswers,
-      }
-    );
-  }, [sceneRev, quizAnswers]);
+  const getStudioEngine = useCallback(
+    () =>
+      engineRef.current as unknown as {
+        setWireframe?: (on: boolean) => void;
+        setMaterialMode?: (mode: "standard" | "clay" | "flat") => void;
+        setDetail?: (level: number) => void;
+        setClip?: (axis: "x" | "y" | "z" | null, pos: number) => void;
+        setSpawnScale?: (x: number, y: number, z: number) => void;
+      } | null,
+    [],
+  );
 
   const download = (name: string, url: string) => {
     const a = document.createElement("a");
@@ -232,147 +244,6 @@ export default function HandLab() {
   const onImportFile = async (f: File) => {
     eng()?.importSceneJson(await f.text());
   };
-
-  const onExportLesson = () => {
-    const lesson = lessons.find(({ id }) => id === lessonId);
-    if (!lesson) {
-      showToast("no active lesson to export");
-      return;
-    }
-    const blob = new Blob([JSON.stringify(lesson, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    download(`handlab-lesson-${lesson.id}.json`, url);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-
-  const onImportLessonFile = async (f: File) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(await f.text()) as unknown;
-    } catch {
-      showToast("lesson file is not valid JSON");
-      return;
-    }
-    const currentLessons = lessonsRef.current;
-    const nextLessons = addImportedLesson(currentLessons, parsed);
-    if (nextLessons === currentLessons) {
-      showToast("lesson data invalid — nothing loaded");
-      return;
-    }
-    lessonsRef.current = nextLessons;
-    setLessons(nextLessons);
-    showToast("lesson imported");
-  };
-
-  // The four handlers below are memoised so LessonPanel's auto-advance effect
-  // (which lists onNext/onBack in its deps) stops tearing down and re-running
-  // on every parent render. Their dependency arrays deliberately exclude
-  // sceneRev/snap/quizAnswers — a scene change must not invalidate them.
-  const selectLesson = useCallback(
-    (nextLessonId: string) => {
-      if (lessonId === nextLessonId) {
-        eng()?.setLineMode(false);
-        setLessonId(null);
-        setLessonStepIdx(0);
-        return;
-      }
-
-      const engine = eng();
-      engine?.clearAll();
-      engine?.clearLines();
-      engine?.setLineMode(false);
-      setHelpOpen(false);
-      setLessonId(nextLessonId);
-      const lastStepIdx = Math.max(
-        (lessons.find(({ id }) => id === nextLessonId)?.steps.length ?? 1) - 1,
-        0,
-      );
-      const storedStepIdx = progressMap[nextLessonId]?.stepIdx ?? 0;
-      setLessonStepIdx(
-        Math.min(Math.max(Math.floor(storedStepIdx), 0), lastStepIdx),
-      );
-    },
-    [lessonId, lessons, progressMap],
-  );
-
-  const nextLessonStep = useCallback(
-    (nextStepIdx: number) => {
-      const lesson = lessons.find(({ id }) => id === lessonId);
-      if (
-        !lesson ||
-        !Number.isInteger(nextStepIdx) ||
-        nextStepIdx <= lessonStepIdx ||
-        nextStepIdx >= lesson.steps.length
-      )
-        return;
-      setLessonStepIdx(nextStepIdx);
-    },
-    [lessons, lessonId, lessonStepIdx],
-  );
-
-  const previousLessonStep = useCallback(
-    (previousStepIdx: number) => {
-      if (
-        !lessonId ||
-        !Number.isInteger(previousStepIdx) ||
-        previousStepIdx >= lessonStepIdx ||
-        previousStepIdx < 0
-      )
-        return;
-      setLessonStepIdx(previousStepIdx);
-    },
-    [lessonId, lessonStepIdx],
-  );
-
-  const handleQuizAnswer = useCallback(
-    (check: QuizCheck, answerIndex: number) => {
-      setQuizAnswers((current) => {
-        if (current[check.question] === answerIndex) return current;
-        return { ...current, [check.question]: answerIndex };
-      });
-      if (answerIndex !== check.answer || !lessonId) return;
-      const nextProgress: Progress = {
-        lessonId,
-        stepIdx: lessonStepIdx,
-        done: true,
-        score: 1,
-        updatedAt: Date.now(),
-      };
-      saveStep(nextProgress);
-      setProgressMap((current) => ({
-        ...current,
-        [lessonId]: nextProgress,
-      }));
-    },
-    [lessonId, lessonStepIdx],
-  );
-
-  // A step counts as done once every one of its checks passes against the live
-  // scene — that's what the Next button is gated on, so record it here.
-  // progressMap is read through a ref so saving progress here cannot retrigger
-  // this effect, and steps with no checks bail out before any of it.
-  useEffect(() => {
-    if (!lessonId) return;
-    const lesson = lessons.find(({ id }) => id === lessonId);
-    const step = lesson?.steps[lessonStepIdx];
-    if (!step || step.checks.length === 0) return;
-    if (!evalChecks(step.checks, snap)) return;
-
-    const done = progressRef.current[lessonId];
-    if (done?.done && done.stepIdx === lessonStepIdx) return;
-
-    const nextProgress: Progress = {
-      lessonId,
-      stepIdx: lessonStepIdx,
-      done: true,
-      score: 1,
-      updatedAt: Date.now(),
-    };
-    saveStep(nextProgress);
-    setProgressMap((current) => ({ ...current, [lessonId]: nextProgress }));
-  }, [lessonId, lessonStepIdx, lessons, snap]);
 
   // Dock items are memoised so React.memo(Dock) actually skips renders.
   // Depending on the volatile UI flags is correct and cheap — they only
@@ -421,15 +292,14 @@ export default function HandLab() {
       },
       {
         id: "camera",
-        label: `camera: ${previewOpen && !lessonId ? "shown" : "hidden"}`,
-        active: previewOpen && !lessonId,
-        disabled: !!lessonId,
-        expanded: previewOpen && !lessonId,
+        label: `camera: ${previewOpen ? "shown" : "hidden"}`,
+        active: previewOpen,
+        expanded: previewOpen,
         controls: "video-dock",
         onClick: () => setPreviewOpen(!previewOpen),
       },
     ],
-    [ui.cam, ui.spin, ui.grid, helpOpen, previewOpen, lessonId, eng],
+    [ui.cam, ui.spin, ui.grid, helpOpen, previewOpen, eng],
   );
 
   if (fatal)
@@ -650,14 +520,6 @@ export default function HandLab() {
             file ↑
           </button>
         </div>
-        <div className="tool-row">
-          <button className="mini" onClick={onExportLesson}>
-            lesson ↓
-          </button>
-          <button className="mini" onClick={() => lessonFileRef.current?.click()}>
-            lesson ↑
-          </button>
-        </div>
         <h2>DISPLAY</h2>
         <div className="tool-row">
           <ThemeToggle />
@@ -674,30 +536,9 @@ export default function HandLab() {
             e.target.value = "";
           }}
         />
-        <input
-          ref={lessonFileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onImportLessonFile(f);
-            e.target.value = "";
-          }}
-        />
       </nav>
 
-      <LessonPanel
-        lessons={lessons}
-        active={lessonId}
-        stepIdx={lessonStepIdx}
-        onSelect={selectLesson}
-        onNext={nextLessonStep}
-        onBack={previousLessonStep}
-        progress={lessonId ? progressMap[lessonId] : undefined}
-        onQuizAnswer={handleQuizAnswer}
-        snap={snap}
-      />
+      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} readyRev={engineRev} studio={studio} onStudio={setStudio} />
 
       <aside
         id="hint-panel"
@@ -750,8 +591,8 @@ export default function HandLab() {
 
       <div
         id="video-dock"
-        className={"video-dock" + (previewOpen ? "" : " is-collapsed") + (lessonId ? " lesson-mode-hidden" : "")}
-        aria-hidden={!previewOpen || !!lessonId}
+        className={"video-dock" + (previewOpen ? "" : " is-collapsed")}
+        aria-hidden={!previewOpen}
       >
         <div className="bar">
           <span id="t-model" ref={tModelRef}>
@@ -772,7 +613,7 @@ export default function HandLab() {
 
       <Dock label="Lab controls" items={dockItems} />
 
-      <div id="depthbar" className={lessonId ? "lesson-mode-hidden" : ""}>
+      <div id="depthbar">
         DEPTH (Z){" "}
         <span id="t-z" ref={tZRef}>
           0.0

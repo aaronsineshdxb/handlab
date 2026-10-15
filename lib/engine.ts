@@ -31,9 +31,17 @@ export type ShapeName =
   | "knot"
   | "tetra"
   | "octa"
-  | "capsule";
+  | "capsule"
+  | "prism"
+  | "pyramid"
+  | "dome"
+  | "hexPrism"
+  | "triPrism";
 
 export type CamState = "idle" | "loading" | "live";
+
+export type StudioMaterial = "standard" | "clay" | "flat";
+export type ClipAxis = "x" | "y" | "z" | null;
 
 export interface UiState {
   shape: ShapeName;
@@ -70,6 +78,11 @@ export const SHAPES: ShapeName[] = [
   "tetra",
   "octa",
   "capsule",
+  "prism",
+  "pyramid",
+  "dome",
+  "hexPrism",
+  "triPrism",
 ];
 
 export interface HudNodes {
@@ -430,6 +443,16 @@ export class HandLabEngine {
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
   private color = "#016A71";
+  /** Scale applied to newly placed meshes (driven by the solid-math panel
+   *  sliders). Stored as ratios so defaults keep the exact legacy sizes. */
+  private spawnScale: [number, number, number] = [1, 1, 1];
+  /** Studio inspection state (pushed from the solid-math panel). */
+  private wireframe = false;
+  private matMode: StudioMaterial = "standard";
+  private detail = 1;
+  private clipAxis: ClipAxis = null;
+  private clipPos = 0;
+  private clipHelper: THREE.Mesh | null = null;
   private geoCache: Partial<Record<ShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hrCache: Partial<Record<ShapeName, number>> = {};
@@ -569,9 +592,10 @@ export class HandLabEngine {
     // stops this line reading as a soft-shadow setting it no longer is.
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false; // static scene: re-render shadows only when something moves
+    this.renderer.localClippingEnabled = true; // studio slicing planes
 
-    this.scene.background = new THREE.Color(0xFCFCF9);
-    this.scene.fog = new THREE.Fog(0xFCFCF9, 14, 30);
+    this.scene.background = new THREE.Color(0xF8FAFC);
+    this.scene.fog = new THREE.Fog(0xF8FAFC, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -599,7 +623,7 @@ export class HandLabEngine {
     this.rimLight.position.set(-5, 3, -4);
     this.scene.add(this.rimLight);
 
-    this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
+    this.grid = new THREE.GridHelper(14, 28, 0xCBD5E1, 0xE2E8F0);
     this.scene.add(this.grid);
     this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
     const floor = new THREE.Mesh(
@@ -867,7 +891,11 @@ export class HandLabEngine {
     this.HANDLE_MAT.dispose();
     this.floorMat.dispose();
     this.boundsMat.dispose();
-    this.grid.geometry.dispose();
+    if (this.clipHelper) {
+      this.clipHelper.geometry.dispose();
+      (this.clipHelper.material as THREE.Material).dispose();
+      this.clipHelper = null;
+    }    this.grid.geometry.dispose();
     (this.grid.material as THREE.Material).dispose();
     this.controls.dispose();
     this.renderer.dispose();
@@ -883,6 +911,30 @@ export class HandLabEngine {
   setColor(c: string): void {
     this.color = c;
     this.emit();
+  }
+
+  /** Scale for newly placed meshes. Clamped so sliders can't collapse or
+   *  blow up the scene. Existing meshes keep their scale. */
+  setSpawnScale(x: number, y: number, z: number): void {
+    const cl = (v: number): number =>
+      Number.isFinite(v) ? Math.min(4, Math.max(0.2, v)) : 1;
+    this.spawnScale = [cl(x), cl(y), cl(z)];
+  }
+
+  /** Place the current shape at the scene centre — the hero solid that
+   *  gives first paint a finished look. */
+  placeCenter(): void {
+    this.setSelected(this.placeAt(new THREE.Vector3(0, 0.2, 0)));
+  }
+
+  /** Dolly the camera along its current orbit direction (showcase framing).
+   *  OrbitControls limits (3–16) still apply. */
+  setCameraDistance(d: number): void {
+    const dist = Math.min(16, Math.max(3, Number.isFinite(d) ? d : 8.5));
+    this._v1.copy(this.camera.position).sub(this.controls.target);
+    if (this._v1.lengthSq() < 1e-6) this._v1.set(0, 0.3, 1);
+    this._v1.setLength(dist);
+    this.camera.position.copy(this.controls.target).add(this._v1);
   }
 
   setLineMode(on: boolean): void {
@@ -1024,6 +1076,7 @@ export class HandLabEngine {
     }
     this.clearAll();
     this.clearLines();
+    this.spawnScale = [1, 1, 1];
     for (const o of data.objects) {
       this.placeAt(
         new THREE.Vector3(o.p[0], o.p[1], o.p[2]),
@@ -1293,41 +1346,71 @@ export class HandLabEngine {
   private geoFor(s: ShapeName): THREE.BufferGeometry {
     const hit = this.geoCache[s];
     if (hit) return hit;
+    // detail scales tessellation: 0 = coarse, 1 = legacy, 2 = fine.
+    const seg = (base: number): number =>
+      Math.max(3, Math.round(base * (this.detail === 0 ? 0.5 : this.detail === 2 ? 1.9 : 1)));
+    const poly = (base: number): number =>
+      this.detail === 0 ? 0 : this.detail === 2 ? Math.max(base, 1) : base;
     let g: THREE.BufferGeometry;
     switch (s) {
       case "cube":
         g = new THREE.BoxGeometry(0.62, 0.62, 0.62);
         break;
       case "sphere":
-        g = new THREE.SphereGeometry(0.4, 32, 32);
+        g = new THREE.SphereGeometry(0.4, seg(32), Math.max(8, Math.round(seg(32) / 2)));
         break;
       case "cone":
-        g = new THREE.ConeGeometry(0.4, 0.8, 28);
+        g = new THREE.ConeGeometry(0.4, 0.8, seg(28));
         break;
       case "torus":
-        g = new THREE.TorusGeometry(0.34, 0.13, 18, 40);
+        g = new THREE.TorusGeometry(0.34, 0.13, Math.max(6, Math.round(seg(18) / 2)), seg(40));
         break;
       case "cylinder":
-        g = new THREE.CylinderGeometry(0.34, 0.34, 0.7, 28);
+        g = new THREE.CylinderGeometry(0.34, 0.34, 0.7, seg(28));
         break;
       case "icosa":
-        g = new THREE.IcosahedronGeometry(0.46, 0);
+        g = new THREE.IcosahedronGeometry(0.46, poly(0));
         break;
       case "knot":
-        g = new THREE.TorusKnotGeometry(0.34, 0.11, 90, 12);
+        g = new THREE.TorusKnotGeometry(0.34, 0.11, seg(90), Math.max(6, Math.round(seg(12) / 2)));
         break;
       case "tetra":
-        g = new THREE.TetrahedronGeometry(0.58);
+        g = new THREE.TetrahedronGeometry(0.58, poly(0));
         break;
       case "octa":
-        g = new THREE.OctahedronGeometry(0.52);
+        g = new THREE.OctahedronGeometry(0.52, poly(0));
         break;
       case "capsule":
-        g = new THREE.CapsuleGeometry(0.28, 0.5, 6, 14);
+        g = new THREE.CapsuleGeometry(0.28, 0.5, Math.max(2, Math.round(seg(6) / 2)), seg(14));
+        break;
+      case "prism":
+        g = new THREE.BoxGeometry(0.55, 0.6, 0.5);
+        break;
+      case "pyramid": {
+        const pg = new THREE.ConeGeometry(0.42, 0.7, 4);
+        pg.rotateY(Math.PI / 4);
+        g = pg;
+        break;
+      }
+      case "dome":
+        g = new THREE.SphereGeometry(0.4, seg(24), 12, 0, Math.PI * 2, 0, Math.PI / 2);
+        break;
+      case "hexPrism":
+        g = new THREE.CylinderGeometry(0.36, 0.36, 0.6, 6);
+        break;
+      case "triPrism":
+        g = new THREE.CylinderGeometry(0.4, 0.4, 0.6, 3);
         break;
     }
     this.geoCache[s] = g;
     return g;
+  }
+
+  private clipPlanesList(): THREE.Plane[] {
+    if (!this.clipAxis) return [];
+    if (this.clipAxis === "x") return [new THREE.Plane(new THREE.Vector3(-1, 0, 0), this.clipPos)];
+    if (this.clipAxis === "y") return [new THREE.Plane(new THREE.Vector3(0, -1, 0), this.clipPos)];
+    return [new THREE.Plane(new THREE.Vector3(0, 0, -1), this.clipPos)];
   }
 
   private matFor(c: string): THREE.MeshStandardMaterial {
@@ -1338,8 +1421,100 @@ export class HandLabEngine {
       roughness: 0.32,
       metalness: 0.25,
     });
+    this.applyStudioProps(m);
     this.matCache[c] = m;
     return m;
+  }
+
+  /** Apply the current studio flags to one placed-solid material. */
+  private applyStudioProps(m: THREE.MeshStandardMaterial): void {
+    if (this.matMode === "clay") {
+      m.roughness = 0.92;
+      m.metalness = 0;
+      m.flatShading = false;
+    } else if (this.matMode === "flat") {
+      m.roughness = 0.6;
+      m.metalness = 0.05;
+      m.flatShading = true;
+    } else {
+      m.roughness = 0.32;
+      m.metalness = 0.25;
+      m.flatShading = false;
+    }
+    m.wireframe = this.wireframe;
+    m.clippingPlanes = this.clipPlanesList();
+    m.needsUpdate = true;
+  }
+
+  /** Wireframe overlay for every placed solid (Studio). */
+  setWireframe(on: boolean): void {
+    this.wireframe = on;
+    Object.values(this.matCache).forEach((m) => {
+      m.wireframe = on;
+    });
+  }
+
+  /** Lighting/material voice for placed solids (Studio). */
+  setMaterialMode(mode: StudioMaterial): void {
+    this.matMode = mode;
+    Object.values(this.matCache).forEach((m) => this.applyStudioProps(m));
+  }
+
+  /** Tessellation level 0–2 (Studio). Rebuilds shared geometries and swaps
+   *  them onto live meshes, preserving each mesh's spawn scale. */
+  setDetail(level: number): void {
+    const next = Math.min(2, Math.max(0, Math.round(level)));
+    if (next === this.detail) return;
+    this.detail = next;
+    Object.values(this.geoCache).forEach((g) => g?.dispose());
+    this.geoCache = {};
+    this.hrCache = {};
+    for (const m of this.spawnables) {
+      const s = this.shapeOf(m);
+      m.geometry = this.geoFor(s);
+      const k = Math.max(m.scale.x, m.scale.y, m.scale.z);
+      m.userData.hr = this.hrFor(s) * k;
+    }
+    this.shadowsDirty = true;
+  }
+
+  /** Cross-section slicing plane (Studio). Null axis disables it. */
+  setClip(axis: ClipAxis, pos: number): void {
+    this.clipAxis = axis;
+    this.clipPos = Number.isFinite(pos) ? Math.min(3, Math.max(-3, pos)) : 0;
+    const planes = this.clipPlanesList();
+    Object.values(this.matCache).forEach((m) => {
+      m.clippingPlanes = planes;
+      m.needsUpdate = true;
+    });
+    if (this.clipHelper) {
+      this.scene.remove(this.clipHelper);
+      this.clipHelper.geometry.dispose();
+      (this.clipHelper.material as THREE.Material).dispose();
+      this.clipHelper = null;
+    }
+    if (!axis) return;
+    const helper = new THREE.Mesh(
+      new THREE.PlaneGeometry(9, 9),
+      new THREE.MeshBasicMaterial({
+        color: 0x0ea5e9,
+        transparent: true,
+        opacity: 0.12,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    if (axis === "x") {
+      helper.rotation.y = Math.PI / 2;
+      helper.position.x = this.clipPos;
+    } else if (axis === "y") {
+      helper.rotation.x = -Math.PI / 2;
+      helper.position.y = this.clipPos;
+    } else {
+      helper.position.z = this.clipPos;
+    }
+    this.clipHelper = helper;
+    this.scene.add(helper);
   }
 
   private hrFor(s: ShapeName): number {
@@ -1361,9 +1536,11 @@ export class HandLabEngine {
     const m = new THREE.Mesh(this.geoFor(s), this.matFor(c));
     m.position.copy(p).clamp(this.PLACE_MIN, this.PLACE_MAX);
     m.castShadow = true;
+    m.scale.set(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     else m.rotation.set(Math.random() * 0.4, Math.random() * 0.8, 0);
-    m.userData.hr = this.hrFor(s);
+    const maxK = Math.max(this.spawnScale[0], this.spawnScale[1], this.spawnScale[2]);
+    m.userData.hr = this.hrFor(s) * maxK;
     m.userData.shape = s;
     this.scene.add(m);
     this.spawnables.push(m);
