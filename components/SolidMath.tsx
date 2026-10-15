@@ -33,6 +33,8 @@ interface SolidMathProps {
   onDims: (key: keyof ShapeDims, value: number) => void;
   onReset: () => void;
   getEngine: () => StudioEngine | null;
+  /** Bumped when the async engine becomes ready; re-runs the push effects. */
+  readyRev: number;
 }
 
 function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => void; children: React.ReactNode; label?: string }) {
@@ -43,7 +45,7 @@ function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => v
   );
 }
 
-function SolidMath({ shape, dims, onDims, onReset, getEngine }: SolidMathProps) {
+function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev }: SolidMathProps) {
   const id = mathIdFor(shape);
   const [studio, setStudio] = useState(false);
   const [wireframe, setWireframe] = useState(false);
@@ -56,16 +58,16 @@ function SolidMath({ shape, dims, onDims, onReset, getEngine }: SolidMathProps) 
 
   useEffect(() => {
     getEngine()?.setWireframe?.(wireframe);
-  }, [getEngine, wireframe]);
+  }, [getEngine, wireframe, readyRev]);
   useEffect(() => {
     getEngine()?.setMaterialMode?.(matMode);
-  }, [getEngine, matMode]);
+  }, [getEngine, matMode, readyRev]);
   useEffect(() => {
     getEngine()?.setDetail?.(detail);
-  }, [getEngine, detail]);
+  }, [getEngine, detail, readyRev]);
   useEffect(() => {
     getEngine()?.setClip?.(clipAxis, clipPos);
-  }, [getEngine, clipAxis, clipPos]);
+  }, [getEngine, clipAxis, clipPos, readyRev]);
 
   return (
     <aside className="solid-math" aria-label="Solid mathematics">

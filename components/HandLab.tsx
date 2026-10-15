@@ -39,6 +39,9 @@ export default function HandLab() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
   const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cube.defaults });
+  /** Bumped when the async engine is assigned, so settings effects re-run
+   *  and re-apply anything the user changed before init completed. */
+  const [engineRev, setEngineRev] = useState(0);
   const engineRef = useRef<HandLabEngine | HandLabFallbackEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -95,7 +98,7 @@ export default function HandLab() {
     }
     const [x, y, z] = spawnScaleFor(mid, dims);
     eng.setSpawnScale(x, y, z);
-  }, [ui.shape, dims]);
+  }, [ui.shape, dims, engineRev]);
 
   // Switching solids resets the math panel to that solid's reference dims,
   // mirroring the showcase behaviour.
@@ -185,6 +188,7 @@ export default function HandLab() {
         return;
       }
       engineRef.current = engine;
+      setEngineRev((r) => r + 1);
     })();
 
     return () => {
@@ -528,7 +532,7 @@ export default function HandLab() {
         />
       </nav>
 
-      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} />
+      <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getStudioEngine} readyRev={engineRev} />
 
       <aside
         id="hint-panel"

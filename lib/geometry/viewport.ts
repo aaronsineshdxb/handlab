@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { ShowcaseShapeId, ShapeDims } from "./math";
 import { withDims } from "./math";
+import { surfaceTopology, type SurfaceTopology } from "./topology";
 
 export type MaterialMode = "pastel" | "clay" | "cad" | "flat";
 export type ClipAxis = "x" | "y" | "z" | null;
@@ -117,6 +118,7 @@ export class ShowcaseEngine {
   private vertexPts: THREE.Points | null = null;
   private dimGroup = new THREE.Group();
   private sliceHelper: THREE.Mesh | null = null;
+  private floor: THREE.Mesh | null = null;
   private raf = 0;
   private disposed = false;
   private settings: ShowcaseSettings = { ...DEFAULT_SETTINGS };
@@ -168,21 +170,15 @@ export class ShowcaseEngine {
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -1.9;
     floor.receiveShadow = true;
+    this.floor = floor;
     this.scene.add(floor);
 
     this.scene.add(this.dimGroup);
 
-    const resize = () => {
-      const w = parent.clientWidth || window.innerWidth;
-      const h = parent.clientHeight || window.innerHeight;
-      this.camera.aspect = w / h;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(w, h, false);
-    };
-    resize();
-    this.resizeObs = new ResizeObserver(resize);
+    this.onResize();
+    this.resizeObs = new ResizeObserver(this.onResize);
     this.resizeObs.observe(parent);
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", this.onResize);
 
     this.rebuild();
     this.tick();
@@ -214,27 +210,45 @@ export class ShowcaseEngine {
     }
   }
 
-  /** Live mesh topology (indexed geometry) for Studio readout. */
-  meshStats(): { v: number; f: number; e: number; euler: number } | null {
+  /** Live mesh topology for the Studio readout. Counts unique vertices
+   *  and unique edges (position-merged), so split normals/UVs can't skew χ. */
+  meshStats(): SurfaceTopology | null {
     if (!this.mesh) return null;
-    const g = this.mesh.geometry;
-    const pos = g.attributes.position.count;
-    const idx = g.index;
-    const f = idx ? idx.count / 3 : pos / 3;
-    const v = pos;
-    const e = Math.round((3 * f) / 2);
-    return { v, f: Math.round(f), e, euler: v - e + Math.round(f) };
+    return surfaceTopology(this.mesh.geometry);
   }
 
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.resizeObs?.disconnect();
+    this.resizeObs = null;
+    window.removeEventListener("resize", this.onResize);
+    this.clearOverlays();
+    if (this.floor) {
+      this.scene.remove(this.floor);
+      this.floor.geometry.dispose();
+      (this.floor.material as THREE.Material).dispose();
+      this.floor = null;
+    }
+    this.scene.remove(this.grid);
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
     this.controls.dispose();
     this.mesh?.geometry.dispose();
     (this.mesh?.material as THREE.Material | undefined)?.dispose?.();
+    this.mesh = null;
     this.renderer.dispose();
   }
+
+  /** Window resize handler (stored reference so dispose can remove it). */
+  private onResize = (): void => {
+    const parent = this.canvas.parentElement;
+    const w = parent?.clientWidth || window.innerWidth;
+    const h = parent?.clientHeight || window.innerHeight;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h, false);
+  };
 
   // ---------- internals ----------
 
@@ -341,14 +355,21 @@ export class ShowcaseEngine {
   private clearOverlays(): void {
     if (this.edgeLines) { this.scene.remove(this.edgeLines); this.edgeLines.geometry.dispose(); (this.edgeLines.material as THREE.Material).dispose(); this.edgeLines = null; }
     if (this.normalLines) { this.scene.remove(this.normalLines); this.normalLines.geometry.dispose(); (this.normalLines.material as THREE.Material).dispose(); this.normalLines = null; }
-    if (this.vertexPts) { this.scene.remove(this.vertexPts); this.vertexPts.geometry.dispose(); (this.vertexPts.material as THREE.Material).dispose(); this.vertexPts = null; }
+    if (this.vertexPts) {
+      this.scene.remove(this.vertexPts);
+      // geometry is shared with the mesh — dispose the material only.
+      (this.vertexPts.material as THREE.Material).dispose();
+      this.vertexPts = null;
+    }
     if (this.sliceHelper) { this.scene.remove(this.sliceHelper); this.sliceHelper.geometry.dispose(); (this.sliceHelper.material as THREE.Material).dispose(); this.sliceHelper = null; }
     while (this.dimGroup.children.length) {
       const o = this.dimGroup.children.pop()!;
       this.dimGroup.remove(o);
       const m = o as THREE.Mesh;
       (m.geometry as THREE.BufferGeometry | undefined)?.dispose?.();
-      ((m.material as THREE.Material | undefined))?.dispose?.();
+      const mat = m.material as THREE.Material & { map?: THREE.Texture | null };
+      mat?.map?.dispose?.();
+      mat?.dispose?.();
     }
     this.dimSprites = [];
   }
@@ -374,6 +395,8 @@ export class ShowcaseEngine {
     }
     if (s.wireframe) {
       (this.mesh.material as THREE.MeshStandardMaterial).wireframe = true;
+    } else {
+      (this.mesh.material as THREE.MeshStandardMaterial).wireframe = false;
     }
 
     // vertex dots
