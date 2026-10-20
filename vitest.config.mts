@@ -9,4 +9,10 @@ export default defineConfig({
   oxc: {
     jsx: { runtime: "automatic" },
   },
+  test: {
+    // All 33 test files are pure CPU tests with no cross-file global state
+    // (dom test environments are created per file); reusing workers instead
+    // of one-per-file saves several seconds of worker startup every run.
+    isolate: false,
+  },
 });
