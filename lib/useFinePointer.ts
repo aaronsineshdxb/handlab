@@ -9,13 +9,11 @@ import { useEffect, useState } from "react";
  * then swapped the DOM branch). Subscriptions are still per-instance so a
  * hybrid laptop switching to touch updates live.
  */
-let cached: boolean | null = null;
 let mql: MediaQueryList | null = null;
 
 function probe(): MediaQueryList {
   if (!mql && typeof window !== "undefined") {
     mql = window.matchMedia("(pointer: fine)");
-    cached = mql.matches;
   }
   return mql as MediaQueryList;
 }
@@ -32,7 +30,6 @@ export function useFinePointer(): boolean {
     if (!query) return;
     setFine(query.matches);
     const onChange = (e: MediaQueryListEvent) => {
-      cached = e.matches;
       setFine(e.matches);
     };
     query.addEventListener("change", onChange);

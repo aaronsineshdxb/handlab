@@ -187,7 +187,6 @@ function UnifiedLab() {
     }
     const [x, y, z] = spawnScaleFor(mid, dims);
     eng.setSpawnScale(x, y, z);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.shape, dims, engineRev]);
 
   // Switching solids resets the math panel to that solid's reference dims.

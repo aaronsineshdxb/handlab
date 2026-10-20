@@ -1,9 +1,5 @@
-import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { PALM_GAIN, clampDepth } from "./fusion";
 import type { DepthProvider, DepthSample } from "./types";
-
-const dist2d = (a: NormalizedLandmark, b: NormalizedLandmark): number =>
-  Math.hypot(a.x - b.x, a.y - b.y);
 
 /**
  * Baseline depth provider: palm size grows as the hand nears the camera.

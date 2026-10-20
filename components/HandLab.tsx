@@ -428,7 +428,7 @@ export default function HandLab() {
       </header>
 
       <nav className="toolbar" aria-label="Shape palette">
-        <h2>SPAWN SHAPE [1–0]</h2>
+        <h2>SPAWN SHAPE [1–0 / ⇧1–5]</h2>
         <div className="shape-grid">
           {SHAPES.map((s) => (
             <Magnet key={s} strength={0.25}>

@@ -62,7 +62,6 @@ export function isWebGLAvailable(): boolean {
   }
 }
 
-const TASKS_VISION_VERSION = "1.0.1";
 // Supply-chain hardening (audit §2.1): same vendored assets as lib/engine.ts.
 // See the comment there for re-vendoring + checksum verification steps.
 const WASM_URL = "/wasm";

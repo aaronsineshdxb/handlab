@@ -70,7 +70,8 @@ the preview opens automatically after webcam permission succeeds.
 | Fist (hold 0.6s) | Delete hovered object |
 | Two-hand pinch + spread/close | Pinch both hands, spread to enlarge / close to shrink shape |
 | Mouse move / wheel | Move on view plane (wheel zoom disabled) |
-| `1–0` | Select shape (10 shapes) |
+| `1–0` | Select shape (first 10 shapes) |
+| `⇧Shift`+`1–5` | Select shapes 11–15 (prism, pyramid, dome, hexPrism, triPrism) |
 | `L` | Line mode |
 | `P` | Place current shape (works in line mode) |
 | `Shift+click` | Place current shape (works in line mode, mouse) |

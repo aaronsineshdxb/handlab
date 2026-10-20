@@ -10,6 +10,7 @@ import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
+import { prefersReducedMotion } from "./motion";
 import {
   SCALE_MAX,
   SCALE_MIN,
@@ -311,7 +312,6 @@ interface Anchor {
   base: THREE.Vector3;
 }
 
-const TASKS_VISION_VERSION = "1.0.1";
 // Supply-chain hardening (audit §2.1): WASM runtime + hand-landmarker model
 // are vendored under /public so no third-party CDN executes WASM at runtime.
 //   public/wasm/  <- copy of node_modules/@mediapipe/tasks-vision@1.0.1/wasm/
@@ -535,6 +535,8 @@ export class HandLabEngine {
   private landmarkerUsedCpu = false;
   private onVisibility: (() => void) | null = null;
   private wasHidden = false;
+  /** OS reduced-motion: skip decorative loop motion, snap the cursor. */
+  private reducedMotion = prefersReducedMotion();
   private pinchState = false;
   private smoothZ = 0;
   private fistSince = 0;
@@ -792,14 +794,17 @@ export class HandLabEngine {
 
     /* ---------- start with an empty scene — user places shapes ---------- */
 
-    const self = this;
-    (window as unknown as Record<string, unknown>).__lab = {
-      get polylines() {
-        return self.getMeasurements();
-      },
-      target: this.target,
-      cursor: this.cursor,
-    };
+    // Debug handle (console: __lab.polylines / __lab.target / __lab.cursor).
+    // Object-literal getters can't capture lexical `this`, so the getter is
+    // defined with an arrow closure instead of a `const self = this` alias.
+    const lab = {} as Record<string, unknown>;
+    Object.defineProperty(lab, "polylines", {
+      get: () => this.getMeasurements(),
+      enumerable: true,
+    });
+    lab.target = this.target;
+    lab.cursor = this.cursor;
+    (window as unknown as Record<string, unknown>).__lab = lab;
 
     this.fT = performance.now();
     this.tick();
@@ -923,7 +928,7 @@ export class HandLabEngine {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     if (this.opts.video.srcObject) this.opts.video.srcObject = null;
-    delete (window as any).__lab;
+    delete (window as unknown as Record<string, unknown>).__lab;
     // Lines / junctions own label sprites + CanvasTextures — dispose those,
     // but shared SEG/HANDLE meshes are flagged userData.shared and skipped.
     for (const L of this.polylines) {
@@ -2335,6 +2340,13 @@ export class HandLabEngine {
     ) {
       return;
     }
+    if (e.shiftKey && e.code.startsWith("Digit")) {
+      // Shift+1..5 reach the 11th..15th palette shapes, which `1–0` cannot
+      // select. Shift+6..9 fall through the SHAPES.length guard.
+      const i = 9 + +e.code.slice(5);
+      if (i > 9 && i < SHAPES.length) this.setShape(SHAPES[i]);
+      return;
+    }
     if (
       (e.key >= "1" && e.key <= "9") ||
       e.key === "0"
@@ -2740,13 +2752,23 @@ export class HandLabEngine {
     }
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
-    this.cursor.position.lerp(
-      this.target,
-      1 - Math.pow(0.0015, dt),
-    ); // smooth follow
+    if (this.reducedMotion) {
+      // Follow input exactly (no trailing lerp); the decorative ring spin and
+      // z-axis pulse below are skipped instead.
+      this.cursor.position.copy(this.target);
+    } else {
+      this.cursor.position.lerp(
+        this.target,
+        1 - Math.pow(0.0015, dt),
+      ); // smooth follow
+    }
+    // lookAt() rebuilds the quaternion, so the decorative spin must come
+    // after it — otherwise lookAt overwrites the rotation every frame.
     this.ring.lookAt(this.camera.position);
-    this.ring.rotation.z += dt * 1.2;
-    this.zAxis.scale.y = 1 + Math.sin(t * 3) * 0.15;
+    if (!this.reducedMotion) {
+      this.ring.rotation.z += dt * 1.2;
+      this.zAxis.scale.y = 1 + Math.sin(t * 3) * 0.15;
+    }
     const p = this.dropLine.geometry.attributes.position as THREE.BufferAttribute;
     p.setXYZ(0, this.cursor.position.x, this.cursor.position.y, this.cursor.position.z);
     p.setXYZ(1, this.cursor.position.x, -2.6, this.cursor.position.z);
@@ -2822,7 +2844,10 @@ export class HandLabEngine {
       c2d.style.display = s.behind ? "none" : "block";
       c2d.style.left = s.x + "px";
       c2d.style.top = s.y + "px";
-      const cb = this.pinchState ? "#3ddc84" : "#016A71";
+      // Follow the active theme + colour scheme like the 3D ring: themed
+      // rest colour, theme-aware pinch green. No hardcoded hex.
+      const cc2d = this.pinchState ? this.cursorPinch : this.cursorRest;
+      const cb = "#" + cc2d.toString(16).padStart(6, "0");
       if (cb !== this.lastCur2dBorder) {
         this.lastCur2dBorder = cb;
         c2d.style.borderColor = cb;

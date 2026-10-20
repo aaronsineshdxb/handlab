@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref so a force-push doesn't queue
+# several full builds behind each other.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      # Build before tests: lib/perf-budget.test.ts only asserts when a
+      # .next/app-build-manifest.json exists, so building first makes the
+      # bundle-budget checks run for real instead of silently skipping.
+      - run: npm run build
+        env:
+          NODE_ENV: production
+
+      - run: npm test
