@@ -1,6 +1,6 @@
 {
   "name": "handlab",
-  "version": "2.0.0",
+  "version": "0.6.0",
   "private": true,
   "description": "HANDLAB — 3D hand-tracked cursor (Next.js + React + TypeScript + Three.js)",
   "scripts": {
