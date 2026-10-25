@@ -1,9 +1,8 @@
 # HANDLAB — 3D Hand Cursor
 
-A Next.js + React + TypeScript + Three.js site that turns your webcam into a
-floating 3D pointer. Move your index finger to fly a cursor through 3D space,
-pinch to click, grab, and place objects — all relative to your camera, so
-gestures always match the screen.
+site that turns your webcam into a floating 3D pointer. Move your index finger to 
+fly a cursor through 3D space,
+pinch to click, grab, and place objects 
 
 ```Demo online
 https://handlab.runs-on.dev/
@@ -161,7 +160,6 @@ The toolbar's SCENE section:
 
 ## VR (`/vr` route)
 
-Isolated WebXR page — the desktop `/` lab is untouched. Open `/vr`:
 
 - `Enter VR` requests an `immersive-vr` session (`local-floor` + `hand-tracking`
   optional features) via `lib/xr/session.ts`. Requires HTTPS (Vercel OK) and a
