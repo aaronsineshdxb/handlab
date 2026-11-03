@@ -10,6 +10,7 @@ import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
+import { pythagorasOf } from "./geometry/chainMath";
 import { prefersReducedMotion } from "./motion";
 import {
   SCALE_MAX,
@@ -122,6 +123,16 @@ export interface Measurement {
   angles: number[];
   minAngle: number | null;
   maxAngle: number | null;
+  /** Sum of interior angles in degrees — closed loops only, else null. */
+  angleSum: number | null;
+  /** Pythagoras triple for open 3-point chains, else null. */
+  pythag: {
+    a: number;
+    b: number;
+    c: number;
+    residual: number;
+    right: boolean;
+  } | null;
 }
 
 export interface SceneObjectData {
@@ -2139,11 +2150,17 @@ export class HandLabEngine {
             ),
           );
       }
+      const pts: [number, number, number][] = L.pts.map(
+        (p) => [p.x, p.y, p.z] as [number, number, number],
+      );
+      // (n−2)·180° comparison basis for closed loops; pure triple data for
+      // open 3-point chains. Both feed the React measure panel via onMath.
+      const angleSum =
+        closed && angles.length > 0 ? angles.reduce((s, a) => s + a, 0) : null;
+      const pythag = !closed ? pythagorasOf(pts) : null;
       return {
         id,
-        pts: L.pts.map(
-          (p) => [p.x, p.y, p.z] as [number, number, number],
-        ),
+        pts,
         segs: Math.max(L.pts.length - 1, 0),
         total,
         closed,
@@ -2154,6 +2171,8 @@ export class HandLabEngine {
         angles,
         minAngle: angles.length ? Math.min(...angles) : null,
         maxAngle: angles.length ? Math.max(...angles) : null,
+        angleSum,
+        pythag,
       };
     });
   }

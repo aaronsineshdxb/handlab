@@ -21,6 +21,7 @@ import {
   type UiState,
 } from "./engine";
 import type { SceneSnap } from "./lessons/checks";
+import { pythagorasOf } from "./geometry/chainMath";
 import { shouldDetect } from "./handRate";
 import {
   SCALE_MAX,
@@ -695,6 +696,11 @@ export class HandLabFallbackEngine {
         angles.push((Math.acos(cos) * 180) / Math.PI);
       }
     }
+    // Mirrors lib/engine.ts getMeasurements: sum of interior angles for
+    // closed loops, Pythagoras triple data for open 3-point chains.
+    const angleSum =
+      L.closed && angles.length > 0 ? angles.reduce((s, a) => s + a, 0) : null;
+    const pythag = !L.closed ? pythagorasOf(pts) : null;
     return {
       id: L.id || i,
       pts,
@@ -708,6 +714,8 @@ export class HandLabFallbackEngine {
       angles,
       minAngle: angles.length ? Math.min(...angles) : null,
       maxAngle: angles.length ? Math.max(...angles) : null,
+      angleSum,
+      pythag,
     };
   }
 
