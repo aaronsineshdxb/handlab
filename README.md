@@ -27,16 +27,16 @@ the preview opens automatically after webcam permission succeeds.
 
 ## Teaching mode
 
-Use the `Lessons` panel, choose a difficulty, and select a lesson to work
-through its objectives and steps. Checks are modeled for place-count, closed
-chains, area thresholds, and quizzes. The current MVP UI provides quiz
-feedback; scene-check evaluation is not yet wired into lesson progression.
-Progress is stored locally in this browser under the `handlab.progress.v1`
-key.
+Use the `Lessons` drawer (rail button `≡`), choose Easy/Advanced/Both, and
+select a lesson to work through its objectives and steps. Scene checks
+(place-count, chain-closed, area-gt, angle-at, length-range) evaluate against
+the live scene and gate `Next`; quizzes and numeric checks confirm before
+advancing. Progress is stored locally in this browser under the
+`handlab.progress.v1` key.
 
-Teachers can author lesson JSON matching `lib/lessons/types.ts`, export an
-active lesson with `lesson ↓` as a starting point, then import validated custom
-lessons with `lesson ↑`; lesson IDs must be unique.
+Teachers can author lesson JSON matching `lib/lessons/types.ts`, export the
+active lesson with `lesson ↓`, then import validated custom lessons with
+`lesson ↑`; lesson IDs must be unique.
 
 ## Structure
 
