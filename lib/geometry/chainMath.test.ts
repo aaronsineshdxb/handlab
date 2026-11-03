@@ -1,10 +1,12 @@
 // lib/geometry/chainMath.test.ts
 import { describe, expect, it } from "vitest";
 import {
+  angleSumText,
   chainLength,
   dist3,
   interiorAnglesDeg,
   pythagorasOf,
+  pythagText,
   sumDegrees,
 } from "./chainMath";
 
@@ -132,5 +134,56 @@ describe("chainMath.pythagorasOf", () => {
     const angle = interiorAnglesDeg(pts, false)[0];
     const p = pythagorasOf(pts);
     expect(p!.right).toBe(Math.abs(angle - 90) <= pythagorasOf.MATCH_TOL_DEG);
+  });
+});
+
+describe("chainMath.angleSumText", () => {
+  it("shows measured sum vs the (n−2)·180° target, rule spelled out", () => {
+    expect(angleSumText(359.98, 4)).toBe("Σ 359.98° · target 360° (4×180−360)");
+  });
+
+  it("closed triangle built from real angles: target (3−2)·180 = 180", () => {
+    const loop: P[] = [
+      [0, 0, 0],
+      [3, 0, 0],
+      [3, 4, 0],
+    ];
+    const sum = sumDegrees(interiorAnglesDeg(loop, true));
+    expect(angleSumText(sum, loop.length)).toBe(
+      "Σ 180.00° · target 180° (3×180−360)",
+    );
+  });
+});
+
+describe("chainMath.pythagText", () => {
+  it("formats the right-triangle residual with an explicit + sign", () => {
+    const p = pythagorasOf([
+      [0, 0, 0],
+      [3, 0, 0],
+      [3, 4, 0],
+    ] as P[]);
+    expect(pythagText(p!)).toBe("a²+b²−c² = +0.00");
+  });
+
+  it("sign + 2-decimal abs value follow the computed residual direction", () => {
+    // obtuse at the middle vertex → a²+b² > c² (positive residual)
+    const pOver = pythagorasOf([
+      [0, 0, 0],
+      [3, 0, 0],
+      [0, 1, 0],
+    ] as P[]);
+    expect(pOver!.residual).toBeGreaterThan(0);
+    expect(pythagText(pOver!)).toBe(`a²+b²−c² = +${pOver!.residual.toFixed(2)}`);
+
+    // [0,0,0],[3,0,0],[6,2,0]: stretched past right → a²+b² < c² (negative)
+    const pLong = pythagorasOf([
+      [0, 0, 0],
+      [3, 0, 0],
+      [6, 2, 0],
+    ] as P[]);
+    expect(pLong!.residual).toBeLessThan(0);
+    expect(pythagText(pLong!)).toBe(
+      `a²+b²−c² = -${Math.abs(pLong!.residual).toFixed(2)}`,
+    );
   });
 });

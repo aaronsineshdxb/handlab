@@ -10,7 +10,14 @@ import { PalmDepthProvider } from "./depth/palm";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
-import { pythagorasOf } from "./geometry/chainMath";
+import {
+  angleSumText,
+  interiorAnglesDeg,
+  pythagorasOf,
+  pythagText,
+  sumDegrees,
+  type Pt,
+} from "./geometry/chainMath";
 import { prefersReducedMotion } from "./motion";
 import {
   SCALE_MAX,
@@ -495,6 +502,11 @@ export class HandLabEngine {
   private pinchDist0 = 0;
   private pinchDistSmooth = 0;
   private scaleFactor = 1;
+
+  // chain label variants (line-drawer chips): Σ-angle-sum on closed loops /
+  // a²+b²−c² residual on open 3-point chains. OFF = existing text unchanged.
+  private angleSumLabels = false;
+  private pythagLabels = false;
 
   // lines + measurement
   private lineMode = false;
@@ -1068,6 +1080,17 @@ export class HandLabEngine {
   toggleSnap(): void {
     this.snapOn = !this.snapOn;
     this.emit();
+  }
+
+  /** Line-drawer chip toggles for the Σ-angle-sum / Pythagoras label variants. */
+  setChainMathMode(kind: "angleSum" | "pythag", on: boolean): void {
+    if (kind === "angleSum") this.angleSumLabels = on;
+    else this.pythagLabels = on;
+    this.updateLineLabelsAll();
+  }
+
+  private updateLineLabelsAll(): void {
+    this.polylines.forEach((L) => this.updateLine(L));
   }
 
   clearLines(): void {
@@ -2102,13 +2125,25 @@ export class HandLabEngine {
           ? L.pts.slice(0, -1)
           : L.pts;
       const { area } = newellArea(loop);
-      L.sumLabel.userData.set(
-        `L ${total.toFixed(2)}m · A ${area.toFixed(2)}m²`,
-      );
+      let text = `L ${total.toFixed(2)}m · A ${area.toFixed(2)}m²`;
+      // chip-toggled teaching extension: (n−2)·180° comparison on the
+      // collapsed loop — interiorAnglesDeg covers the wrap-around vertices
+      // that angLabels can't. Allocates only while the chip is ON.
+      if (this.angleSumLabels && loop.length >= 3) {
+        const angles = interiorAnglesDeg(
+          loop.map((p) => [p.x, p.y, p.z] as Pt),
+          true,
+        );
+        text += ` · ${angleSumText(sumDegrees(angles), loop.length)}`;
+      }
+      L.sumLabel.userData.set(text);
     } else {
-      L.sumLabel.userData.set(
-        `L ${total.toFixed(2)}m · ${L.pts.length - 1} seg`,
-      );
+      let text = `L ${total.toFixed(2)}m · ${L.pts.length - 1} seg`;
+      if (this.pythagLabels && L.pts.length === 3) {
+        const triple = pythagorasOf(L.pts.map((p) => [p.x, p.y, p.z] as Pt));
+        if (triple) text += ` · ${pythagText(triple)}`;
+      }
+      L.sumLabel.userData.set(text);
     }
   }
 

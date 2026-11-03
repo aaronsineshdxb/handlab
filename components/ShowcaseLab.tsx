@@ -64,6 +64,7 @@ type FullEngine = StudioEngine & {
   setColor?: (c: string) => void;
   setLineMode?: (on: boolean) => void;
   toggleSnap?: () => void;
+  setChainMathMode?: (kind: "angleSum" | "pythag", on: boolean) => void;
   clearLines?: () => void;
   undo?: () => void;
   clearAll?: () => void;
@@ -89,6 +90,9 @@ function UnifiedLab() {
   const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cylinder.defaults });
   const [studio, setStudio] = useState(false);
   const [drawer, setDrawer] = useState<"shapes" | "line" | "help" | "lessons" | null>(null);
+  // line-drawer chip states for the chain math label variants
+  const [angleSumChip, setAngleSumChip] = useState(false);
+  const [pythagChip, setPythagChip] = useState(false);
   const [mathOpen, setMathOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
@@ -481,6 +485,18 @@ function UnifiedLab() {
             <button className="sc-chip" onClick={() => engineRef.current?.undo?.()}>undo</button>
             <button className="sc-chip" onClick={() => engineRef.current?.clearLines?.()}>clear lines</button>
             <button className="sc-chip" onClick={() => engineRef.current?.clearAll?.()}>clear solids</button>
+          </div>
+          <div className="sc-chips">
+            <button
+              className={"sc-chip" + (angleSumChip ? " on" : "")}
+              aria-pressed={angleSumChip}
+              onClick={() => { const on = !angleSumChip; setAngleSumChip(on); engineRef.current?.setChainMathMode?.("angleSum", on); }}
+            >Σ angles</button>
+            <button
+              className={"sc-chip" + (pythagChip ? " on" : "")}
+              aria-pressed={pythagChip}
+              onClick={() => { const on = !pythagChip; setPythagChip(on); engineRef.current?.setChainMathMode?.("pythag", on); }}
+            >a²+b²=c²</button>
           </div>
           <div className="sc-chips">
             <button

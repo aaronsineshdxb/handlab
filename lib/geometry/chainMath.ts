@@ -104,3 +104,16 @@ export function pythagorasOf(points: readonly Pt[]): Pythagoras | null {
     right: Math.abs(interiorAngleDegAt(p0!, p1!, p2!) - 90) <= PYTHAG_RIGHT_TOL_DEG,
   };
 }
+
+/** e.g. "Σ 359.52° · target 360° (4×180−360)" — the rule, spelled out. */
+export function angleSumText(sumDeg: number, vertexCount: number): string {
+  const target = (vertexCount - 2) * 180;
+  return `Σ ${sumDeg.toFixed(2)}° · target ${target}° (${vertexCount}×180−360)`;
+}
+
+/** "a²+b²−c² = +0.00" — sign visible so corrections read as direction:
+ *  a negative residual means the chain was stretched past right (c² too big). */
+export function pythagText(p: Pythagoras): string {
+  const sign = p.residual < 0 ? "-" : "+";
+  return `a²+b²−c² = ${sign}${Math.abs(p.residual).toFixed(2)}`;
+}
