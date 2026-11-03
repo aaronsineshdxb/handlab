@@ -3,6 +3,7 @@ import type { Lesson } from "./types";
 import {
   addImportedLesson,
   isLesson,
+  isLessonCheck,
   MAX_CHECKS,
   MAX_OBJECTIVES,
   MAX_QUIZ_OPTIONS,
@@ -149,5 +150,21 @@ describe("lesson import validation", () => {
     const current = [lesson];
 
     expect(addImportedLesson(current, imported)).toEqual([lesson, imported]);
+  });
+});
+
+describe("angle-at + length-range checks", () => {
+  it("accepts valid angle-at", () => {
+    expect(isLessonCheck({ kind: "angle-at", min: 30, max: 90 })).toBe(true);
+  });
+  it("rejects angle-at with min > max or out-of-range degrees", () => {
+    expect(isLessonCheck({ kind: "angle-at", min: 90, max: 30 })).toBe(false);
+    expect(isLessonCheck({ kind: "angle-at", min: -10, max: 30 })).toBe(false);
+    expect(isLessonCheck({ kind: "angle-at", min: 30, max: 190 })).toBe(false);
+  });
+  it("accepts valid length-range and rejects min > max / negative", () => {
+    expect(isLessonCheck({ kind: "length-range", min: 1, max: 2 })).toBe(true);
+    expect(isLessonCheck({ kind: "length-range", min: 2, max: 1 })).toBe(false);
+    expect(isLessonCheck({ kind: "length-range", min: -1, max: 2 })).toBe(false);
   });
 });

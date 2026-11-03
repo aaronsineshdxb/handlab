@@ -23,7 +23,7 @@ const isFiniteNumber = (value: unknown): value is number =>
 const isNonNegativeInteger = (value: unknown): value is number =>
   isFiniteNumber(value) && Number.isInteger(value) && value >= 0;
 
-const isLessonCheck = (value: unknown): value is CheckKind => {
+export const isLessonCheck = (value: unknown): value is CheckKind => {
   if (!isRecord(value)) return false;
   switch (value.kind) {
     case "place-count":
@@ -32,6 +32,23 @@ const isLessonCheck = (value: unknown): value is CheckKind => {
       return isNonNegativeInteger(value.minPoints);
     case "area-gt":
       return isFiniteNumber(value.min);
+    case "angle-at":
+      return (
+        isFiniteNumber(value.min) &&
+        isFiniteNumber(value.max) &&
+        value.min >= 0 &&
+        value.min <= 180 &&
+        value.max >= 0 &&
+        value.max <= 180 &&
+        value.min <= value.max
+      );
+    case "length-range":
+      return (
+        isFiniteNumber(value.min) &&
+        isFiniteNumber(value.max) &&
+        value.min >= 0 &&
+        value.min <= value.max
+      );
     case "quiz":
       return (
         isText(value.question, MAX_TEXT_LENGTH) &&

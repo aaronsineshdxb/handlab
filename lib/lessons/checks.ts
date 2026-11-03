@@ -1,4 +1,9 @@
 import type { CheckKind } from "./types";
+import {
+  chainLength,
+  interiorAnglesDeg,
+  type Pt,
+} from "../geometry/chainMath";
 
 export interface SceneSnap {
   objects: { s: string }[];
@@ -28,16 +33,21 @@ export function polygonArea(pts: number[][]): number {
   return Math.hypot(nx, ny, nz) / 2;
 }
 
-/** True when the chain's last vertex is within CLOSE_EPS of its first. */
-function isClosedLoop(pts: number[][]): boolean {
+/** True when the chain's first/last vertices coincide (chain closes by
+ *  repeating its start point). */
+function sameEnds(pts: readonly number[][]): boolean {
   const first = pts[0];
   const last = pts[pts.length - 1];
-  if (!first || !last || pts.length < 3) return false;
+  if (!first || !last) return false;
   return (
-    Math.hypot(
-      ...first.map((value, index) => value - (last[index] ?? 0)),
-    ) < CLOSE_EPS
+    Math.hypot(...first.map((value, index) => value - (last[index] ?? 0))) < CLOSE_EPS
   );
+}
+
+/** True when the chain's last vertex is within CLOSE_EPS of its first. */
+function isClosedLoop(pts: number[][]): boolean {
+  if (pts.length < 3) return false;
+  return sameEnds(pts);
 }
 
 /** A check passes when *any* chain in the scene satisfies it — a student who
@@ -61,6 +71,25 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
       return snap.chains.some(
         (chain) => isClosedLoop(chain) && polygonArea(chain) > c.min,
       );
+    case "angle-at": {
+      // Any interior angle in any chain (open joints + closed wrap-around)
+      // inside [min,max] passes. Degrees in lesson JSON, matching the HUD.
+      for (const chain of snap.chains) {
+        const closed = chain.length >= 3 && sameEnds(chain);
+        for (const angle of interiorAnglesDeg(chain as unknown as readonly Pt[], closed)) {
+          if (angle >= c.min && angle <= c.max) return true;
+        }
+      }
+      return false;
+    }
+    case "length-range": {
+      for (const chain of snap.chains) {
+        const closed = chain.length >= 3 && sameEnds(chain);
+        const length = chainLength(chain as unknown as readonly Pt[], closed);
+        if (length >= c.min && length <= c.max) return true;
+      }
+      return false;
+    }
     case "quiz":
       return snap.quizAnswers[c.question] === c.answer;
     default:

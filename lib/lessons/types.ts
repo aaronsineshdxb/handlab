@@ -6,6 +6,9 @@ export type CheckKind =
   | { kind: "place-count"; shape: string; count: number }
   | { kind: "chain-closed"; minPoints: number }
   | { kind: "area-gt"; min: number }
+  | { kind: "angle-at"; min: number; max: number }
+  | { kind: "length-range"; min: number; max: number }
+  | { kind: "numeric"; question: string; answer: number; tolerance: number }
   | { kind: "quiz"; question: string; options: string[]; answer: number };
 
 export type QuizCheck = Extract<CheckKind, { kind: "quiz" }>;

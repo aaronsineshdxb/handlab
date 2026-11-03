@@ -108,3 +108,74 @@ describe("evalCheck", () => {
     expect(evalCheck(check, snap({ quizAnswers: { "Volume scale?": 1 } }))).toBe(false);
   });
 });
+
+describe("angle-at", () => {
+  it("passes when any chain has an interior angle within [min,max] (degrees)", () => {
+    const check = { kind: "angle-at", min: 89, max: 91 } as const;
+    const rightTriangle: number[][][] = [
+      [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+      ],
+    ];
+    expect(evalCheck(check, snap({ chains: rightTriangle }))).toBe(true);
+  });
+
+  it("fails outside the range", () => {
+    const check = { kind: "angle-at", min: 120, max: 130 } as const;
+    const chain: number[][][] = [
+      [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+      ],
+    ];
+    expect(evalCheck(check, snap({ chains: chain }))).toBe(false);
+  });
+
+  it("also looks at closed-loop wrap-around vertices", () => {
+    const check = { kind: "angle-at", min: 89, max: 91 } as const;
+    const square: number[][][] = [
+      [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+      ],
+    ];
+    expect(evalCheck(check, snap({ chains: square }))).toBe(true);
+  });
+});
+
+describe("length-range", () => {
+  it("passes when an open chain's total length is within [min,max] inclusive", () => {
+    const check = { kind: "length-range", min: 7, max: 9 } as const; // 3+5=8
+    const chain: number[][][] = [
+      [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+      ],
+    ];
+    expect(evalCheck(check, snap({ chains: chain }))).toBe(true);
+  });
+
+  it("closed chains use the perimeter (incl. wrap-around)", () => {
+    const check = { kind: "length-range", min: 11.9, max: 12.1 } as const; // 3+5+4=12
+    const closed: number[][][] = [
+      [
+        [0, 0, 0],
+        [3, 0, 0],
+        [3, 4, 0],
+        [0, 0, 0],
+      ],
+    ];
+    expect(evalCheck(check, snap({ chains: closed }))).toBe(true);
+  });
+
+  it("fails when no chain fits", () => {
+    const check = { kind: "length-range", min: 50, max: 60 } as const;
+    expect(evalCheck(check, snap({ chains: [] }))).toBe(false);
+  });
+});

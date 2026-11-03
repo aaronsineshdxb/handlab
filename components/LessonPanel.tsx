@@ -24,6 +24,14 @@ export function describeCheck(check: CheckKind): string {
       return `Close a loop of ${check.minPoints}+ points`;
     case "area-gt":
       return `Enclose an area greater than ${check.min} m²`;
+    case "angle-at":
+      return `Turn an angle between ${check.min}° and ${check.max}°`;
+    case "length-range":
+      return `Draw a chain between ${check.min} m and ${check.max} m long`;
+    case "numeric":
+      return check.tolerance > 0
+        ? `Type the value of ${check.question} (± ${check.tolerance})`
+        : `Type the value of ${check.question}`;
     default:
       return "Answer the question";
   }
