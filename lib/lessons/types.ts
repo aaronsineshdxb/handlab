@@ -12,6 +12,9 @@ export type CheckKind =
   | { kind: "quiz"; question: string; options: string[]; answer: number };
 
 export type QuizCheck = Extract<CheckKind, { kind: "quiz" }>;
+/** Free numeric answer check. Stored by the question text in the same
+ *  quizAnswers record the engine snapshot carries. */
+export type NumericCheck = Extract<CheckKind, { kind: "numeric" }>;
 
 export interface LessonStep {
   id: string;

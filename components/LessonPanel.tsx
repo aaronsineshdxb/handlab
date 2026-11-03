@@ -1,12 +1,14 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
+import NumericCard from "./NumericCard";
 import QuizCard from "./QuizCard";
 import SegmentedControl from "./bits/SegmentedControl";
 import AnimatedList from "./bits/AnimatedList";
 import type {
   CheckKind,
   Lesson,
+  NumericCheck,
   Progress,
   QuizCheck,
 } from "../lib/lessons/types";
@@ -53,6 +55,8 @@ export interface LessonPanelProps {
   onBack: (previousStepIdx: number) => void;
   progress?: Progress;
   onQuizAnswer?: (check: QuizCheck, answerIndex: number) => void;
+  /** Fires when the student submits a numeric answer (NaN-guarded upstream). */
+  onNumericAnswer?: (check: NumericCheck, value: number) => void;
   /** Live scene snapshot. When provided, scene-based checks (place-count,
    *  chain-closed, area-gt) gate progression instead of being ignored. */
   snap?: SceneSnap;
@@ -67,11 +71,13 @@ function LessonPanel({
   onBack,
   progress,
   onQuizAnswer,
+  onNumericAnswer,
   snap,
 }: LessonPanelProps) {
   const lesson = lessons.find(({ id }) => id === active);
   const [levelMode, setLevelMode] = useState<LessonLevelMode>("both");
   const [completedQuizKey, setCompletedQuizKey] = useState<string | null>(null);
+  const [completedNumericKey, setCompletedNumericKey] = useState<string | null>(null);
   const [quizIncorrect, setQuizIncorrect] = useState(false);
   const [quizRun, setQuizRun] = useState(0);
   const visibleStepIndexes = lesson ? getVisibleStepIndexes(lesson, levelMode) : [];
@@ -82,6 +88,9 @@ function LessonPanel({
   const previousStepIdx =
     activeStepPosition >= 0 ? visibleStepIndexes[activeStepPosition - 1] : undefined;
   const quizCheck = step?.checks.find((check) => check.kind === "quiz");
+  const numericCheck = step?.checks.find(
+    (check): check is NumericCheck => check.kind === "numeric",
+  );
   const maxResumeStepIdx = Math.max((lesson?.steps.length ?? 1) - 1, 0);
   const resumeStepIdx = Math.min(
     Math.max(Math.floor(progress?.stepIdx ?? 0), 0),
@@ -91,6 +100,10 @@ function LessonPanel({
   const quizKey =
     quizCheck?.kind === "quiz"
       ? `${active ?? ""}:${step?.id ?? ""}:${quizCheck.question}`
+      : null;
+  const numericKey =
+    numericCheck?.kind === "numeric"
+      ? `${active ?? ""}:${step?.id ?? ""}:${numericCheck.question}`
       : null;
   const firstVisibleStepIdx = visibleStepIndexes[0];
 
@@ -108,6 +121,7 @@ function LessonPanel({
 
   useEffect(() => {
     setCompletedQuizKey(null);
+    setCompletedNumericKey(null);
     setQuizIncorrect(false);
   }, [active, stepIdx, step?.id, quizCheck?.question, quizRun]);
 
@@ -119,6 +133,15 @@ function LessonPanel({
     onQuizAnswer?.(quizCheck, answerIndex);
   };
 
+  const handleNumericAnswer = (value: number) => {
+    if (numericCheck?.kind !== "numeric" || !Number.isFinite(value)) return;
+    const correct = Math.abs(value - numericCheck.answer) <= numericCheck.tolerance;
+    setCompletedNumericKey(correct ? numericKey : null);
+    if (!correct) setQuizIncorrect(true);
+    if (correct) setQuizIncorrect(false);
+    onNumericAnswer?.(numericCheck, value);
+  };
+
   const isPreviouslyCompleted =
     !!progress &&
     (progress.stepIdx > stepIdx ||
@@ -127,21 +150,30 @@ function LessonPanel({
     (quizCheck?.kind === "quiz" && completedQuizKey === quizKey) ||
     isPreviouslyCompleted;
   const quizIncomplete = quizCheck?.kind === "quiz" && !quizComplete;
+  const numericComplete =
+    (numericCheck?.kind === "numeric" && completedNumericKey === numericKey) ||
+    isPreviouslyCompleted;
+  const numericIncomplete = numericCheck?.kind === "numeric" && !numericComplete;
 
   // Scene checks are evaluated against the live scene. Without a snapshot
   // (e.g. the standalone physics/chemistry labs) they can't be verified, so
   // they're treated as satisfied rather than silently blocking the student.
-  const sceneChecks = (step?.checks ?? []).filter((c) => c.kind !== "quiz");
+  // quiz/numeric are excluded: they're answered in their own cards, not by
+  // placing objects.
+  const sceneChecks = (step?.checks ?? []).filter(
+    (c) => c.kind !== "quiz" && c.kind !== "numeric",
+  );
   const checkStatus = sceneChecks.map((check) => ({
     check,
     label: describeCheck(check),
     passed: snap ? evalCheck(check, snap) : true,
   }));
   const sceneIncomplete = checkStatus.some((c) => !c.passed);
-  const stepBlocked = quizIncomplete || sceneIncomplete;
+  const stepBlocked = quizIncomplete || numericIncomplete || sceneIncomplete;
 
   const resetQuiz = () => {
     setCompletedQuizKey(null);
+    setCompletedNumericKey(null);
     setQuizIncorrect(false);
     setQuizRun((run) => run + 1);
   };
@@ -299,6 +331,15 @@ function LessonPanel({
                   answerIndex={quizCheck.answer}
                   hint={step.hint ?? step.prompt ?? step.title}
                   onAnswer={handleQuizAnswer}
+                />
+              )}
+              {numericCheck?.kind === "numeric" && (
+                <NumericCard
+                  key={`${active}:${step.id}:${numericCheck.question}:${quizRun}`}
+                  question={numericCheck.question}
+                  answer={numericCheck.answer}
+                  tolerance={numericCheck.tolerance}
+                  onAnswer={handleNumericAnswer}
                 />
               )}
             </>

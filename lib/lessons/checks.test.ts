@@ -179,3 +179,17 @@ describe("length-range", () => {
     expect(evalCheck(check, snap({ chains: [] }))).toBe(false);
   });
 });
+
+describe("numeric", () => {
+  const check = { kind: "numeric", question: "Volume in m³?", answer: 12, tolerance: 0.5 } as const;
+
+  it("passes within tolerance inclusive", () => {
+    expect(evalCheck(check, snap({ quizAnswers: { "Volume in m³?": 12.5 } }))).toBe(true);
+    expect(evalCheck(check, snap({ quizAnswers: { "Volume in m³?": 11.5 } }))).toBe(true);
+  });
+  it("fails outside tolerance, or with no/invalid answer", () => {
+    expect(evalCheck(check, snap({ quizAnswers: { "Volume in m³?": 12.51 } }))).toBe(false);
+    expect(evalCheck(check, snap({}))).toBe(false);
+    expect(evalCheck(check, snap({ quizAnswers: { "Volume in m³?": Number.NaN } }))).toBe(false);
+  });
+});

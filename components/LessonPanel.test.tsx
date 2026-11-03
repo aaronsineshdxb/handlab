@@ -38,11 +38,48 @@ const noStepsLesson: Lesson = {
   steps: [],
 };
 
+const numericLesson: Lesson = {
+  id: "numeric-lesson",
+  title: "Numeric Lesson",
+  level: "intro",
+  objectives: ["Type the value"],
+  steps: [
+    {
+      id: "type-1",
+      title: "Type the volume",
+      prompt: "Type the prism's volume.",
+      level: "intro",
+      checks: [{ kind: "numeric", question: "Volume in m³?", answer: 12, tolerance: 0.5 }],
+    },
+    {
+      id: "type-2",
+      title: "Second step",
+      prompt: "Complete the second step.",
+      level: "intro",
+      checks: [],
+    },
+  ],
+};
+
 function renderPanel(progress?: Progress): string {
   return renderToStaticMarkup(
     <LessonPanel
       lessons={[lesson]}
       active={lesson.id}
+      stepIdx={0}
+      progress={progress}
+      onSelect={() => {}}
+      onNext={() => {}}
+      onBack={() => {}}
+    />,
+  );
+}
+
+function renderNumericPanel(progress?: Progress): string {
+  return renderToStaticMarkup(
+    <LessonPanel
+      lessons={[numericLesson]}
+      active={numericLesson.id}
       stepIdx={0}
       progress={progress}
       onSelect={() => {}}
@@ -125,5 +162,33 @@ describe("LessonPanel progress", () => {
     expect(markup).toContain('role="progressbar"');
     expect(markup).toContain('aria-valuenow="75"');
     expect(markup).toContain("75%");
+  });
+});
+
+describe("LessonPanel numeric steps", () => {
+  it("blocks Next until the numeric answer is correct", () => {
+    const markup = renderNumericPanel();
+
+    expect(markup).toContain('aria-label="Numeric challenge"');
+    expect(markup).toContain("Volume in m³?");
+    expect(markup).toContain('id="next-blocked"');
+    expect(markup).toContain("Answer the question correctly to continue.");
+    const nextButton = markup.match(/<button[^>]*>Next<\/button>/)?.[0];
+    expect(nextButton).toContain('disabled=""');
+  });
+
+  it("unblocks Next once progress marks the numeric step done", () => {
+    const markup = renderNumericPanel({
+      lessonId: numericLesson.id,
+      stepIdx: 0,
+      done: true,
+      score: 1,
+      updatedAt: 1,
+    });
+
+    expect(markup).not.toContain('id="next-blocked"');
+    const nextButton = markup.match(/<button[^>]*>Next<\/button>/)?.[0];
+    expect(nextButton).toBeDefined();
+    expect(nextButton?.match(/disabled/g)).toBeNull();
   });
 });

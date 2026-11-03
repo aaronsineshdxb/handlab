@@ -90,6 +90,16 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
       }
       return false;
     }
+    case "numeric": {
+      // Reuses the quizAnswers record: index semantics don't apply, the
+      // stored value IS the number the student typed.
+      const value = snap.quizAnswers[c.question];
+      return (
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        Math.abs(value - c.answer) <= c.tolerance
+      );
+    }
     case "quiz":
       return snap.quizAnswers[c.question] === c.answer;
     default:

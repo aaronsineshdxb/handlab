@@ -168,3 +168,14 @@ describe("angle-at + length-range checks", () => {
     expect(isLessonCheck({ kind: "length-range", min: -1, max: 2 })).toBe(false);
   });
 });
+
+describe("numeric checks", () => {
+  it("accepts a finite answer + non-negative tolerance", () => {
+    expect(isLessonCheck({ kind: "numeric", question: "v?", answer: 5, tolerance: 0 })).toBe(true);
+  });
+  it("rejects negative tolerance or non-finite answer", () => {
+    expect(isLessonCheck({ kind: "numeric", question: "v?", answer: 5, tolerance: -1 })).toBe(false);
+    expect(isLessonCheck({ kind: "numeric", question: "v?", answer: Number.NaN, tolerance: 1 })).toBe(false);
+    expect(isLessonCheck({ kind: "numeric", question: "", answer: 5, tolerance: 1 })).toBe(false);
+  });
+});

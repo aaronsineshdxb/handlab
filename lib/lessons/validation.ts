@@ -49,6 +49,13 @@ export const isLessonCheck = (value: unknown): value is CheckKind => {
         value.min >= 0 &&
         value.min <= value.max
       );
+    case "numeric":
+      return (
+        isText(value.question, MAX_TEXT_LENGTH) &&
+        isFiniteNumber(value.answer) &&
+        isFiniteNumber(value.tolerance) &&
+        value.tolerance >= 0
+      );
     case "quiz":
       return (
         isText(value.question, MAX_TEXT_LENGTH) &&
