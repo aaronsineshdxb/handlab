@@ -29,7 +29,9 @@ export default function NumericCard({
 
   const submit = () => {
     if (state === "correct") return;
-    const parsed = Number(value);
+    // Blank/whitespace must grade invalid, not parse as the answer
+    // (Number("") === 0 would otherwise read a 0-answer check as correct).
+    const parsed = value.trim() === "" ? Number.NaN : Number(value);
     if (!Number.isFinite(parsed)) {
       setState("wrong");
       onAnswer(Number.NaN);
@@ -95,6 +97,11 @@ export default function NumericCard({
         <p className="m-sub" style={{ marginTop: 6, color: "var(--good)" }}>
           Inside tolerance ✓
         </p>
+      )}
+      {state === "wrong" && (
+        <div role="alert" style={{ marginTop: 10, color: "var(--color-bad)" }}>
+          Not quite — try again.
+        </div>
       )}
     </section>
   );

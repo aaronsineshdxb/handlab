@@ -137,8 +137,7 @@ function LessonPanel({
     if (numericCheck?.kind !== "numeric" || !Number.isFinite(value)) return;
     const correct = Math.abs(value - numericCheck.answer) <= numericCheck.tolerance;
     setCompletedNumericKey(correct ? numericKey : null);
-    if (!correct) setQuizIncorrect(true);
-    if (correct) setQuizIncorrect(false);
+    setQuizIncorrect(!correct);
     onNumericAnswer?.(numericCheck, value);
   };
 
