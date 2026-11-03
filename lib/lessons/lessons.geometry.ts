@@ -137,7 +137,7 @@ export const LESSONS: Lesson[] = [
         id: "guess",
         title: "Guess the length",
         prompt:
-          "Look at the room grid: each large grid square is 1 m. Draw a line-chain you think is exactly 2.00 m long WITHOUT reading the live label carefully. Confidence-check: type your target length next.",
+          "Look at the room grid: each grid square is 0.5 m. Without reading the live label, plan a line-chain you think is exactly 2.00 m long. Confidence-check: type your target length next.",
         level: "advanced",
         hint: "Commit to a number first — measurement after estimation trains the eye.",
         checks: [
