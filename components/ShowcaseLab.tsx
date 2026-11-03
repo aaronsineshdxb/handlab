@@ -19,6 +19,18 @@ import {
 import { lockLightTheme } from "../lib/geometry/showcase-state";
 import ColorWell from "./bits/ColorWell";
 import DomainSwitcher from "./DomainSwitcher";
+import LessonPanel from "./LessonPanel";
+import { LESSONS } from "../lib/lessons/lessons.geometry";
+import { loadProgress, saveStep } from "../lib/lessons/store";
+import { addImportedLesson } from "../lib/lessons/validation";
+import type {
+  Lesson,
+  NumericCheck,
+  Progress,
+  QuizCheck,
+} from "../lib/lessons/types";
+import type { SceneSnap } from "../lib/lessons/checks";
+import { createSceneSync } from "../lib/sceneSync";
 
 const GLYPHS: Record<ShapeName, { g: string; label: string }> = {
   cube: { g: "◼", label: "cube" },
@@ -62,6 +74,7 @@ type FullEngine = StudioEngine & {
   loadFromStorage?: () => void;
   exportPNG?: () => string | null;
   exportScene?: () => { objects: unknown[] };
+  exportCheckSnap?: (quizAnswers?: Record<string, number>) => SceneSnap;
   importSceneJson?: (text: string) => boolean;
   enableWebcam?: () => void;
   cancelWebcamLoad?: () => void;
@@ -75,12 +88,26 @@ function UnifiedLab() {
   const [ui, setUi] = useState<UiState>(initialUiState);
   const [dims, setDims] = useState<ShapeDims>({ ...SHAPE_DEFS.cylinder.defaults });
   const [studio, setStudio] = useState(false);
-  const [drawer, setDrawer] = useState<"shapes" | "line" | "help" | null>(null);
+  const [drawer, setDrawer] = useState<"shapes" | "line" | "help" | "lessons" | null>(null);
   const [mathOpen, setMathOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [engineRev, setEngineRev] = useState(0);
+  // ---- lessons: seed data, active lesson/step, persisted progress ----
+  const [lessons, setLessons] = useState<Lesson[]>(LESSONS);
+  const lessonsRef = useRef<Lesson[]>(LESSONS);
+  const [lessonId, setLessonId] = useState<string | null>(null);
+  const [lessonStep, setLessonStep] = useState(0);
+  const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
+  const lessonFileRef = useRef<HTMLInputElement>(null);
+  // Answers keyed by check question text; read back by exportCheckSnap so
+  // quiz/numeric answers appear in the live snapshot the checks re-runs on.
+  const quizRef = useRef<Record<string, number>>({});
+  // Bumped (coalesced by sceneSync ≈10 Hz) whenever the engine reports a
+  // scene change; rebuilding engineSnap is cheap vs re-running exportCheckSnap
+  // once per animation frame during a drag.
+  const [sceneTick, setSceneTick] = useState(0);
   const engineRef = useRef<FullEngine | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -119,12 +146,17 @@ function UnifiedLab() {
     };
     let engine: FullEngine | null = null;
     let disposed = false;
+    // Lesson checks re-evaluate against the live scene; the engine fires
+    // onScene from place/delete/drag and sceneSync coalesces the bursts into
+    // one React update per 100ms flush instead of one per animation frame.
+    const sceneSync = createSceneSync(() => setSceneTick((t) => t + 1));
     const opts = {
       canvas: canvasRef.current, video: videoRef.current, skel: skelRef.current,
       cursor2d: cursor2dRef.current, toast: toastRef.current, hud,
       emit: setUi,
       onCamLive: () => setPreviewOpen(true),
       onFatal: (msg: string) => setFatal(msg),
+      onScene: (): void => { sceneSync(); },
     };
     void (async () => {
       try {
@@ -157,6 +189,8 @@ function UnifiedLab() {
     })();
     return () => {
       disposed = true;
+      sceneSync.flush();
+      sceneSync.dispose();
       engine?.dispose?.();
       engineRef.current = null;
     };
@@ -166,6 +200,9 @@ function UnifiedLab() {
 
   // Judging panel: polished light theme, restored on unmount.
   useEffect(() => lockLightTheme(), []);
+
+  // Lessons progress (handlab.progress.v1) — persisted in this browser only.
+  useEffect(() => setProgressMap(loadProgress()), []);
 
   const setDim = useCallback((key: keyof ShapeDims, value: number) => {
     setDims((d) => ({ ...d, [key]: value }));
@@ -238,6 +275,100 @@ function UnifiedLab() {
     engineRef.current?.importSceneJson?.(await f.text());
   }, []);
 
+  // ---- lessons: live scene snapshot + step flow handlers ----
+
+  // Live scene snapshot for lesson checks. Rebuilt when the engine reports a
+  // scene change (coalesced to ≈10 Hz by sceneSync) or quiz answers change.
+  // engineRev: the async engine arrives after first paint.
+  const engineSnap = useMemo<SceneSnap | undefined>(() => {
+    const eng = engineRef.current as FullEngine | null;
+    if (!eng?.exportCheckSnap) return undefined;
+    return eng.exportCheckSnap(quizRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneTick, engineRev]);
+
+  const selectLesson = useCallback(
+    (nextId: string) => {
+      if (lessonId === nextId) {
+        setLessonId(null);
+        setLessonStep(0);
+        return;
+      }
+      setLessonId(nextId);
+      const lesson = lessons.find(({ id }) => id === nextId);
+      const last = Math.max((lesson?.steps.length ?? 1) - 1, 0);
+      const stored = progressMap[nextId]?.stepIdx ?? 0;
+      setLessonStep(Math.min(Math.max(Math.floor(stored), 0), last));
+    },
+    [lessonId, lessons, progressMap],
+  );
+
+  // Reaching/failing a step's checks records it as the resume point and re-bars
+  // the score ring — same write path the standalone HUD labs use via saveStep.
+  const bumpProgress = useCallback(
+    (stepIdx: number) => {
+      if (!lessonId) return;
+      const next: Progress = {
+        lessonId,
+        stepIdx,
+        done: true,
+        score: 1,
+        updatedAt: Date.now(),
+      };
+      saveStep(next);
+      setProgressMap((cur) => ({ ...cur, [lessonId]: next }));
+    },
+    [lessonId],
+  );
+
+  const handleQuizAnswer = useCallback(
+    (check: QuizCheck, answerIndex: number) => {
+      if (answerIndex !== check.answer || !lessonId) return;
+      quizRef.current[check.question] = answerIndex;
+      setSceneTick((t) => t + 1);
+      bumpProgress(lessonStep);
+    },
+    [lessonId, lessonStep, bumpProgress],
+  );
+
+  const handleNumericAnswer = useCallback(
+    (check: NumericCheck, value: number) => {
+      quizRef.current[check.question] = value;
+      setSceneTick((t) => t + 1);
+      if (
+        Number.isFinite(value) &&
+        Math.abs(value - check.answer) <= check.tolerance
+      )
+        bumpProgress(lessonStep);
+    },
+    [lessonStep, bumpProgress],
+  );
+
+  const onLessonExport = useCallback(() => {
+    const lesson = lessons.find(({ id }) => id === lessonId);
+    if (!lesson) return;
+    const blob = new Blob([JSON.stringify(lesson, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    download(`handlab-lesson-${lesson.id}.json`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, [lessonId, lessons]);
+
+  const onLessonImport = useCallback(async (f: File) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await f.text()) as unknown;
+    } catch {
+      return;
+    }
+    const cur = lessonsRef.current;
+    const next = addImportedLesson(cur, parsed);
+    if (next === cur) return;
+    lessonsRef.current = next;
+    setLessons(next);
+  }, []);
+
   const shapes = useMemo(
     () => (studio ? [...SHAPES] : FOUNDATIONS),
     [studio],
@@ -298,6 +429,7 @@ function UnifiedLab() {
         <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">✋</span></button>
         <button className={"sc-fab" + (drawer === "help" ? " active" : "")} aria-pressed={drawer === "help"} aria-label="Gestures" title="Gesture map" onClick={() => setDrawer((d) => (d === "help" ? null : "help"))}><span aria-hidden="true">?</span></button>
         <button className={"sc-fab" + (mathOpen ? " active" : "")} aria-pressed={mathOpen} aria-label="Math panel" title="Live mathematics" onClick={() => setMathOpen((v) => !v)}><span aria-hidden="true">∑</span></button>
+        <button className={"sc-fab" + (drawer === "lessons" ? " active" : "")} aria-pressed={drawer === "lessons"} aria-label="Lessons" title="Guided lessons" onClick={() => setDrawer((d) => (d === "lessons" ? null : "lessons"))}><span aria-hidden="true">≡</span></button>
       </nav>
 
       {drawer === "shapes" && (
@@ -368,6 +500,29 @@ function UnifiedLab() {
           <p className="sc-note"><kbd>pinch tap</kbd> place / select · <kbd>hold</kbd> grab + drag</p>
           <p className="sc-note"><kbd>fist 0.6s</kbd> delete hovered · <kbd>L</kbd> line mode · <kbd>R</kbd> recenter</p>
           <p className="sc-note">No webcam? Mouse moves on your view plane, click = place, drag = move.</p>
+        </aside>
+      )}
+
+      {drawer === "lessons" && (
+        <aside className="sc-drawer sc-lessons" aria-label="Guided lessons">
+          <div className="sc-drawer__head"><b>Lessons</b><button aria-label="Close" onClick={() => setDrawer(null)}>×</button></div>
+          <LessonPanel
+            lessons={lessons}
+            active={lessonId}
+            stepIdx={lessonStep}
+            onSelect={selectLesson}
+            onNext={(n) => { setLessonStep(n); bumpProgress(n); }}
+            onBack={(n) => setLessonStep(n)}
+            progress={lessonId ? progressMap[lessonId] : undefined}
+            onQuizAnswer={handleQuizAnswer}
+            onNumericAnswer={handleNumericAnswer}
+            snap={engineSnap}
+          />
+          <div className="sc-chips" style={{ marginTop: 8 }}>
+            <button className="sc-chip" disabled={!lessonId} onClick={onLessonExport}>lesson ↓</button>
+            <button className="sc-chip" onClick={() => lessonFileRef.current?.click()}>lesson ↑</button>
+          </div>
+          <input ref={lessonFileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLessonImport(f); e.target.value = ""; }} />
         </aside>
       )}
 

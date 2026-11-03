@@ -78,6 +78,11 @@ h1,h2,h3,.brand h1,.nf-code{font-family:var(--font-display);font-weight:500;lett
  .lesson-panel{display:block}
  @media(max-height:838px){.lesson-panel{bottom:92px}}
   @media(max-width:720px){.lesson-panel{bottom:320px}}
+ /* Lessons drawer (ShowcaseLab): LessonPanel mounts inside .sc-drawer but was
+    built for the fixed HUD sidebar (.hint) — reset the fixed geometry and card
+    chrome so it flows as normal drawer content. Scoped (2 classes) so it beats
+    every .lesson-panel rule above regardless of order. */
+ .sc-lessons .lesson-panel{position:static;top:auto;right:auto;bottom:auto;left:auto;width:auto;z-index:auto;overflow:visible;background:transparent;border:0;border-radius:0;box-shadow:none;padding:0;transition:none}
  .lesson-mode-hidden{display:none!important}
 /* ---------- 404 / not-found ---------- */
 .nf-wrap{min-height:100dvh;display:grid;place-items:center;padding:24px;position:relative;overflow:hidden;background:var(--color-paper)}
