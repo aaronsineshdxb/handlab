@@ -283,12 +283,15 @@ function UnifiedLab() {
   const engineSnap = useMemo<SceneSnap | undefined>(() => {
     const eng = engineRef.current as FullEngine | null;
     if (!eng?.exportCheckSnap) return undefined;
-    return eng.exportCheckSnap(quizRef.current);
+    return eng.exportCheckSnap({ ...quizRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneTick, engineRev]);
 
   const selectLesson = useCallback(
     (nextId: string) => {
+      // answers are keyed by question text; clear on lesson switch so stories
+      // can't leak between lessons (also covers the toggle-off path below)
+      quizRef.current = {};
       if (lessonId === nextId) {
         setLessonId(null);
         setLessonStep(0);
@@ -511,7 +514,7 @@ function UnifiedLab() {
             active={lessonId}
             stepIdx={lessonStep}
             onSelect={selectLesson}
-            onNext={(n) => { setLessonStep(n); bumpProgress(n); }}
+            onNext={(n) => setLessonStep(n)}
             onBack={(n) => setLessonStep(n)}
             progress={lessonId ? progressMap[lessonId] : undefined}
             onQuizAnswer={handleQuizAnswer}
