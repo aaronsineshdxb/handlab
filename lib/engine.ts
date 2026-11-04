@@ -28,6 +28,7 @@ import {
   pinchMid,
   scaleFactorForDist,
 } from "./twoHandScale";
+import { cmPerMeterFor, ndcFromLandmark, rulerText } from "./ruler";
 import type { SceneSnap } from "./lessons/checks";
 import {
   SCENE_THEMES,
@@ -468,6 +469,7 @@ export class HandLabEngine {
   private _sd = new THREE.Vector3();
   private _aa = new THREE.Vector3();
   private _ab = new THREE.Vector3();
+  private rulerA = new THREE.Vector3(); // ruler: first hand's plane intersection
   private UP_Y = new THREE.Vector3(0, 1, 0);
 
   private spawnables: THREE.Mesh[] = [];
@@ -502,6 +504,18 @@ export class HandLabEngine {
   private pinchDist0 = 0;
   private pinchDistSmooth = 0;
   private scaleFactor = 1;
+
+  // two-hand pinch ruler (line-drawer chip): while armed, the both-hands
+  // spread measures instead of scaling — each pinch midpoint is projected
+  // onto the camera plane through the cursor target and the distance floats
+  // as a label; a calibrated real hand span converts readouts to local cm.
+  private rulerOn = false;
+  private rulerLabel: LabelSprite | null = null;
+  private rulerGroup = new THREE.Group();
+  private rulerCalibrating = false;
+  private rulerSpanCm = 0;
+  private rulerCmPerMeter: number | null = null;
+  private rulerSpanMeters = 0;
 
   // chain label variants (line-drawer chips): Σ-angle-sum on closed loops /
   // a²+b²−c² residual on open 3-point chains. OFF = existing text unchanged.
@@ -780,6 +794,8 @@ export class HandLabEngine {
 
     /* ---------- lines infra ---------- */
     this.scene.add(this.junctionGroup);
+    // two-hand ruler label park — same group lifecycle as junctionGroup
+    this.scene.add(this.rulerGroup);
     this.snapMarker = new THREE.Mesh(
       new THREE.TorusGeometry(0.2, 0.03, 10, 32),
       new THREE.MeshBasicMaterial({ color: 0x2E7D46 }),
@@ -962,6 +978,9 @@ export class HandLabEngine {
     this.activeLine = null;
     disposeGroup(this.junctionGroup);
     this.scene.remove(this.junctionGroup);
+    disposeGroup(this.rulerGroup);
+    this.scene.remove(this.rulerGroup);
+    this.rulerLabel = null;
     const disposeObj = (o: THREE.Object3D): void => {
       const mesh = o as THREE.Mesh;
       mesh.geometry?.dispose?.();
@@ -1087,6 +1106,29 @@ export class HandLabEngine {
     if (kind === "angleSum") this.angleSumLabels = on;
     else this.pythagLabels = on;
     this.updateLineLabelsAll();
+  }
+
+  /** Line-drawer ruler chip: while ON, the both-hands spread measures (the
+   *  ruler owns that gesture; scale may not arm under it). Returns the new
+   *  state so the chip reflects reality even if the engine re-arms around it. */
+  toggleRuler(): boolean {
+    this.rulerOn = !this.rulerOn;
+    if (this.rulerOn && this.twoHandScaling) this.endTwoHandScale(true);
+    if (this.rulerOn) {
+      // A span set before arming must still calibrate on the next pinch.
+      this.rulerCalibrating = this.rulerSpanCm > 0;
+    } else {
+      this.rulerCalibrating = false;
+      if (this.rulerLabel) this.rulerLabel.visible = false;
+    }
+    return this.rulerOn;
+  }
+
+  /** Student enters their real hand span (cm) — next both-hands pinch arms
+   *  the conversion factor from that sample's projected metres. */
+  setRulerSpanCm(cm: number): void {
+    this.rulerSpanCm = cm;
+    this.rulerCalibrating = cm > 0 && this.rulerOn;
   }
 
   private updateLineLabelsAll(): void {
@@ -1915,6 +1957,64 @@ export class HandLabEngine {
     }
   }
 
+  /* ---------- two-hand pinch ruler ---------- */
+
+  /** Both-pinch measuring: project each hand's pinch midpoint onto the
+   *  camera plane through the live cursor target (mouse-fallback pattern)
+   *  and float the distance label at the midpoint. */
+  private updateRulerLabel(
+    main: NormalizedLandmark[],
+    other: NormalizedLandmark[],
+  ): void {
+    const aNdc = ndcFromLandmark(
+      (main[4].x + main[8].x) / 2,
+      (main[4].y + main[8].y) / 2,
+    );
+    const bNdc = ndcFromLandmark(
+      (other[4].x + other[8].x) / 2,
+      (other[4].y + other[8].y) / 2,
+    );
+    this.ndc.set(aNdc.x, aNdc.y);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    this.camera.getWorldDirection(this._v1);
+    this.camPlane.setFromNormalAndCoplanarPoint(
+      this._v1.negate(),
+      this.target,
+    );
+    if (!this.ray.ray.intersectPlane(this.camPlane, this.rulerA)) {
+      if (this.rulerLabel) this.rulerLabel.visible = false;
+      return;
+    }
+    this.ndc.set(bNdc.x, bNdc.y);
+    this.ray.setFromCamera(this.ndc, this.camera);
+    if (!this.ray.ray.intersectPlane(this.camPlane, this._v2)) {
+      if (this.rulerLabel) this.rulerLabel.visible = false;
+      return;
+    }
+    const aMeters = this.rulerA.distanceTo(this._v2);
+    if (this.rulerCalibrating) {
+      // First both-pinch frame after arming: this spread IS the student's
+      // measured span. Commit whatever cmPerMeterFor returns — its own
+      // 0.02 m floor already rejects degenerate samples.
+      this.rulerSpanMeters = aMeters;
+      this.rulerCmPerMeter = cmPerMeterFor(this.rulerSpanCm, aMeters);
+      this.rulerCalibrating = false;
+    }
+    this.ensureRulerLabel();
+    const label = this.rulerLabel;
+    if (!label) return;
+    label.position.copy(this.rulerA).add(this._v2).multiplyScalar(0.5);
+    label.position.y += 0.05;
+    label.userData.set(rulerText(aMeters, this.rulerCmPerMeter));
+    label.visible = true;
+  }
+
+  private ensureRulerLabel(): void {
+    if (this.rulerLabel) return;
+    this.rulerLabel = makeLabel("#8affc1");
+    this.rulerGroup.add(this.rulerLabel);
+  }
+
   /* ---------- fist = right-click/delete ---------- */
 
   private onFistHold(): void {
@@ -2602,6 +2702,8 @@ export class HandLabEngine {
       this.pinchState = false;
       this.pinchState2 = false;
       this.endTwoHandScale(true);
+      // ruler measurement is lost with the hands — never leave a stuck label
+      if (this.rulerLabel) this.rulerLabel.visible = false;
       this.scaleFactor = 1;
       this.pinchHeld = false;
       this.grabbed = null;
@@ -2743,11 +2845,21 @@ export class HandLabEngine {
     }
     const bothPinched = !!(other && this.pinchState && this.pinchState2);
     if (bothPinched && other) {
-      this.updateTwoHandScale(main, other);
-      // While scaling, the single-hand drag path stays frozen (see
-      // onPinchMove early-return + tick guard) so spread maps to size only.
-      if (!this.twoHandScaling && this.pinchState) this.onPinchMove();
+      if (this.rulerOn) {
+        // Ruler owns the two-hand gesture while armed — measure, never scale;
+        // the single-hand drag path stays frozen exactly as while scaling.
+        this.updateRulerLabel(main, other);
+        if (this.twoHandScaling) this.endTwoHandScale(true);
+      } else {
+        this.updateTwoHandScale(main, other);
+        // While scaling, the single-hand drag path stays frozen (see
+        // onPinchMove early-return + tick guard) so spread maps to size only.
+        if (!this.twoHandScaling && this.pinchState) this.onPinchMove();
+      }
     } else {
+      // ruler armed but hands not both pinched → hide the label (also no
+      // per-frame work at all while this.rulerOn is false)
+      if (this.rulerOn && this.rulerLabel) this.rulerLabel.visible = false;
       if (this.twoHandScaling) this.endTwoHandScale();
       if (this.pinchState) this.onPinchMove();
     }

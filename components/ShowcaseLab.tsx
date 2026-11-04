@@ -65,6 +65,8 @@ type FullEngine = StudioEngine & {
   setLineMode?: (on: boolean) => void;
   toggleSnap?: () => void;
   setChainMathMode?: (kind: "angleSum" | "pythag", on: boolean) => void;
+  toggleRuler?: () => boolean;
+  setRulerSpanCm?: (cm: number) => void;
   clearLines?: () => void;
   undo?: () => void;
   clearAll?: () => void;
@@ -93,6 +95,9 @@ function UnifiedLab() {
   // line-drawer chip states for the chain math label variants
   const [angleSumChip, setAngleSumChip] = useState(false);
   const [pythagChip, setPythagChip] = useState(false);
+  // two-hand ruler chip + the student's real hand span used to calibrate it
+  const [rulerChip, setRulerChip] = useState(false);
+  const [spanCm, setSpanCm] = useState(18);
   const [mathOpen, setMathOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
@@ -498,6 +503,20 @@ function UnifiedLab() {
               onClick={() => { const on = !pythagChip; setPythagChip(on); engineRef.current?.setChainMathMode?.("pythag", on); }}
             >a²+b²=c²</button>
           </div>
+          <div className="sc-chips">
+            <button
+              className={"sc-chip" + (rulerChip ? " on" : "")}
+              aria-pressed={rulerChip}
+              onClick={() => { const on = !!engineRef.current?.toggleRuler?.(); setRulerChip(on); }}
+            >ruler</button>
+          </div>
+          <label className="sc-slider">
+            <span className="sc-slider__head"><span>my hand span</span><b>{spanCm.toFixed(0)} cm</b></span>
+            <input type="range" min={10} max={30} step={1} value={spanCm}
+              onChange={(e) => { const cm = Number(e.target.value); setSpanCm(cm); if (rulerChip) engineRef.current?.setRulerSpanCm?.(cm); }}
+              aria-label="My hand span in centimetres" />
+          </label>
+          <p className="sc-note">ruler: pinch both hands → distance between pinch points. Measure your real span once with a ruler, set it here, then pinch that same span to calibrate — readouts switch to ≈ cm (view-plane approximation).</p>
           <div className="sc-chips">
             <button
               className="sc-chip"

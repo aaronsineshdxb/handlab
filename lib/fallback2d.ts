@@ -322,6 +322,13 @@ export class HandLabFallbackEngine {
     this.toast("depth AI needs WebGL mode — unavailable in 2D fallback");
   }
 
+  /** The two-hand ruler measures in the WebGL scene — no-ops here, kept for
+   *  API parity so the drawer chip stays inert in 2D fallback. */
+  toggleRuler(): boolean {
+    return false;
+  }
+  setRulerSpanCm(_cm: number): void {}
+
   exportScene(): SceneData {
     return {
       version: 1,
