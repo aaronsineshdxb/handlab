@@ -166,7 +166,8 @@ describe("chainMath.pythagText", () => {
   });
 
   it("sign + 2-decimal abs value follow the computed residual direction", () => {
-    // obtuse at the middle vertex → a²+b² > c² (positive residual)
+    // ~18° ACUTE at the middle vertex → cos θ > 0 → a²+b² > c² (positive residual);
+    // obtuse at the middle vertex → c² = a²+b²−2ab·cos θ with cos θ < 0 → a²+b² < c² (negative).
     const pOver = pythagorasOf([
       [0, 0, 0],
       [3, 0, 0],
