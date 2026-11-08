@@ -42,10 +42,10 @@ active lesson with `lesson ↓`, then import validated custom lessons with
 
 | Path | What |
 |---|---|
-| `app/page.tsx` | Route entry, renders the lab |
+| `app/page.tsx` | Route entry, renders `LabEntry` |
 | `app/layout.tsx` | Metadata, fonts, favicon |
-| `app/globals.css` | All HUD styling |
-| `components/HandLab.tsx` | React HUD (palette, status cards, controls) + engine lifecycle |
+| `components/LabEntry.tsx` | Dynamic entry — lazy-loads `ShowcaseLab` (ssr: false) |
+| `components/ShowcaseLab.tsx` | Live lab: rail + drawers, engine lifecycle, lessons |
 | `lib/engine.ts` | `HandLabEngine`: Three.js scene, gestures, MediaPipe tracking, measurement |
 
 The 3D engine is imperative and lives in `HandLabEngine` (created in a
@@ -53,9 +53,9 @@ The 3D engine is imperative and lives in `HandLabEngine` (created in a
 updates through an `emit` callback and writes high-frequency readouts (XYZ,
 fps, depth) straight to DOM nodes via refs.
 
-The app starts in a lightweight mouse-first workspace. Use `gestures` to open the
-help drawer and `camera: hidden` to show the tracking preview when you need it;
-the preview opens automatically after webcam permission succeeds.
+The app starts in a lightweight mouse-first workspace. Use the `?` rail button
+to open the help drawer and the camera rail button (◐) to show the tracking
+preview; the preview opens automatically after webcam permission succeeds.
 
 ## Controls
 
@@ -113,8 +113,8 @@ The toolbar's SCENE section:
 
 ## Notes
 
-- Depth AI (on by default): Depth Anything V2 (`onnx-community/depth-anything-v2-small`,
-  via `@huggingface/transformers`) runs monocular depth estimation at ~2.5fps
+- Depth AI (off by default — `depth v2` in the drawer starts it): Depth Anything V2 (`onnx-community/depth-anything-v2-small`,
+  via `@huggingface/transformers`) runs monocular depth estimation at ~1.4fps
   on a 256px crop in a background loop. Weights are vendored under
   `/public/models/onnx-community/depth-anything-v2-small`, so there is no
   Hugging Face download: it works offline and `connect-src` is `'self'` only.
@@ -133,8 +133,8 @@ The toolbar's SCENE section:
   The
   fingertip z-score delta vs its anchor is fused 70/30 with the palm-size
   baseline; stale/low-confidence neural samples are ignored, so worst case is
-  pure palm baseline. Inference pauses while the tab is hidden. Starts
-  automatically with the webcam; disable via `depth v2` in the toolbar.
+  pure palm baseline. Inference pauses while the tab is hidden. It loads only
+  when you enable it — the palm-size baseline runs alone otherwise.
   Unavailable in 2D fallback mode.
 - Hand tracking: MediaPipe HandLandmarker, loaded on demand when you click
   Enable webcam. Prefers the GPU delegate and silently retries on CPU when GPU

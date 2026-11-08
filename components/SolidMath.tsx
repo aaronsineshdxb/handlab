@@ -76,7 +76,7 @@ function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio, 
         <b>{id === "knot" ? "Torus knot" : SHAPE_DEFS[id].label} · live math</b>
         <button className="mini" onClick={onReset} title="Reset dimensions to defaults">reset</button>
       </div>
-      <div className="sc-chips" role="tablist" aria-label="Learning mode">
+      <div className="sc-chips" role="group" aria-label="Learning mode">
         <Chip on={!studio} onClick={() => onStudio(false)}>Learn</Chip>
         <Chip on={studio} onClick={() => onStudio(true)}>Studio</Chip>
       </div>

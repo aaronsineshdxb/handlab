@@ -11,7 +11,7 @@
  */
 export const PR_STEP = 0.25;
 export const PR_FLOOR = 0.75;
-export const PR_MAX_CAP = 2;
+export const PR_MAX_CAP = 1.5;
 
 const SLOW_MS = 26; // ~38fps — start shedding pixels
 const FAST_MS = 13; // ~77fps — start adding them back

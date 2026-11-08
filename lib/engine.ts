@@ -83,8 +83,8 @@ export const initialUiState: UiState = {
   spin: false,
   grid: true,
   cam: "idle",
-  depthOn: true,
-  depth: "waiting for camera — enable webcam to start depth AI",
+  depthOn: false,
+  depth: "depth AI off — enable with 'depth v2' for neural depth",
 };
 
 export const SHAPES: ShapeName[] = [
@@ -592,11 +592,11 @@ export class HandLabEngine {
   private camLive = false;
   private loopStarted = false;
 
-  // depth providers: palm-size baseline (always) + Depth Anything V2 (on by default)
+  // depth providers: palm-size baseline (always) + Depth Anything V2 (opt-in)
   private palm = new PalmDepthProvider();
   private mono = new DepthAnythingV2Provider();
-  private depthOn = true;
-  private depthStatus = "waiting for camera — enable webcam to start depth AI";
+  private depthOn = false;
+  private depthStatus = "depth AI off — enable with 'depth v2' for neural depth";
 
   // frame / HUD
   private hudCache: Record<string, string> = {};
@@ -623,14 +623,14 @@ export class HandLabEngine {
   constructor(opts: EngineOpts) {
     this.opts = opts;
     // iPadOS thermally throttles with camera + WebGL + WASM together, so
-    // start cheaper there (no AA, 1.5x PR cap, 1024 shadows). Desktop keeps
-    // full fidelity. See lib/caps.ts — iPad is the only visual-downgrade
-    // exception.
+    // start cheaper there (no AA, 1024 shadows). Pixel ratio is capped at
+    // 1.5x everywhere (PR_MAX_CAP); See lib/caps.ts — iPad is the only
+    // remaining visual-downgrade exception.
     const ipad = isIPadOS();
     this.isIPad = ipad;
     const dpr = window.devicePixelRatio || 1;
-    this.prNow = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
-    this.PR_MAX = Math.min(dpr, ipad ? 1.5 : PR_MAX_CAP);
+    this.prNow = Math.min(dpr, PR_MAX_CAP);
+    this.PR_MAX = Math.min(dpr, PR_MAX_CAP);
     if (ipad) {
       this.depthOn = false;
       this.depthStatus = "off — tap depth v2 to enable (iPad saves ~50MB)";
@@ -658,7 +658,7 @@ export class HandLabEngine {
         );
       }
     }
-    this.renderer.setPixelRatio(Math.min(dpr, ipad ? 1.5 : 2));
+    this.renderer.setPixelRatio(this.prNow);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186 and is silently coerced to
@@ -691,7 +691,7 @@ export class HandLabEngine {
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
-    key.shadow.mapSize.set(ipad ? 1024 : 2048, ipad ? 1024 : 2048);
+    key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
     this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
     this.rimLight.position.set(-5, 3, -4);

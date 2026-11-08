@@ -116,7 +116,7 @@ tokens (`var(--space-md)`), never raw values.
 - Library: motion 13.x (`motion/react`) — motion-on project as of the visual overhaul.
 - Allowlist (max 3 primitives per view): static Dock (entrance fade + press
   tick only — no hover magnification) · Magnet pull ≤0.3 (fine pointers only) · layoutId sliding indicator (tabs, domain pill)
-  · one-shot text entrance (BlurText) · one-shot list stagger (AnimatedList)
+  · one-shot list stagger (AnimatedList)
   · 404 turbulence + conic border (content page only).
 - Everything else stays CSS: easings cubic-bezier(0.16, 1, 0.3, 1) `--ease-out`,
   cubic-bezier(0.7, 0, 0.84, 0) `--ease-in`, cubic-bezier(0.65, 0, 0.35, 1) `--ease-in-out`.
@@ -155,7 +155,7 @@ tokens (`var(--space-md)`), never raw values.
 - Content pages: typography only.
 
 ## What pages MUST share
-- The wordmark / logotype (HANDLAB, Space Grotesk 700, tracking 0.14em).
+- The wordmark / logotype (lowercase, Geist 600, tracking -0.01em — matches Typography above).
 - The accent colour and its placement (≤ 5 % per viewport).
 - The display + body fonts.
 - The CTA voice (button shape, border-radius, padding rhythm).
@@ -234,7 +234,7 @@ See `tokens.css` at project root (source of truth).
 ## Provenance
 - Pages inventoried: `app/page.tsx` (geometry workspace), `app/physics/page.tsx` (mechanics/electrostatics/optics), `app/chemistry/page.tsx` (VSEPR/wet-lab), `app/vr/page.tsx` (WebXR isolated), `app/not-found.tsx` (out-of-tracking-range 404).
 - No prior `.hallmark/log.json`. First Hallmark run for this project.
-- Pre-flight preserved: Space Grotesk + IBM Plex Mono via next/font, dark intent, Next.js routes.
+- Pre-flight preserved: Geist + Newsreader + Geist Mono via next/font, dark intent, Next.js routes.
 - Full remake (2026-09-28): Perplexity design language — cream canvas #FCFCF9,
   ink #27251E, teal voltage #016A71, Geist + Newsreader + Geist Mono,
   pill-first geometry. 3D scene re-lit for cream (bg/fog/grid/lights/cursor).

@@ -39,7 +39,7 @@ export const DA_V2_MODEL_ID = "onnx-community/depth-anything-v2-small";
 // lib/depthAssets.test.ts. The app treats all depth output as untrusted
 // (clamped in fusion.ts).
 const INFER_W = 256;
-const INFER_MS = 400;
+const INFER_MS = 700;
 
 // Vendored weight per dtype, verified against the HF Hub (2026-09-30):
 //   model.onnx (fp32)          = 99.1 MB   <- never used

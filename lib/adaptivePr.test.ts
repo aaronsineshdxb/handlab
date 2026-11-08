@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { PR_FLOOR, PR_MAX_CAP, PR_STEP, nextPixelRatio } from "./adaptivePr";
 
 describe("adaptivePr constants", () => {
-  it("uses 0.25 steps, a 0.75 floor and a 2x cap", () => {
+  it("uses 0.25 steps, a 0.75 floor and a 1.5x cap", () => {
     expect(PR_STEP).toBe(0.25);
     expect(PR_FLOOR).toBe(0.75);
-    expect(PR_MAX_CAP).toBe(2);
+    expect(PR_MAX_CAP).toBe(1.5);
   });
 });
 

@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { HandLabEngine } from "./engine";
 import { HandLabFallbackEngine } from "./fallback2d";
 import { VRHandLabEngine } from "./vr-engine";
-import HandLab from "../components/HandLab";
 import HandLabVR from "../components/HandLabVR";
 
 /**
@@ -74,8 +73,7 @@ describe("shapes in line mode", () => {
     expect(placed).toEqual({ x: 0, y: 0, z: 0 });
   });
 
-  it("desktop and VR toolbars expose a place action that works in line mode", () => {
-    expect(renderToStaticMarkup(<HandLab />)).toMatch(/place .*\[P\]/);
+  it("VR toolbar exposes a place action that works in line mode", () => {
     expect(renderToStaticMarkup(<HandLabVR />)).toMatch(/place /);
   });
 });

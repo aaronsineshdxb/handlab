@@ -5,14 +5,14 @@ import { isIPadOS } from "./caps";
  *
  * detectForVideo ran once per requestAnimationFrame, i.e. up to 60 times a
  * second, but the landmarks are consumed by the render/depth fusion path and
- * a hand physically cannot move faster than that. Capping at 45Hz keeps
- * tracking smooth on 90/120Hz displays without paying full 60Hz inference
- * cost.
+ * a hand physically cannot move faster than that. Capping at 30Hz keeps
+ * tracking smooth (well above finger-twitch bandwidth, well below the
+ * 60Hz inference cost) and cuts inference by a third versus 45Hz.
  *
  * iPadOS runs the landmarker on the CPU delegate and thermally throttles
  * with camera + WebGL + WASM together, so it drops to 20Hz there.
  */
-export const HAND_DETECT_MS = 1000 / 45;
+export const HAND_DETECT_MS = 1000 / 30;
 export const HAND_DETECT_MS_IPAD = 1000 / 20;
 
 /** Current detection interval for this device (SSR-safe via isIPadOS). */

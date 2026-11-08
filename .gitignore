@@ -9,3 +9,5 @@ dogfood-output/
 .env
 .env.*
 !.env.example
+# default split(1) fragment names (xaa…xzz) that previously polluted the root
+x[a-z][a-z]

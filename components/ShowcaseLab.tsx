@@ -16,7 +16,8 @@ import {
   spawnScaleFor,
   type ShapeDims,
 } from "../lib/geometry/math";
-import { lockLightTheme } from "../lib/geometry/showcase-state";
+import ThemeToggle from "./bits/ThemeToggle";
+import { AccentSection } from "./bits/AccentPicker";
 import ColorWell from "./bits/ColorWell";
 import DomainSwitcher from "./DomainSwitcher";
 import LessonPanel from "./LessonPanel";
@@ -207,8 +208,8 @@ function UnifiedLab() {
 
   const getEngine = useCallback((): StudioEngine | null => engineRef.current, []);
 
-  // Judging panel: polished light theme, restored on unmount.
-  useEffect(() => lockLightTheme(), []);
+  // Theme/accent are user-controlled (ThemeToggle + AccentSection in the
+  // shapes drawer) — no forced lock. Tokens drive both 2D and 3D.
 
   // Lessons progress (handlab.progress.v1) — persisted in this browser only.
   useEffect(() => setProgressMap(loadProgress()), []);
@@ -420,16 +421,16 @@ function UnifiedLab() {
           <i>pinch to place · drag sliders for live math</i>
           <div className="sc-domains"><DomainSwitcher active="geometry" /></div>
         </div>
-        <div className="sc-mode" role="tablist" aria-label="Learning mode">
-          <button role="tab" aria-selected={!studio} className={!studio ? "on" : ""} onClick={() => setMode(false)}>Simple · Learn</button>
-          <button role="tab" aria-selected={studio} className={studio ? "on" : ""} onClick={() => setMode(true)}>Complex · Studio</button>
+        <div className="sc-mode" role="group" aria-label="Learning mode">
+          <button aria-pressed={!studio} className={!studio ? "on" : ""} onClick={() => setMode(false)}>Simple · Learn</button>
+          <button aria-pressed={studio} className={studio ? "on" : ""} onClick={() => setMode(true)}>Complex · Studio</button>
         </div>
         <div className="sc-header__actions">
           <button
             className="sc-btn ghost"
             onClick={() => (ui.cam === "loading" ? engineRef.current?.cancelWebcamLoad?.() : engineRef.current?.enableWebcam?.())}
           >
-            {ui.cam === "live" ? "Restart hand" : ui.cam === "loading" ? "Cancel" : "✋ Enable hand"}
+            {ui.cam === "live" ? "Restart hand" : ui.cam === "loading" ? "Cancel" : "Enable hand tracking"}
           </button>
           <button className="sc-btn" onClick={onPhoto}>Export PNG</button>
         </div>
@@ -438,7 +439,7 @@ function UnifiedLab() {
       <nav className="sc-rail" aria-label="Showcase controls">
         <button className={"sc-fab" + (drawer === "shapes" ? " active" : "")} aria-pressed={drawer === "shapes"} aria-label="Shapes" title="Shape library" onClick={() => setDrawer((d) => (d === "shapes" ? null : "shapes"))}><span aria-hidden="true">▦</span></button>
         <button className={"sc-fab" + (drawer === "line" ? " active" : "")} aria-pressed={drawer === "line"} aria-label="Line tools" title="Line + measure tools" onClick={() => setDrawer((d) => (d === "line" ? null : "line"))}><span aria-hidden="true">╱</span></button>
-        <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">✋</span></button>
+        <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">◐</span></button>
         <button className={"sc-fab" + (drawer === "help" ? " active" : "")} aria-pressed={drawer === "help"} aria-label="Gestures" title="Gesture map" onClick={() => setDrawer((d) => (d === "help" ? null : "help"))}><span aria-hidden="true">?</span></button>
         <button className={"sc-fab" + (mathOpen ? " active" : "")} aria-pressed={mathOpen} aria-label="Math panel" title="Live mathematics" onClick={() => setMathOpen((v) => !v)}><span aria-hidden="true">∑</span></button>
         <button className={"sc-fab" + (drawer === "lessons" ? " active" : "")} aria-pressed={drawer === "lessons"} aria-label="Lessons" title="Guided lessons" onClick={() => setDrawer((d) => (d === "lessons" ? null : "lessons"))}><span aria-hidden="true">≡</span></button>
@@ -456,6 +457,9 @@ function UnifiedLab() {
           </div>
           <h4 className="solid-math__h">Color</h4>
           <ColorWell color={ui.color} onChange={(c) => engineRef.current?.setColor?.(c)} />
+          <h4 className="solid-math__h">Display</h4>
+          <ThemeToggle />
+          <AccentSection />
           <h4 className="solid-math__h">View</h4>
           <div className="sc-chips">
             <button className={"sc-chip" + (ui.spin ? " on" : "")} aria-pressed={ui.spin} onClick={() => engineRef.current?.toggleSpin?.()}>spin</button>

@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-// TEMPORARY: physics disabled — original import below to re-enable.
-// import PhysicsLab from "../../components/PhysicsLab";
+
+// Physics workspace removed — route redirects to geometry home.
 
 export const metadata: Metadata = {
-  title: "HANDLAB Physics — Temporarily Disabled",
-  description: "Physics workspace is temporarily disabled.",
+  title: "HANDLAB Physics — Removed",
+  description: "The physics workspace was removed; HANDLAB now focuses on the geometry lab.",
 };
 
 export default function PhysicsPage() {
-  // TEMPORARY: redirect to geometry home. Revert to `return <PhysicsLab />` to re-enable.
   redirect("/");
-  // return <PhysicsLab />;
 }

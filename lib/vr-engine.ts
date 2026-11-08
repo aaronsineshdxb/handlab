@@ -197,7 +197,7 @@ export class VRHandLabEngine {
         { cause: err },
       );
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, ipad ? 1.5 : 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     // PCFSoftShadowMap was removed in three r186; see lib/engine.ts.
