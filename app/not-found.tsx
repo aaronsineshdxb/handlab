@@ -20,8 +20,7 @@ export default function NotFound() {
         <h1 className="nf-code">404</h1>
         <p className="nf-title">Out of tracking range</p>
         <p className="nf-sub">
-          No hand detected here — the cursor never landed on this page.
-          It may have been moved, deleted, or never placed at all.
+          Go back home what are you trying to do
         </p>
         <p className="nf-status" aria-hidden="true">
           ERR 404 · cursor xyz: —, —, — · pinch: open
@@ -32,7 +31,7 @@ export default function NotFound() {
           </Link>
         </div>
         <p className="nf-hint">
-          tip: press <kbd>R</kbd> in the lab to recenter your hand control
+          tip: press <kbd>R</kbd> to do something
         </p>
       </div>
     </div>
