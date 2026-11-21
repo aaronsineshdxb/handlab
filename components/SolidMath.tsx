@@ -36,7 +36,6 @@ interface SolidMathProps {
   /** Bumped when the async engine becomes ready; re-runs the push effects. */
   readyRev: number;
   studio: boolean;
-  onStudio: (v: boolean) => void;
 }
 
 function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => void; children: React.ReactNode; label?: string }) {
@@ -47,7 +46,7 @@ function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => v
   );
 }
 
-function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio, onStudio }: SolidMathProps) {
+function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio }: SolidMathProps) {
   const id = mathIdFor(shape);
   const [wireframe, setWireframe] = useState(false);
   const [matMode, setMatMode] = useState<StudioMaterial>("standard");
@@ -74,13 +73,8 @@ function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio, 
     <aside className="solid-math" aria-label="Solid mathematics">
       <div className="solid-math__head">
         <b>{id === "knot" ? "Torus knot" : SHAPE_DEFS[id].label} · live math</b>
-        <button className="mini" onClick={onReset} title="Reset dimensions to defaults">reset</button>
+        <button className="mini" onClick={onReset} title="Reset dimensions to defaults">Reset</button>
       </div>
-      <div className="sc-chips" role="group" aria-label="Learning mode">
-        <Chip on={!studio} onClick={() => onStudio(false)}>Learn</Chip>
-        <Chip on={studio} onClick={() => onStudio(true)}>Studio</Chip>
-      </div>
-
       {id === "knot" ? (
         <>
           <article className="sc-card">
@@ -159,6 +153,19 @@ function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio, 
   );
 }
 
+/** Substitution line that never breaks mid-token: expression sits left,
+ *  the ≈ result right — a wrap can only fall between the two. */
+function SubLine({ text }: { text: string }) {
+  const i = text.indexOf(" ≈ ");
+  if (i < 0) return <code className="sub">{text}</code>;
+  return (
+    <code className="sub sc-symline">
+      <span>{text.slice(0, i)}</span>
+      <b>≈&nbsp;{text.slice(i + 3)}</b>
+    </code>
+  );
+}
+
 function MathCards({ id, dims, onDims }: { id: ShowcaseShapeId; dims: ShapeDims; onDims: (key: keyof ShapeDims, value: number) => void }) {
   const def = SHAPE_DEFS[id];
   const m = metricsFor(id, dims);
@@ -166,27 +173,31 @@ function MathCards({ id, dims, onDims }: { id: ShowcaseShapeId; dims: ShapeDims;
     <>
       <article className="sc-card sc-card--vol">
         <label>Volume V</label>
-        <b>{m.volume.toFixed(2)} <span>cm³</span></b>
+        <b>{m.volume.toFixed(2)}&nbsp;<span>cm³</span></b>
         <code>{m.volumeSym}</code>
-        <code className="sub">{m.volumeSub}</code>
+        <SubLine text={m.volumeSub} />
       </article>
       <article className="sc-card sc-card--area">
         <label>Surface area A</label>
-        <b>{m.area.toFixed(2)} <span>cm²</span></b>
+        <b>{m.area.toFixed(2)}&nbsp;<span>cm²</span></b>
         <code>{m.areaSym}</code>
-        <code className="sub">{m.areaSub}</code>
+        <SubLine text={m.areaSub} />
       </article>
       <article className="sc-card sc-card--euler">
         <label>Faces · Edges · Vertices</label>
-        <b>{m.faces ?? "mesh"} <span>F</span> · {m.edges ?? "mesh"} <span>E</span> · {m.vertices ?? "mesh"} <span>V</span></b>
-        <code>{m.euler != null ? `V − E + F = ${m.vertices} − ${m.edges} + ${m.faces} = ${m.euler}` : "V − E + F → Studio mesh χ"}</code>
-        {def.eulerNote && <code className="sub">{def.eulerNote}</code>}
+        {m.faces != null ? (
+          <b>{m.faces}&nbsp;<span>F</span> · {m.edges}&nbsp;<span>E</span> · {m.vertices}&nbsp;<span>V</span></b>
+        ) : (
+          <b>smooth <span>· no flat faces</span></b>
+        )}
+        <code>{m.euler != null ? `V − E + F = ${m.vertices} − ${m.edges} + ${m.faces} = ${m.euler}` : (def.eulerNote ?? "V − E + F → Studio mesh χ")}</code>
+        {def.eulerNote && m.euler != null && <code className="sub">{def.eulerNote}</code>}
       </article>
       {def.params.map((p) => {
         const v = Number(dims[p.key] ?? def.defaults[p.key]);
         return (
           <label className="sc-slider" key={p.key}>
-            <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)} cm</b></span>
+            <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)}&nbsp;cm</b></span>
             <input type="range" min={p.min} max={p.max} step={p.step} value={v} onChange={(e) => onDims(p.key, Number(e.target.value))} aria-label={p.label} />
           </label>
         );

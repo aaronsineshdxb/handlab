@@ -6,9 +6,11 @@
 .sc-grid-overlay{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(var(--color-rule) 1px,transparent 1px),linear-gradient(90deg,var(--color-rule) 1px,transparent 1px);background-size:44px 44px;opacity:.28;mask-image:radial-gradient(ellipse 90% 85% at 50% 45%,var(--color-ink) 55%,transparent 100%)}
 
 .sc-header{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 18px;pointer-events:none;z-index:20}
+/* mode toggle shares the true page centre regardless of brand/action widths */
+.sc-mode{position:absolute;left:50%;top:14px;transform:translateX(-50%)}
 .sc-brand b{font-size:17px;letter-spacing:-.01em;text-transform:lowercase}
 .sc-brand b span{color:var(--color-ink-2);font-weight:500}
-.sc-brand i{display:block;font-style:normal;font-size:11px;color:var(--color-muted);margin-top:2px}
+.sc-brand i{display:block;font-style:normal;font-size:11px;color:var(--color-ink-2);margin-top:2px}
 .sc-mode{pointer-events:auto;display:flex;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:999px;padding:3px;box-shadow:var(--shadow-sm)}
 .sc-mode button{border:0;background:transparent;color:var(--color-ink-2);font-size:13px;font-weight:600;padding:9px 18px;border-radius:999px;cursor:pointer;white-space:nowrap}
 .sc-mode button.on{background:var(--color-ink);color:var(--color-paper)}
@@ -18,11 +20,12 @@
 .sc-btn:active{transform:translateY(1px)}
 
 .sc-rail{position:absolute;left:16px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:20}
-.sc-fab{width:46px;height:46px;border-radius:50%;background:var(--color-paper-2);border:1px solid var(--color-rule);color:var(--color-ink);font-size:20px;cursor:pointer;box-shadow:var(--shadow-sm);display:grid;place-items:center}
-.sc-fab.active{background:var(--color-ink);color:var(--color-paper);border-color:var(--color-ink)}
+.sc-fab{width:52px;height:52px;border-radius:14px;background:var(--color-paper-2);border:1px solid var(--color-rule);color:var(--color-ink);font-size:20px;cursor:pointer;box-shadow:var(--shadow-sm);display:grid;place-items:center;align-content:center}
+.sc-fab.active{background:var(--color-paper-3);border-color:var(--color-ink);color:var(--color-ink)}
+.sc-fab.active i{color:var(--color-ink-2)}
 .sc-fab:hover{border-color:var(--color-ink)}
 
-.sc-drawer{position:absolute;left:74px;top:50%;transform:translateY(-50%);width:300px;max-height:min(70vh,560px);overflow:auto;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:16px;box-shadow:var(--shadow-card);padding:14px;z-index:21}
+.sc-drawer{position:absolute;left:80px;top:50%;transform:translateY(-50%);width:300px;max-height:min(70vh,560px);overflow:auto;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:16px;box-shadow:var(--shadow-card);padding:14px;z-index:21}
 .sc-drawer--wide{width:340px}
 .sc-drawer__head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .sc-drawer__head b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-ink-2)}
@@ -52,13 +55,17 @@
 .sc-card{background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow-sm)}
 .sc-card label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-muted);font-weight:600}
 .sc-card b{display:block;font-size:22px;margin:4px 0;font-variant-numeric:tabular-nums}
-.sc-card b span{font-size:12px;color:var(--color-muted);font-weight:500}
+.sc-card b span{font-size:12px;color:var(--color-ink-2);font-weight:500}
 .sc-card code{display:block;font-family:var(--font-mono);font-size:11.5px;color:var(--color-ink);background:var(--color-paper);border:1px solid var(--color-rule);border-radius:8px;padding:5px 8px;margin-top:5px;white-space:normal;line-height:1.45}
+/* expression left, ≈ result right — wraps only between them, never mid-token */
+.sc-symline{display:flex;justify-content:space-between;gap:10px;white-space:nowrap}
+.sc-symline b{font-weight:400;color:var(--color-ink)}
 .sc-card code.sub{color:var(--color-ink-2);background:var(--color-paper-2)}
 .sc-mathcards{display:flex;flex-direction:column;gap:10px}
 .sc-mathcards article{border:1px solid var(--color-rule);border-radius:12px;padding:10px 12px;background:var(--color-paper-2)}
 .sc-mathcards label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted)}
 .sc-mathcards b{display:block;font-size:18px;margin:2px 0;font-variant-numeric:tabular-nums}
+.sc-mathcards b span{font-size:12px;color:var(--color-ink-2);font-weight:500}
 .sc-mathcards code{display:block;font-family:var(--font-mono);font-size:11px;background:var(--color-paper);border:1px solid var(--color-rule);border-radius:8px;padding:4px 7px;margin-top:4px;line-height:1.45;white-space:normal}
 .sc-mathcards code.sub{color:var(--color-ink-2)}
 
@@ -70,7 +77,7 @@
 .net-empty{border:1px dashed var(--color-rule-2);border-radius:12px;padding:14px;background:var(--color-paper)}
 
 /* ---------- solid-math panel (hand-tracking view, replaces lessons) ---------- */
-.solid-math{position:fixed;right:20px;top:92px;bottom:92px;z-index:var(--z-raised);width:308px;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:16px;padding:14px;box-shadow:var(--shadow-card);overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.solid-math{position:fixed;right:20px;top:92px;max-height:calc(100dvh - 184px);z-index:var(--z-raised);width:308px;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:16px;padding:14px 14px 20px;box-shadow:var(--shadow-card);overflow-y:auto;display:flex;flex-direction:column;gap:10px}
 .solid-math__head{display:flex;justify-content:space-between;align-items:center}
 .solid-math__head b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-ink-2)}
 .solid-math__head .mini{flex:0 0 auto;min-width:64px}
@@ -96,7 +103,18 @@
 .sc-status{position:absolute;left:16px;bottom:16px;z-index:20;display:flex;gap:8px;align-items:center;background:var(--color-paper-2);border:1px solid var(--color-rule);border-radius:999px;padding:8px 16px;font-size:12px;color:var(--color-ink-2);box-shadow:var(--shadow-sm);white-space:nowrap}
 .sc-status b{color:var(--color-ink);font-variant-numeric:tabular-nums}
 .sc-viddock{right:348px !important;bottom:16px !important}
-.sc-fallback-note{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:30;background:var(--color-paper-2);border:1px solid var(--color-rule);color:var(--color-ink-2);font-size:12px;padding:8px 16px;border-radius:999px;white-space:nowrap}
+.sc-fallback-note{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:10px;background:var(--color-paper-2);border:1px solid var(--color-rule);color:var(--color-ink-2);font-size:12px;padding:6px 8px 6px 16px;border-radius:999px;white-space:nowrap}
+.sc-fallback-note button{border:1px solid var(--color-rule-2);background:var(--color-paper-3);color:var(--color-ink);border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:15px;line-height:1;display:grid;place-items:center;font-weight:600}
+.sc-fallback-note button:hover{color:var(--color-ink);border-color:var(--color-ink)}
+.sc-fallback-note button:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+/* first-run onboarding cue — dimmed backdrop makes the layering explicit */
+.sc-hint-wrap{position:absolute;inset:0;z-index:15;display:grid;place-items:center;background:color-mix(in oklab, var(--color-paper) 62%, transparent);backdrop-filter:blur(2px)}
+.sc-hint{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;background:var(--color-paper-2);border:1px solid var(--color-rule-2);border-radius:16px;padding:20px 28px;box-shadow:var(--shadow-card)}
+.sc-hint b{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.sc-hint span{font-size:12px;color:var(--color-ink-2);line-height:1.5}
+.sc-hint button{margin-top:10px;border:1px solid var(--color-ink);background:var(--color-ink);color:var(--color-paper);border-radius:999px;padding:8px 20px;font-size:12px;font-weight:600;cursor:pointer}
+.sc-hint button:hover{background:var(--color-ink-2);border-color:var(--color-ink-2)}
+.sc-hint button:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
 .sc-brand{display:flex;flex-direction:column;align-items:flex-start;pointer-events:none}
 .sc-brand .sc-domains{position:static;margin-top:8px;z-index:auto;opacity:1}
 .sc-brand .sc-domains .domain-switch{pointer-events:auto}
@@ -104,6 +122,18 @@
 .sc-drawer kbd{font-family:var(--font-mono);background:var(--color-paper);border:1px solid var(--color-rule);border-radius:6px;padding:1px 6px;font-size:11px;color:var(--color-ink)}
 @media(max-width:900px){.sc-viddock{right:8px !important}}
 @media(max-width:720px){.sc-status{left:8px;bottom:auto;top:150px}.sc-domains{position:static}}
+/* depth readout lives inside the params pill as its final segment */
+.sc-params__depth{display:flex;flex-direction:column;gap:2px;min-width:150px;border-left:1px solid var(--color-rule);padding-left:16px;font-size:11px}
+.sc-params__depth .sc-slider__head span{text-transform:uppercase;letter-spacing:.05em}
+#depthfill{height:6px;background:var(--color-paper-3);border-radius:99px;overflow:hidden}
+#depthfill i{display:block;height:100%;width:50%;background:var(--color-accent);border-radius:99px;transition:width var(--dur-short) var(--ease-out)}
+/* rail: glyph + micro-label tool palette */
+.sc-fab{width:52px;height:52px;border-radius:14px}
+.sc-fab span{display:grid;place-items:center;width:100%;line-height:1;font-size:18px}
+.sc-fab i{display:block;font-style:normal;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--color-ink-2);text-align:center;line-height:1;margin-top:3px}
+/* dark theme: lift the grid + rules out of the mud */
+[data-theme="dark"] .sc-grid-overlay{opacity:.5}
+[data-theme="dark"] .sc-card code,[data-theme="dark"] .sc-mathcards code{border-color:var(--color-rule-2)}
 
 /* states — every interactive element: hover · focus · active · disabled */
 .sc-mode button:focus-visible,.sc-btn:focus-visible,.sc-fab:focus-visible,.sc-chip:focus-visible,.sc-shape:focus-visible,.sc-drawer__head button:focus-visible,.sc-net__head button:focus-visible,.sc-slider input:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}

@@ -102,6 +102,9 @@ function UnifiedLab() {
   const [mathOpen, setMathOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
+  // first-run onboarding hint + the dismissable 2D-fallback notice
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const [fallbackDismissed, setFallbackDismissed] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [engineRev, setEngineRev] = useState(0);
   // ---- lessons: seed data, active lesson/step, persisted progress ----
@@ -386,6 +389,9 @@ function UnifiedLab() {
     () => (studio ? [...SHAPES] : FOUNDATIONS),
     [studio],
   );
+  // Quiet onboarding cue for the no-camera landing state: shows once the
+  // engine is live, dismisses on click, and hides itself once tracking starts.
+  const showHint = !hintDismissed && ui.cam === "idle" && engineRev > 0;
   const mid = mathIdFor(ui.shape);
   const shapeLabel = mid === "knot" ? "knot" : SHAPE_DEFS[mid].label.toLowerCase();
   const params = mid === "knot" ? [] : SHAPE_DEFS[mid].params;
@@ -411,8 +417,21 @@ function UnifiedLab() {
         <div className="sc-grid-overlay" aria-hidden="true" />
       </div>
       <div id="cursor2d" ref={cursor2dRef}></div>
-      {is2D && (
-        <div className="sc-fallback-note">2D fallback mode — WebGL unavailable. Shapes, lines, webcam + save/load still work.</div>
+      {is2D && !fallbackDismissed && (
+        <div className="sc-fallback-note">
+          2D fallback mode — WebGL unavailable. Shapes, lines, webcam + save/load still work.
+          <button aria-label="Dismiss notice" onClick={() => setFallbackDismissed(true)}>×</button>
+        </div>
+      )}
+      {showHint && (
+        <div className="sc-hint-wrap" aria-label="Getting started">
+          <div className="sc-hint">
+            <b>pinch to place</b>
+            <span>or drag with the mouse · scroll to zoom</span>
+            <span>enable hand tracking for the full lab</span>
+            <button aria-label="Dismiss hint" onClick={() => setHintDismissed(true)}>Got it</button>
+          </div>
+        </div>
       )}
 
       <header className="sc-header">
@@ -427,22 +446,22 @@ function UnifiedLab() {
         </div>
         <div className="sc-header__actions">
           <button
-            className="sc-btn ghost"
+            className="sc-btn"
             onClick={() => (ui.cam === "loading" ? engineRef.current?.cancelWebcamLoad?.() : engineRef.current?.enableWebcam?.())}
           >
             {ui.cam === "live" ? "Restart hand" : ui.cam === "loading" ? "Cancel" : "Enable hand tracking"}
           </button>
-          <button className="sc-btn" onClick={onPhoto}>Export PNG</button>
+          <button className="sc-btn ghost" onClick={onPhoto}>Export PNG</button>
         </div>
       </header>
 
       <nav className="sc-rail" aria-label="Showcase controls">
-        <button className={"sc-fab" + (drawer === "shapes" ? " active" : "")} aria-pressed={drawer === "shapes"} aria-label="Shapes" title="Shape library" onClick={() => setDrawer((d) => (d === "shapes" ? null : "shapes"))}><span aria-hidden="true">▦</span></button>
-        <button className={"sc-fab" + (drawer === "line" ? " active" : "")} aria-pressed={drawer === "line"} aria-label="Line tools" title="Line + measure tools" onClick={() => setDrawer((d) => (d === "line" ? null : "line"))}><span aria-hidden="true">╱</span></button>
-        <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">◐</span></button>
-        <button className={"sc-fab" + (drawer === "help" ? " active" : "")} aria-pressed={drawer === "help"} aria-label="Gestures" title="Gesture map" onClick={() => setDrawer((d) => (d === "help" ? null : "help"))}><span aria-hidden="true">?</span></button>
-        <button className={"sc-fab" + (mathOpen ? " active" : "")} aria-pressed={mathOpen} aria-label="Math panel" title="Live mathematics" onClick={() => setMathOpen((v) => !v)}><span aria-hidden="true">∑</span></button>
-        <button className={"sc-fab" + (drawer === "lessons" ? " active" : "")} aria-pressed={drawer === "lessons"} aria-label="Lessons" title="Guided lessons" onClick={() => setDrawer((d) => (d === "lessons" ? null : "lessons"))}><span aria-hidden="true">≡</span></button>
+        <button className={"sc-fab" + (drawer === "shapes" ? " active" : "")} aria-pressed={drawer === "shapes"} aria-label="Shapes" title="Shape library" onClick={() => setDrawer((d) => (d === "shapes" ? null : "shapes"))}><span aria-hidden="true">▦</span><i>shapes</i></button>
+        <button className={"sc-fab" + (drawer === "line" ? " active" : "")} aria-pressed={drawer === "line"} aria-label="Line tools" title="Line + measure tools" onClick={() => setDrawer((d) => (d === "line" ? null : "line"))}><span aria-hidden="true">╱</span><i>lines</i></button>
+        <button className={"sc-fab" + (previewOpen ? " active" : "")} aria-pressed={previewOpen} aria-label="Camera preview" title="Webcam preview" onClick={() => setPreviewOpen((v) => !v)}><span aria-hidden="true">◐</span><i>camera</i></button>
+        <button className={"sc-fab" + (drawer === "help" ? " active" : "")} aria-pressed={drawer === "help"} aria-label="Gestures" title="Gesture map" onClick={() => setDrawer((d) => (d === "help" ? null : "help"))}><span aria-hidden="true">?</span><i>help</i></button>
+        <button className={"sc-fab" + (mathOpen ? " active" : "")} aria-pressed={mathOpen} aria-label="Math panel" title="Live mathematics" onClick={() => setMathOpen((v) => !v)}><span aria-hidden="true">∑</span><i>math</i></button>
+        <button className={"sc-fab" + (drawer === "lessons" ? " active" : "")} aria-pressed={drawer === "lessons"} aria-label="Lessons" title="Guided lessons" onClick={() => setDrawer((d) => (d === "lessons" ? null : "lessons"))}><span aria-hidden="true">≡</span><i>learn</i></button>
       </nav>
 
       {drawer === "shapes" && (
@@ -462,22 +481,22 @@ function UnifiedLab() {
           <AccentSection />
           <h4 className="solid-math__h">View</h4>
           <div className="sc-chips">
-            <button className={"sc-chip" + (ui.spin ? " on" : "")} aria-pressed={ui.spin} onClick={() => engineRef.current?.toggleSpin?.()}>spin</button>
-            <button className={"sc-chip" + (ui.grid ? " on" : "")} aria-pressed={ui.grid} onClick={() => engineRef.current?.toggleGrid?.()}>grid</button>
-            <button className="sc-chip" onClick={() => engineRef.current?.recenter?.()}>recenter</button>
+            <button className={"sc-chip" + (ui.spin ? " on" : "")} aria-pressed={ui.spin} onClick={() => engineRef.current?.toggleSpin?.()}>Spin</button>
+            <button className={"sc-chip" + (ui.grid ? " on" : "")} aria-pressed={ui.grid} onClick={() => engineRef.current?.toggleGrid?.()}>Grid</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.recenter?.()}>Recenter</button>
           </div>
           <h4 className="solid-math__h">Depth AI</h4>
           <div className="sc-chips">
-            <button className={"sc-chip" + (ui.depthOn ? " on" : "")} aria-pressed={ui.depthOn} onClick={() => void engineRef.current?.setDepthEnabled?.(!ui.depthOn)}>depth v2</button>
+            <button className={"sc-chip" + (ui.depthOn ? " on" : "")} aria-pressed={ui.depthOn} onClick={() => void engineRef.current?.setDepthEnabled?.(!ui.depthOn)}>Depth v2</button>
           </div>
           <p className="sc-note">{ui.depth}</p>
           <h4 className="solid-math__h">Scene</h4>
           <div className="sc-chips">
-            <button className="sc-chip" onClick={() => engineRef.current?.saveToStorage?.()}>save</button>
-            <button className="sc-chip" onClick={() => engineRef.current?.loadFromStorage?.()}>load</button>
-            <button className="sc-chip" onClick={onPhoto}>photo</button>
-            <button className="sc-chip" onClick={onExportFile}>file ↓</button>
-            <button className="sc-chip" onClick={() => fileRef.current?.click()}>file ↑</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.saveToStorage?.()}>Save</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.loadFromStorage?.()}>Load</button>
+            <button className="sc-chip" onClick={onPhoto}>Photo</button>
+            <button className="sc-chip" onClick={onExportFile}>File ↓</button>
+            <button className="sc-chip" onClick={() => fileRef.current?.click()}>File ↑</button>
           </div>
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImportFile(f); e.target.value = ""; }} />
         </aside>
@@ -487,13 +506,13 @@ function UnifiedLab() {
         <aside className="sc-drawer" aria-label="Line tools">
           <div className="sc-drawer__head"><b>Measure · lines [L]</b><button aria-label="Close" onClick={() => setDrawer(null)}>×</button></div>
           <div className="sc-chips">
-            <button className={"sc-chip" + (ui.lineMode ? " on" : "")} aria-pressed={ui.lineMode} onClick={() => engineRef.current?.setLineMode?.(!ui.lineMode)}>line: {ui.lineMode ? "on" : "off"}</button>
-            <button className={"sc-chip" + (ui.snapOn ? " on" : "")} aria-pressed={ui.snapOn} onClick={() => engineRef.current?.toggleSnap?.()}>snap</button>
+            <button className={"sc-chip" + (ui.lineMode ? " on" : "")} aria-pressed={ui.lineMode} onClick={() => engineRef.current?.setLineMode?.(!ui.lineMode)}>Line: {ui.lineMode ? "on" : "off"}</button>
+            <button className={"sc-chip" + (ui.snapOn ? " on" : "")} aria-pressed={ui.snapOn} onClick={() => engineRef.current?.toggleSnap?.()}>Snap</button>
           </div>
           <div className="sc-chips">
-            <button className="sc-chip" onClick={() => engineRef.current?.undo?.()}>undo</button>
-            <button className="sc-chip" onClick={() => engineRef.current?.clearLines?.()}>clear lines</button>
-            <button className="sc-chip" onClick={() => engineRef.current?.clearAll?.()}>clear solids</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.undo?.()}>Undo</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.clearLines?.()}>Clear lines</button>
+            <button className="sc-chip" onClick={() => engineRef.current?.clearAll?.()}>Clear solids</button>
           </div>
           <div className="sc-chips">
             <button
@@ -512,7 +531,7 @@ function UnifiedLab() {
               className={"sc-chip" + (rulerChip ? " on" : "")}
               aria-pressed={rulerChip}
               onClick={() => { const on = !!engineRef.current?.toggleRuler?.(); setRulerChip(on); }}
-            >ruler</button>
+            >Ruler</button>
           </div>
           <label className="sc-slider">
             <span className="sc-slider__head"><span>my hand span</span><b>{spanCm.toFixed(0)} cm</b></span>
@@ -561,8 +580,8 @@ function UnifiedLab() {
             snap={engineSnap}
           />
           <div className="sc-chips" style={{ marginTop: 8 }}>
-            <button className="sc-chip" disabled={!lessonId} onClick={onLessonExport}>lesson ↓</button>
-            <button className="sc-chip" onClick={() => lessonFileRef.current?.click()}>lesson ↑</button>
+            <button className="sc-chip" disabled={!lessonId} onClick={onLessonExport}>Lesson ↓</button>
+            <button className="sc-chip" onClick={() => lessonFileRef.current?.click()}>Lesson ↑</button>
           </div>
           <input ref={lessonFileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLessonImport(f); e.target.value = ""; }} />
         </aside>
@@ -574,11 +593,15 @@ function UnifiedLab() {
           const v = Number(dims[p.key] ?? paramDefault(p.key));
           return (
             <label className="sc-slider" key={p.key}>
-              <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)} cm</b></span>
+              <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)}&nbsp;cm</b></span>
               <input type="range" min={p.min} max={p.max} step={p.step} value={v} onChange={(e) => setDim(p.key, Number(e.target.value))} aria-label={p.label} />
             </label>
           );
         })}
+        <div className="sc-params__depth" aria-label="Hand depth">
+          <span className="sc-slider__head"><span>depth&nbsp;(z)</span><b id="t-z" ref={tZRef}>0.0</b></span>
+          <div id="depthfill"><i id="depthi" ref={depthiRef}></i></div>
+        </div>
       </div>
 
       <div className="sc-status" aria-label="Hand status">
@@ -587,11 +610,11 @@ function UnifiedLab() {
         <span aria-hidden="true">·</span>
         <span id="t-pinch" ref={tPinchRef}>open</span>
         <span aria-hidden="true">·</span>
-        <span><b id="t-count" ref={tCountRef}>0</b> solids</span>
+        <span><b id="t-count" ref={tCountRef}>0</b> placed</span>
       </div>
 
       {mathOpen && (
-        <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getEngine} readyRev={engineRev} studio={studio} onStudio={setMode} />
+        <SolidMath shape={ui.shape} dims={dims} onDims={setDim} onReset={resetDims} getEngine={getEngine} readyRev={engineRev} studio={studio} />
       )}
 
       <div id="video-dock" className={"video-dock sc-viddock" + (previewOpen ? "" : " is-collapsed")} aria-hidden={!previewOpen}>
@@ -604,11 +627,6 @@ function UnifiedLab() {
           <video id="cam" ref={videoRef} playsInline muted autoPlay disablePictureInPicture aria-label="Webcam preview"></video>
           <canvas id="skel" ref={skelRef} width={248} height={140} aria-hidden="true"></canvas>
         </div>
-      </div>
-
-      <div id="depthbar">
-        DEPTH (Z) <span id="t-z" ref={tZRef}>0.0</span>
-        <div id="depthfill"><i id="depthi" ref={depthiRef}></i></div>
       </div>
 
       <span id="t-xyz" ref={tXyzRef} className="sr-only">0, 0, 0</span>

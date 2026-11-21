@@ -41,6 +41,10 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // The home directory holds a stray package-lock.json, so Next.js would
+  // otherwise infer the workspace root as ~ and run output file tracing from
+  // there. Pin the root to this file's directory instead.
+  outputFileTracingRoot: __dirname,
   // motion/react is only imported inside the lazy lab/VR chunks, but without
   // this the bundler keeps the whole barrel available per importer. Measured
   // win is small (~KBs); the flag is free and cannot change behaviour.

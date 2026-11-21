@@ -120,13 +120,17 @@ export default function HandLabVR() {
   if (fatal)
     return (
       <div className="vr-fatal">
-        <h1>
-          HAND<span>LAB</span> VR
-        </h1>
-        <p>{fatal}</p>
-        <p>
-          <Link href="/">Back to desktop lab</Link>
-        </p>
+        <div>
+          <h1>
+            hand<span>lab</span> vr
+          </h1>
+          <p>{fatal}</p>
+          <p>
+            <Link className="btn" href="/">
+              Back to desktop lab
+            </Link>
+          </p>
+        </div>
       </div>
     );
 

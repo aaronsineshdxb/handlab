@@ -308,6 +308,11 @@ export class HandLabFallbackEngine {
   placeCurrentShape(): void {
     this.placeShapeAt({ x: this.cursor.x, y: this.cursor.y });
   }
+  /** Showcase first paint: hero solid at the world centre (API parity with
+   *  the WebGL engine's placeCenter, so the landing stage isn't empty). */
+  placeCenter(): void {
+    this.placeShapeAt({ x: 0, y: 0 });
+  }
   toggleSpin(): void {
     this.spin = !this.spin;
     this.emit();
@@ -1450,14 +1455,23 @@ export class HandLabFallbackEngine {
         g.arc(0, 0, r * 0.7, 0, 7);
         g.stroke();
         break;
-      case "cylinder":
+      case "cylinder": {
+        // proper cylinder silhouette: body + bottom bulge + visible top rim
+        const eh = r * 0.32;
         g.beginPath();
-        if (typeof (g as CanvasRenderingContext2D & { roundRect?: unknown }).roundRect === "function")
-          (g as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(-r, -r * 0.7, r * 2, r * 1.4, 6);
-        else g.rect(-r, -r * 0.7, r * 2, r * 1.4);
+        g.moveTo(-r, -eh);
+        g.lineTo(-r, eh);
+        g.ellipse(0, eh, r, eh, 0, Math.PI, 0, true);
+        g.lineTo(r, -eh);
+        g.ellipse(0, -eh, r, eh, 0, 0, Math.PI, true);
+        g.closePath();
         g.fill();
         g.stroke();
+        g.beginPath();
+        g.ellipse(0, -eh, r, eh, 0, 0, Math.PI * 2);
+        g.stroke();
         break;
+      }
       case "icosa":
       case "octa":
         g.beginPath();
