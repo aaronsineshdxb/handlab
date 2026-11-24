@@ -1,3 +1,4 @@
+import { onReducedMotionChange, prefersReducedMotion } from "./motion";
 /**
  * Standalone VR engine for the isolated `/vr` page.
  * No MediaPipe, no Depth Anything, no 2D fallback — WebXR only.
@@ -121,6 +122,8 @@ export class VRHandLabEngine {
   private boundsMat: THREE.LineBasicMaterial;
   private floorMat: THREE.ShadowMaterial;
   private themeOff: (() => void) | null = null;
+  private reducedMotion = prefersReducedMotion();
+  private motionOff: (() => void) | null = null;
 
   private cursor = new THREE.Group();
   private core: THREE.Mesh;
@@ -129,7 +132,8 @@ export class VRHandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: VrShapeName = "cube";
-  private color = "#5EEAD4";
+  private color = "#0D9488";
+  private cursorRest = sceneThemeNow().cursor;
   private geoCache: Partial<Record<VrShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};
   private hovered: THREE.Mesh | null = null;
@@ -206,8 +210,9 @@ export class VRHandLabEngine {
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType("local-floor");
 
-    this.scene.background = new THREE.Color(0xFCFCF9);
-    this.scene.fog = new THREE.Fog(0xFCFCF9, 14, 30);
+    const initTheme = sceneThemeNow();
+    this.scene.background = new THREE.Color(initTheme.bg);
+    this.scene.fog = new THREE.Fog(initTheme.bg, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -221,25 +226,26 @@ export class VRHandLabEngine {
 
     // desktop orbit preview (disabled while presenting)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
+    this.controls.enableDamping = !this.reducedMotion;
     this.controls.target.set(0, 0.4, 0);
     this.controls.maxDistance = 16;
     this.controls.minDistance = 1;
 
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9);
+    this.cursorRest = initTheme.cursor;
+    this.hemi = new THREE.HemisphereLight(initTheme.hemiSky, initTheme.hemiGround, 0.9);
     this.scene.add(this.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
-    this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
+    this.rimLight = new THREE.DirectionalLight(initTheme.rim, initTheme.rimIntensity);
     this.rimLight.position.set(-5, 3, -4);
     this.scene.add(this.rimLight);
 
-    this.grid = new THREE.GridHelper(14, 28, 0xCFC9B8, 0xE3DED0);
+    this.grid = new THREE.GridHelper(14, 28, initTheme.gridCenter, initTheme.gridMain);
     this.scene.add(this.grid);
-    this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
+    this.floorMat = new THREE.ShadowMaterial({ opacity: initTheme.floorOpacity });
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
       this.floorMat,
@@ -248,7 +254,7 @@ export class VRHandLabEngine {
     floor.position.y = -1.4;
     floor.receiveShadow = true;
     this.scene.add(floor);
-    this.boundsMat = new THREE.LineBasicMaterial({ color: 0xD8D2C2 });
+    this.boundsMat = new THREE.LineBasicMaterial({ color: initTheme.bounds });
     const bounds = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(8.4, 5.4, 8)),
       this.boundsMat,
@@ -279,6 +285,10 @@ export class VRHandLabEngine {
 
     this.applySceneTheme(currentTheme());
     this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
+    this.motionOff = onReducedMotionChange((reduced) => {
+      this.reducedMotion = reduced;
+      if (this.controls) this.controls.enableDamping = !reduced;
+    });
 
     this.hoverRing = new THREE.Mesh(
       new THREE.TorusGeometry(0.55, 0.025, 10, 40),
@@ -326,7 +336,7 @@ export class VRHandLabEngine {
       c.add(
         new THREE.Line(
           laserGeo,
-          new THREE.LineBasicMaterial({ color: 0x016A71, transparent: true, opacity: 0.7 }),
+          new THREE.LineBasicMaterial({ color: this.cursorRest, transparent: true, opacity: 0.7 }),
         ),
       );
       const idx = i;
@@ -433,7 +443,7 @@ export class VRHandLabEngine {
     const moved = start ? start.distanceTo(this.cursorPos) : 99;
     const quick = isQuickTap(downAt, performance.now(), moved);
     const wasGrabbing = this.grabbed !== null;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(this.cursorRest);
     if (quick && !wasGrabbing) this.tapAction();
     if (!quick || !wasGrabbing) {
       // hold-release drops a grabbed object
@@ -812,12 +822,6 @@ export class VRHandLabEngine {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     if (this.presenting) {
       this.setCursorFromController(0);
-      if (this.controllers[1]) {
-        // keep second controller laser length in sync for hover feedback
-        const c = this.controllers[1];
-        this._v1.set(0, 0, 0);
-        c.getWorldPosition(this._v1);
-      }
       this.pollHands();
       this.pollSticks(dt);
       if (this.grabbed) {
@@ -880,13 +884,14 @@ export class VRHandLabEngine {
     const downAt = this.pressT.get("mouse") ?? 0;
     const moved = this.mouseDownPos.distanceTo(this.cursorPos);
     this.pressT.delete("mouse");
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(this.cursorRest);
     const wasGrabbing = this.grabbed !== null;
     if (isQuickTap(downAt, performance.now(), moved) && !wasGrabbing) this.tapAction();
     this.grabbed = null;
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement | null;
     if (
       target &&
@@ -896,7 +901,10 @@ export class VRHandLabEngine {
     ) {
       return;
     }
-    if (e.key === "Escape" || e.key === "Enter") {
+    if (e.key === "Escape") {
+      if (this.lineMode) this.finishLine();
+    } else if (e.key === "Enter") {
+      if (target?.closest("button, a, select")) return;
       if (this.lineMode) this.finishLine();
     }
     if (e.key === "Delete" || e.key === "Backspace") {
@@ -962,10 +970,14 @@ export class VRHandLabEngine {
     this.scene.add(this.grid);
     // Guarded: applySceneTheme now runs after cursor creation, but keep this
     // safe against future reorderings.
+    this.cursorRest = p.cursor;
     if (this.core)
       (this.core.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
     if (this.ring)
       (this.ring.material as THREE.MeshBasicMaterial).color.setHex(p.cursor);
+    for (const laser of this.lasers) {
+      (laser.material as THREE.LineBasicMaterial).color.setHex(p.cursor);
+    }
   }
 
   dispose(): void {
@@ -974,6 +986,8 @@ export class VRHandLabEngine {
     if (session) void session.end().catch(() => undefined);
     this.themeOff?.();
     this.themeOff = null;
+    this.motionOff?.();
+    this.motionOff = null;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener("resize", this.onResize);
     window.visualViewport?.removeEventListener("resize", this.onResize);

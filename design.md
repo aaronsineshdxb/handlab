@@ -32,13 +32,13 @@ Axes: light / geometric-sans / cool.
 - `--color-ink-2`   oklch(38% 0.012 85)    — strong secondary
 - `--color-rule`    oklch(89% 0.008 85)    — hairlines
 - `--color-rule-2`  oklch(82% 0.01 85)     — stronger rules
-- `--color-muted`   oklch(56% 0.01 85)     — smoke #72706B
+- `--color-muted`   oklch(50% 0.01 85)     — smoke #66635B
 - `--color-neutral` oklch(45% 0.01 85)     — mid neutral
 - `--color-accent`  oklch(45% 0.075 202)   — teal voltage #016A71
 - `--color-accent-2` oklch(62% 0.10 198)   — bright teal #00A1AC
 - `--color-accent-ink` oklch(98.6% 0.005 95) — cream text on teal
 - `--color-focus`   oklch(45% 0.075 202)   — teal rings everywhere
-- `--color-good`    oklch(55% 0.12 155)    — positive #539E55 family
+- `--color-good`    oklch(46% 0.13 155)    — positive #1F7A4C family
 - `--color-warn`    oklch(52% 0.13 55)     — warning #97431A family
 - `--color-bad`     oklch(50% 0.14 20)     — negative #A23544 family
 
@@ -52,12 +52,12 @@ fog, grid, bounds, lights, floor shadow, and rest-state cursor; pinch/line
 state tints swap to their bright pair. Placed-object colors are user data and
 never change with the theme. 2D fallback picks its palette per frame.
 
-## Colour schemes
+## Color schemes
 User-selectable at will. `data-accent` on `<html>` (`teal | violet | forest |
 amber | rose | blue | custom`) re-keys only `--color-accent`,
 `--color-accent-2`, and `--color-focus`; paper/ink/rules/status never move so
 elevation and readability stay put. Picker lives in each lab toolbar
-(COLOUR SCHEME section, `components/bits/AccentPicker.tsx`): six preset
+(Color scheme section, `components/bits/AccentPicker.tsx`): six preset
 swatches + a custom `input[type=color]` well for any hex. Presets persist to
 `localStorage(handlab-scheme)`; custom hex persists to
 `localStorage(handlab-accent-custom)` and is painted inline
@@ -70,30 +70,22 @@ scheme; pinch/line state tints stay green/amber. The 2D fallback derives its
 cursor/halo per frame from the same scheme. Placed-object colors are user
 data and never change with the scheme.
 
-- `--color-paper`   oklch(15% 0.008 80)   — canvas #100E12
-- `--color-paper-2` oklch(20% 0.01 80)    — cards
-- `--color-paper-3` oklch(25% 0.012 80)   — fills
+- `--color-paper`   oklch(14.5% 0.006 85) — canvas #11100E
+- `--color-paper-2` oklch(19.5% 0.007 85) — cards #1B1A17
+- `--color-paper-3` oklch(24.5% 0.008 85) — fills #262420
 - `--color-ink`     oklch(93% 0.008 90)   — warm white text
-- `--color-ink-2`   oklch(80% 0.01 85)
-- `--color-rule`    oklch(28% 0.01 80)
-- `--color-rule-2`  oklch(34% 0.012 80)
-- `--color-muted`   oklch(68% 0.01 85)
-- `--color-neutral` oklch(60% 0.01 85)
+- `--color-ink-2`   oklch(84% 0.01 85)
+- `--color-rule`    oklch(29% 0.008 85)
+- `--color-rule-2`  oklch(36% 0.01 85)
+- `--color-muted`   oklch(66% 0.01 85)
+- `--color-neutral` oklch(56% 0.01 85)
 - `--color-accent`  oklch(72% 0.09 205)   — brightened teal #34B4C4
-- `--color-accent-ink` oklch(15% 0.008 80) — near-black text on teal
+- `--color-accent-ink` oklch(14.5% 0.006 85) — near-black text on teal
 - `--color-focus`   oklch(72% 0.09 205)
-- `--color-good`    oklch(70% 0.14 155)
+- `--color-good`    oklch(73% 0.14 155)
 - `--color-warn`    oklch(72% 0.12 65)
-- `--color-bad`     oklch(68% 0.13 20)
+- `--color-bad`     oklch(72% 0.13 20)
 - Shadows go black-based on dark (elevation still reads via lightness steps).
-
-Legacy aliases (do not use in new code, kept for compatibility):
-`--bg` → `--color-paper`, `--surface` → `--color-paper-2`,
-`--surface2` → `--color-paper-3`, `--fg` → `--color-ink`,
-`--muted` → `--color-muted`, `--accent` → `--color-accent`,
-`--accent2` → `--color-accent-2`, `--good` → `--color-good`,
-`--warn` → `--color-warn`, `--bad` → `--color-bad`,
-`--border` → `--color-rule`.
 
 ## Typography
 - Display: Geist, weight 500, style normal, tracking -0.015em (pplxSans voice)
@@ -182,7 +174,7 @@ See `tokens.css` at project root (source of truth).
   --color-ink: oklch(24% 0.012 85);
   --color-ink-2: oklch(38% 0.012 85);
   --color-rule: oklch(89% 0.008 85);
-  --color-muted: oklch(56% 0.01 85);
+  --color-muted: oklch(50% 0.01 85);
   --color-accent: oklch(45% 0.075 202);
   --color-accent-ink: oklch(98.6% 0.005 95);
   --color-focus: oklch(45% 0.075 202);
@@ -223,7 +215,7 @@ See `tokens.css` at project root (source of truth).
   --primary: 45% 0.075 202;
   --primary-foreground: 98.6% 0.005 95;
   --muted: 89% 0.008 85;
-  --muted-foreground: 56% 0.01 85;
+  --muted-foreground: 50% 0.01 85;
   --border: 89% 0.008 85;
   --input: 89% 0.008 85;
   --ring: 45% 0.075 202;
@@ -232,7 +224,7 @@ See `tokens.css` at project root (source of truth).
 ```
 
 ## Provenance
-- Pages inventoried: `app/page.tsx` (geometry workspace), `app/physics/page.tsx` (mechanics/electrostatics/optics), `app/chemistry/page.tsx` (VSEPR/wet-lab), `app/vr/page.tsx` (WebXR isolated), `app/not-found.tsx` (out-of-tracking-range 404).
+- Pages inventoried: `app/page.tsx` (geometry workspace), `app/physics/page.tsx` (mechanics/electrostatics/optics), `app/chemistry/page.tsx` (VSEPR/wet-lab), `app/vr/page.tsx` (WebXR isolated), `app/not-found.tsx` (out-of-tracking-range 404), `app/error.tsx` (runtime error boundary).
 - No prior `.hallmark/log.json`. First Hallmark run for this project.
 - Pre-flight preserved: Geist + Newsreader + Geist Mono via next/font, dark intent, Next.js routes.
 - Full remake (2026-09-28): Perplexity design language — cream canvas #FCFCF9,

@@ -18,7 +18,7 @@ import {
   sumDegrees,
   type Pt,
 } from "./geometry/chainMath";
-import { prefersReducedMotion } from "./motion";
+import { onReducedMotionChange, prefersReducedMotion } from "./motion";
 import {
   SCALE_MAX,
   SCALE_MIN,
@@ -63,6 +63,42 @@ export type CamState = "idle" | "loading" | "live";
 export type StudioMaterial = "standard" | "clay" | "flat";
 export type ClipAxis = "x" | "y" | "z" | null;
 
+/** Shared engine contract implemented by both HandLabEngine (WebGL) and
+ *  HandLabFallbackEngine (2D canvas). 3D-only Studio methods are optional. */
+export interface LabEngine {
+  setWireframe?: (on: boolean) => void;
+  setMaterialMode?: (mode: StudioMaterial) => void;
+  setDetail?: (level: number) => void;
+  setClip?: (axis: ClipAxis, pos: number) => void;
+  setSpawnScale?: (x: number, y: number, z: number) => void;
+  setShape: (s: ShapeName) => void;
+  setColor: (c: string) => void;
+  setLineMode: (on: boolean) => void;
+  toggleSnap: () => void;
+  setChainMathMode?: (kind: "angleSum" | "pythag", on: boolean) => void;
+  toggleRuler: () => boolean;
+  setRulerSpanCm: (cm: number) => void;
+  clearLines: () => void;
+  undo: () => void;
+  clearAll: () => void;
+  recenter: () => void;
+  toggleSpin: () => void;
+  toggleGrid: () => void;
+  saveToStorage: () => void;
+  loadFromStorage: () => void;
+  exportPNG: () => string | null;
+  exportScene: () => SceneData;
+  exportCheckSnap: (quizAnswers?: Record<string, number>) => SceneSnap;
+  importSceneJson: (text: string) => boolean;
+  enableWebcam: () => Promise<void> | void;
+  cancelWebcamLoad: () => void;
+  setDepthEnabled?: (on: boolean) => Promise<void> | void;
+  setCameraDistance?: (d: number) => void;
+  placeCenter: () => void;
+  placeCurrentShape: () => void;
+  dispose: () => void;
+}
+
 export interface UiState {
   shape: ShapeName;
   color: string;
@@ -77,7 +113,7 @@ export interface UiState {
 
 export const initialUiState: UiState = {
   shape: "cube",
-  color: "#5EEAD4",
+  color: "#0D9488",
   lineMode: false,
   snapOn: true,
   spin: false,
@@ -218,32 +254,46 @@ type LabelSprite = THREE.Sprite & {
   userData: { set(t: string): void; last?: string };
 };
 
-const LABEL_FONT = '600 52px "IBM Plex Mono",monospace';
+const LABEL_FONT = '600 44px ui-monospace, SFMono-Regular, Menlo, monospace';
 
-function makeLabel(color = "#ffd76a"): LabelSprite {
+function makeLabel(color = "#fde68a"): LabelSprite {
   const cv = document.createElement("canvas");
-  cv.width = 256;
-  cv.height = 128;
+  cv.width = 320;
+  cv.height = 112;
   const tex = new THREE.CanvasTexture(cv);
   const sp = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }),
   ) as LabelSprite;
-  sp.scale.set(1.15, 0.58, 1);
+  sp.scale.set(1.3, 0.46, 1);
   sp.renderOrder = 999;
   sp.userData.set = (t: string) => {
     if (sp.userData.last === t) return;
     sp.userData.last = t; // skip canvas redraws
     const g = cv.getContext("2d");
     if (!g) return;
-    g.clearRect(0, 0, 256, 128);
+    g.clearRect(0, 0, 320, 112);
     g.font = LABEL_FONT;
+    const w = Math.min(300, Math.max(120, g.measureText(t).width + 44));
+    const h = 76;
+    const x = (320 - w) / 2;
+    const y = (112 - h) / 2;
+    const r = h / 2;
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+    g.fillStyle = "rgba(27, 26, 23, 0.88)";
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = "rgba(252, 252, 249, 0.22)";
+    g.stroke();
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.lineWidth = 8;
-    g.strokeStyle = "rgba(0,0,0,.85)";
-    g.strokeText(t, 128, 64);
     g.fillStyle = color;
-    g.fillText(t, 128, 64);
+    g.fillText(t, 160, 57);
     tex.needsUpdate = true;
   };
   return sp;
@@ -441,6 +491,7 @@ export class HandLabEngine {
   private cursorPinch = 0x2E7D46;
   private cursorLine = 0xB26A00;
   private themeOff: (() => void) | null = null;
+  private motionOff: (() => void) | null = null;
 
   private cursor = new THREE.Group();
   private core: THREE.Mesh;
@@ -474,7 +525,7 @@ export class HandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
-  private color = "#5EEAD4";
+  private color = "#0D9488";
   /** Scale applied to newly placed meshes (driven by the solid-math panel
    *  sliders). Stored as ratios so defaults keep the exact legacy sizes. */
   private spawnScale: [number, number, number] = [1, 1, 1];
@@ -568,7 +619,17 @@ export class HandLabEngine {
   private lastDetectAt = -Infinity;
   private skelRaf = 0;
   private lastHands: NormalizedLandmark[][] = [];
-  private lastSkelSig = "";
+  private lastSkelHash = 0;
+  private skelW = 248;
+  private skelH = 140;
+  private skelRo: ResizeObserver | null = null;
+  private lastCur2dVis = false;
+  private lastHandOn: boolean | null = null;
+  private lastHandCount = -1;
+  private lastCursorHex = -1;
+  private lastDropX = NaN;
+  private lastDropY = NaN;
+  private lastDropZ = NaN;
   private landmarkerUsedCpu = false;
   private onVisibility: (() => void) | null = null;
   private wasHidden = false;
@@ -668,8 +729,9 @@ export class HandLabEngine {
     this.renderer.shadowMap.autoUpdate = false; // static scene: re-render shadows only when something moves
     this.renderer.localClippingEnabled = true; // studio slicing planes
 
-    this.scene.background = new THREE.Color(0xF8FAFC);
-    this.scene.fog = new THREE.Fog(0xF8FAFC, 14, 30);
+    const initTheme = sceneThemeNow();
+    this.scene.background = new THREE.Color(initTheme.bg);
+    this.scene.fog = new THREE.Fog(initTheme.bg, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(
       55,
@@ -686,20 +748,20 @@ export class HandLabEngine {
     this.controls.maxDistance = 16;
     this.controls.minDistance = 3;
 
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0xd8cfb8, 0.9);
+    this.hemi = new THREE.HemisphereLight(initTheme.hemiSky, initTheme.hemiGround, 0.9);
     this.scene.add(this.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(4, 7, 5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
-    this.rimLight = new THREE.DirectionalLight(0x016A71, 0.7);
+    this.rimLight = new THREE.DirectionalLight(initTheme.rim, initTheme.rimIntensity);
     this.rimLight.position.set(-5, 3, -4);
     this.scene.add(this.rimLight);
 
-    this.grid = new THREE.GridHelper(14, 28, 0xCBD5E1, 0xE2E8F0);
+    this.grid = new THREE.GridHelper(14, 28, initTheme.gridCenter, initTheme.gridMain);
     this.scene.add(this.grid);
-    this.floorMat = new THREE.ShadowMaterial({ opacity: 0.32 });
+    this.floorMat = new THREE.ShadowMaterial({ opacity: initTheme.floorOpacity });
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
       this.floorMat,
@@ -709,7 +771,7 @@ export class HandLabEngine {
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    this.boundsMat = new THREE.LineBasicMaterial({ color: 0xD8D2C2 });
+    this.boundsMat = new THREE.LineBasicMaterial({ color: initTheme.bounds });
     const bounds = new THREE.LineSegments(
       new THREE.EdgesGeometry(new THREE.BoxGeometry(8.4, 5.4, 8)),
       this.boundsMat,
@@ -764,6 +826,13 @@ export class HandLabEngine {
     // Runs after cursor meshes exist so accent re-skin covers zAxis/dropLine.
     this.applySceneTheme(currentTheme());
     this.themeOff = onThemeChange((t) => this.applySceneTheme(t));
+    this.motionOff = onReducedMotionChange((reduced) => {
+      this.reducedMotion = reduced;
+      if (reduced && this.controls.autoRotate) {
+        this.controls.autoRotate = false;
+        this.emit();
+      }
+    });
 
     /* ---------- hover + selection rings ---------- */
     this.hoverRing = new THREE.Mesh(
@@ -830,6 +899,18 @@ export class HandLabEngine {
     opts.canvas.addEventListener("webglcontextlost", this.onCtxLost);
 
     this.sctx = opts.skel.getContext("2d");
+    this.skelW = opts.skel.clientWidth || 248;
+    this.skelH = opts.skel.clientHeight || 140;
+    if (typeof ResizeObserver !== "undefined") {
+      this.skelRo = new ResizeObserver((entries) => {
+        const cr = entries[0]?.contentRect;
+        if (cr && cr.width > 0 && cr.height > 0) {
+          this.skelW = cr.width;
+          this.skelH = cr.height;
+        }
+      });
+      this.skelRo.observe(opts.skel);
+    }
 
     /* ---------- start with an empty scene — user places shapes ---------- */
 
@@ -940,6 +1021,8 @@ export class HandLabEngine {
     this.disposed = true;
     this.themeOff?.();
     this.themeOff = null;
+    this.motionOff?.();
+    this.motionOff = null;
     this.camRequest++; // invalidate any in-flight enableWebcam()
     if (this.onVisibility) {
       document.removeEventListener("visibilitychange", this.onVisibility);
@@ -948,6 +1031,8 @@ export class HandLabEngine {
     cancelAnimationFrame(this.tickRaf);
     cancelAnimationFrame(this.handRaf);
     cancelAnimationFrame(this.skelRaf);
+    this.skelRo?.disconnect();
+    this.skelRo = null;
     window.removeEventListener("pointermove", this.onPointerMove);
     // No wheel listener (zoom disabled) — nothing to remove.
     this.opts.canvas.removeEventListener(
@@ -1354,44 +1439,73 @@ export class HandLabEngine {
     const stale = (): boolean => req !== this.camRequest;
     this.emitCam("loading");
     try {
-      const { FilesetResolver, HandLandmarker } = await withTimeout(
-        import("@mediapipe/tasks-vision"),
-        30000,
-        "vision module",
-      );
-      if (stale() || this.disposed) return;
-      const files = await withTimeout(
-        FilesetResolver.forVisionTasks(WASM_URL),
-        30000,
-        "wasm backend",
-      );
-      if (stale() || this.disposed) return;
-      const { landmarker: nextLandmarker, usedCpu } = await withTimeout(
-        createLandmarker(files, HandLandmarker),
-        30000,
-        "model load",
-      );
-      this.landmarkerUsedCpu = usedCpu;
-      if (stale() || this.disposed) {
-        try {
-          nextLandmarker.close();
-        } catch {
-          /* noop */
-        }
-        return;
-      }
-      const stream = await withTimeout(
+      // Start webcam permission/hardware warm-up in parallel with MediaPipe WASM/model load.
+      const maxFps = this.isIPad ? 24 : 30;
+      const idealFps = this.isIPad ? 20 : 30;
+      const streamPromise = withTimeout(
         navigator.mediaDevices.getUserMedia({
           video: {
             width: 640,
             height: 480,
             facingMode: "user",
-            frameRate: { max: 45 },
+            frameRate: { ideal: idealFps, max: maxFps },
           },
         }),
         30000,
         "camera",
       );
+      const modelPromise = (async () => {
+        const { FilesetResolver, HandLandmarker } = await withTimeout(
+          import("@mediapipe/tasks-vision"),
+          30000,
+          "vision module",
+        );
+        if (stale() || this.disposed) return null;
+        const files = await withTimeout(
+          FilesetResolver.forVisionTasks(WASM_URL),
+          30000,
+          "wasm backend",
+        );
+        if (stale() || this.disposed) return null;
+        return withTimeout(
+          createLandmarker(files, HandLandmarker),
+          30000,
+          "model load",
+        );
+      })();
+      let nextLandmarker: HandLandmarker | null = null;
+      let usedCpu = false;
+      let stream: MediaStream | null = null;
+      const [modelRes, streamRes] = await Promise.allSettled([
+        modelPromise,
+        streamPromise,
+      ]);
+      if (modelRes.status === "fulfilled" && modelRes.value) {
+        nextLandmarker = modelRes.value.landmarker;
+        usedCpu = modelRes.value.usedCpu;
+      }
+      if (streamRes.status === "fulfilled") stream = streamRes.value;
+      if (modelRes.status === "rejected" || streamRes.status === "rejected") {
+        stream?.getTracks().forEach((t) => t.stop());
+        try {
+          nextLandmarker?.close();
+        } catch {
+          /* noop */
+        }
+        throw modelRes.status === "rejected"
+          ? modelRes.reason
+          : (streamRes as PromiseRejectedResult).reason;
+      }
+      if (!nextLandmarker || !stream) {
+        stream?.getTracks().forEach((t) => t.stop());
+        try {
+          nextLandmarker?.close();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
+      this.landmarkerUsedCpu = usedCpu;
       if (stale() || this.disposed) {
         stream.getTracks().forEach((t) => t.stop());
         try {
@@ -1673,30 +1787,40 @@ export class HandLabEngine {
 
   /** Cross-section slicing plane (Studio). Null axis disables it. */
   setClip(axis: ClipAxis, pos: number): void {
+    const wasActive = this.clipAxis !== null;
+    const isActive = axis !== null;
     this.clipAxis = axis;
     this.clipPos = Number.isFinite(pos) ? Math.min(3, Math.max(-3, pos)) : 0;
     const planes = this.clipPlanesList();
-    Object.values(this.matCache).forEach((m) => {
-      m.clippingPlanes = planes;
-      m.needsUpdate = true;
-    });
-    if (this.clipHelper) {
-      this.scene.remove(this.clipHelper);
-      this.clipHelper.geometry.dispose();
-      (this.clipHelper.material as THREE.Material).dispose();
-      this.clipHelper = null;
+    // Only recompile shaders when toggling clipping on/off; moving the plane
+    // mutates the shared THREE.Plane normal/constant uniform in place.
+    if (wasActive !== isActive) {
+      Object.values(this.matCache).forEach((m) => {
+        m.clippingPlanes = planes;
+        m.needsUpdate = true;
+      });
     }
-    if (!axis) return;
-    const helper = new THREE.Mesh(
-      new THREE.PlaneGeometry(9, 9),
-      new THREE.MeshBasicMaterial({
-        color: 0x0ea5e9,
-        transparent: true,
-        opacity: 0.12,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      }),
-    );
+    if (!axis) {
+      if (this.clipHelper) this.clipHelper.visible = false;
+      return;
+    }
+    if (!this.clipHelper) {
+      this.clipHelper = new THREE.Mesh(
+        new THREE.PlaneGeometry(9, 9),
+        new THREE.MeshBasicMaterial({
+          color: 0x0ea5e9,
+          transparent: true,
+          opacity: 0.12,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      this.scene.add(this.clipHelper);
+    }
+    const helper = this.clipHelper;
+    helper.visible = true;
+    helper.position.set(0, 0, 0);
+    helper.rotation.set(0, 0, 0);
     if (axis === "x") {
       helper.rotation.y = Math.PI / 2;
       helper.position.x = this.clipPos;
@@ -1706,8 +1830,6 @@ export class HandLabEngine {
     } else {
       helper.position.z = this.clipPos;
     }
-    this.clipHelper = helper;
-    this.scene.add(helper);
   }
 
   private hrFor(s: ShapeName): number {
@@ -1803,8 +1925,8 @@ export class HandLabEngine {
     const quick =
       performance.now() - this.pinchStartT < 380 && !this.pinchMoved;
     this.pinchHeld = false;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(0x016A71);
+    (this.core.material as THREE.MeshBasicMaterial).color.setHex(this.cursorRest);
+    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(this.cursorRest);
     if (this.grabbed && !quick) {
       this.grabbed = null;
     }
@@ -2011,7 +2133,7 @@ export class HandLabEngine {
 
   private ensureRulerLabel(): void {
     if (this.rulerLabel) return;
-    this.rulerLabel = makeLabel("#8affc1");
+    this.rulerLabel = makeLabel("#86efac");
     this.rulerGroup.add(this.rulerLabel);
   }
 
@@ -2058,9 +2180,11 @@ export class HandLabEngine {
     const el = document.elementFromPoint(x, y);
     const hit = el?.closest?.("button,input") as HTMLElement | null;
     const cursor2d = this.opts.cursor2d;
-    cursor2d.style.display = "block";
-    cursor2d.style.left = x + "px";
-    cursor2d.style.top = y + "px";
+    if (!this.lastCur2dVis) {
+      this.lastCur2dVis = true;
+      cursor2d.style.display = "block";
+    }
+    cursor2d.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%)`;
     if (down && hit) {
       this.uiDownEl = hit;
       return true;
@@ -2173,7 +2297,7 @@ export class HandLabEngine {
       L.handles.push(h);
     });
     for (let i = 1; i < n - 1; i++) {
-      const lab = makeLabel("#7cf7ff");
+      const lab = makeLabel("#fcfcf9");
       L.group.add(lab);
       L.angLabels.push({ sp: lab, i });
       L.labels.push(lab);
@@ -2209,7 +2333,7 @@ export class HandLabEngine {
     const closed = this.isClosed(L);
     const total = polyTotal(L.pts, closed);
     if (!L.sumLabel) {
-      L.sumLabel = makeLabel(closed ? "#8affc1" : "#ffd76a");
+      L.sumLabel = makeLabel(closed ? "#86efac" : "#fde68a");
       L.sumLabel.scale.set(1.9, 0.95, 1);
       L.group.add(L.sumLabel);
     }
@@ -2335,7 +2459,7 @@ export class HandLabEngine {
         const deg = THREE.MathUtils.radToDeg(
           Math.acos(THREE.MathUtils.clamp(d1.dot(d2), -1, 1)),
         );
-        const lab = makeLabel("#ff9de2");
+        const lab = makeLabel("#fde68a");
         lab.userData.set(deg.toFixed(0) + "°");
         lab.position.copy(A.p).lerp(B.p, 0.5);
         lab.position.y += 0.44;
@@ -2485,6 +2609,7 @@ export class HandLabEngine {
   /* ---------- keyboard ---------- */
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement | null;
     if (
       target &&
@@ -2623,25 +2748,27 @@ export class HandLabEngine {
 
   private drawSkel(all: NormalizedLandmark[][] | undefined, pinched = false): void {
     if (!this.sctx) return;
-    // 21 landmarks x N hands. Rounding to ~2px on a 248x140 preview is below
-    // perceptual threshold, so this skips most redraws while the hand is still
-    // or moving slowly.
-    const sig = (all || [])
-      .map((lm) =>
-        lm
-          .map((p) => `${Math.round(p.x * 124)},${Math.round(p.y * 70)}`)
-          .join(";"),
-      )
-      .join("|");
-    if (sig === this.lastSkelSig) return;
-    this.lastSkelSig = sig;
+    // 21 landmarks x N hands. Numeric FNV-1a hash of quantized coordinates
+    // (~2px on a 248x140 preview) skips redraws with zero string allocations.
+    let h = pinched ? 0x811c9dc5 : 0x01000193;
+    if (all) {
+      for (let hi = 0; hi < all.length; hi++) {
+        const lm = all[hi];
+        h = Math.imul(h ^ (hi + 1), 0x01000193);
+        for (let i = 0; i < lm.length; i++) {
+          const p = lm[i];
+          const qx = (p.x * 124 + 0.5) | 0;
+          const qy = (p.y * 70 + 0.5) | 0;
+          h = Math.imul(h ^ ((qx << 10) ^ qy), 0x01000193);
+        }
+      }
+    }
+    if (h === this.lastSkelHash) return;
+    this.lastSkelHash = h;
     const g = this.sctx;
     const canvas = this.opts.skel;
-    // Match the overlay to the displayed video box: the canvas is absolutely
-    // positioned over #cam (inset:0, 100%x100%), so use its CSS size, not the
-    // hardcoded 248x140. Sync the backing store for crisp lines on hidpi.
-    const W = canvas.clientWidth || 248;
-    const H = canvas.clientHeight || 140;
+    const W = this.skelW || 248;
+    const H = this.skelH || 140;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const needW = Math.max(1, Math.round(W * dpr));
     const needH = Math.max(1, Math.round(H * dpr));
@@ -2668,10 +2795,16 @@ export class HandLabEngine {
       vw > 0 && vh > 0 ? W - (nx * vw * s - cropX) : (1 - nx) * W;
     const mapY = (ny: number): number =>
       vw > 0 && vh > 0 ? ny * vh * s - cropY : ny * H;
+    const accentNum = sceneThemeNow().cursor;
+    const ar = (accentNum >> 16) & 255;
+    const ag = (accentNum >> 8) & 255;
+    const ab = accentNum & 255;
+    const accentStroke = `rgba(${ar},${ag},${ab},.92)`;
+    const accentJoint = `rgb(${Math.min(255, ar + 45)},${Math.min(255, ag + 45)},${Math.min(255, ab + 45)})`;
     (all || []).forEach((lm) => {
       g.strokeStyle = pinched
         ? "rgba(61,220,132,.95)"
-        : "rgba(77,163,255,.9)";
+        : accentStroke;
       g.lineWidth = 1.4;
       g.beginPath();
       EDGES.forEach(([a, b]) => {
@@ -2679,7 +2812,7 @@ export class HandLabEngine {
         g.lineTo(mapX(lm[b].x), mapY(lm[b].y));
       });
       g.stroke();
-      g.fillStyle = pinched ? "#3ddc84" : "#9cc6ff";
+      g.fillStyle = pinched ? "#3ddc84" : accentJoint;
       lm.forEach((p, i) => {
         if (i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20) {
           g.beginPath();
@@ -2691,10 +2824,14 @@ export class HandLabEngine {
   }
 
   private setHandUI(on: boolean, n = 0): void {
-    this.opts.hud["d-hand"].className = "dot " + (on ? "on" : "off");
-    this.opts.hud["t-hand"].textContent = on
-      ? `${n} hand${n > 1 ? "s" : ""}`
-      : "none";
+    if (this.lastHandOn !== on || (on && this.lastHandCount !== n)) {
+      this.lastHandOn = on;
+      this.lastHandCount = n;
+      this.opts.hud["d-hand"].className = "dot " + (on ? "on" : "off");
+      this.opts.hud["t-hand"].textContent = on
+        ? `${n} hand${n > 1 ? "s" : ""}`
+        : "none";
+    }
     if (!on) {
       // tracking lost: release all gesture state so nothing sticks,
       // and report waiting instead of a stale pinch state
@@ -2715,7 +2852,10 @@ export class HandLabEngine {
       this.fistSince = 0;
       this.fistFrames = 0;
       this.anchor = null;
-      this.opts.cursor2d.style.display = "none";
+      if (this.lastCur2dVis) {
+        this.lastCur2dVis = false;
+        this.opts.cursor2d.style.display = "none";
+      }
       this.setText("t-pinch", "waiting");
     }
   }
@@ -2865,12 +3005,11 @@ export class HandLabEngine {
     }
 
     // fist: no fingers extended — require 3 stable frames before arming the timer
-    const open = [
-      extended(main, 8, 6),
-      extended(main, 12, 10),
-      extended(main, 16, 14),
-      extended(main, 20, 18),
-    ].filter(Boolean).length;
+    const open =
+      (extended(main, 8, 6) ? 1 : 0) +
+      (extended(main, 12, 10) ? 1 : 0) +
+      (extended(main, 16, 14) ? 1 : 0) +
+      (extended(main, 20, 18) ? 1 : 0);
     const thumbOpen = D(main[4], main[0]) > D(main[3], main[0]) * 1.25;
     const isFist = open === 0 && !thumbOpen;
     this.fistFrames = isFist ? this.fistFrames + 1 : 0;
@@ -2935,17 +3074,32 @@ export class HandLabEngine {
       this.ring.rotation.z += dt * 1.2;
       this.zAxis.scale.y = 1 + Math.sin(t * 3) * 0.15;
     }
-    const p = this.dropLine.geometry.attributes.position as THREE.BufferAttribute;
-    p.setXYZ(0, this.cursor.position.x, this.cursor.position.y, this.cursor.position.z);
-    p.setXYZ(1, this.cursor.position.x, -2.6, this.cursor.position.z);
-    p.needsUpdate = true;
-    this.dropLine.computeLineDistances();
+    const cx = this.cursor.position.x;
+    const cy = this.cursor.position.y;
+    const cz = this.cursor.position.z;
+    if (
+      Math.abs(cx - this.lastDropX) > 1e-5 ||
+      Math.abs(cy - this.lastDropY) > 1e-5 ||
+      Math.abs(cz - this.lastDropZ) > 1e-5
+    ) {
+      this.lastDropX = cx;
+      this.lastDropY = cy;
+      this.lastDropZ = cz;
+      const p = this.dropLine.geometry.attributes.position as THREE.BufferAttribute;
+      p.setXYZ(0, cx, cy, cz);
+      p.setXYZ(1, cx, -2.6, cz);
+      p.needsUpdate = true;
+      this.dropLine.computeLineDistances();
+    }
 
     // cursor tint: green = pinching, amber = line mode, themed = normal
     const cc = this.pinchHeld ? this.cursorPinch : this.lineMode ? this.cursorLine : this.cursorRest;
-    (this.core.material as THREE.MeshBasicMaterial).color.setHex(cc);
-    (this.ring.material as THREE.MeshBasicMaterial).color.setHex(cc);
-    this.glow.color.setHex(cc);
+    if (cc !== this.lastCursorHex) {
+      this.lastCursorHex = cc;
+      (this.core.material as THREE.MeshBasicMaterial).color.setHex(cc);
+      (this.ring.material as THREE.MeshBasicMaterial).color.setHex(cc);
+      this.glow.color.setHex(cc);
+    }
 
     // line-mode previews: rubber band + snap ring. The ring shows whenever
     // the cursor is near a snappable point or line — even before the chain
@@ -3007,9 +3161,14 @@ export class HandLabEngine {
     if (this.handActive) {
       const s = this.screenOf(this.cursor.position);
       const c2d = this.opts.cursor2d;
-      c2d.style.display = s.behind ? "none" : "block";
-      c2d.style.left = s.x + "px";
-      c2d.style.top = s.y + "px";
+      const vis = !s.behind;
+      if (vis !== this.lastCur2dVis) {
+        this.lastCur2dVis = vis;
+        c2d.style.display = vis ? "block" : "none";
+      }
+      if (vis) {
+        c2d.style.transform = `translate3d(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px, 0) translate(-50%, -50%)`;
+      }
       // Follow the active theme + colour scheme like the 3D ring: themed
       // rest colour, theme-aware pinch green. No hardcoded hex.
       const cc2d = this.pinchState ? this.cursorPinch : this.cursorRest;

@@ -102,9 +102,9 @@ describe("LessonPanel rendering", () => {
       />,
     );
 
-    expect(markup).toContain("OBJECTIVES");
+    expect(markup).toContain("Objectives");
     expect(markup).toContain("No steps are available for this lesson at the selected level.");
-    expect(markup).not.toContain("STEP ");
+    expect(markup).not.toContain("Step 1");
     expect(markup.match(/<button[^>]*disabled=""/g)).toHaveLength(2);
   });
 });

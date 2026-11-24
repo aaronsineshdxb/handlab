@@ -1,0 +1,290 @@
+/**
+ * TypeScript loader and zero-copy framebuffer bridge for the Rust/WASM 3D
+ * software rasterizer (`public/wasm/handlab_sw3d.wasm`).
+ *
+ * Requires zero WebGL: renders directly into WASM linear memory and blits to
+ * a plain 2D `<canvas>` via `putImageData()`.
+ */
+
+import type { ClipAxis, ShapeName, StudioMaterial } from "./engine";
+
+export const SW3D_WASM_URL = "/wasm/handlab_sw3d.wasm";
+
+const SHAPE_IDS: Record<ShapeName, number> = {
+  cube: 0,
+  sphere: 1,
+  cone: 2,
+  torus: 3,
+  cylinder: 4,
+  icosa: 5,
+  knot: 6,
+  tetra: 7,
+  octa: 8,
+  capsule: 9,
+  prism: 10,
+  pyramid: 11,
+  dome: 12,
+  hexPrism: 13,
+  triPrism: 14,
+};
+
+interface Sw3dExports {
+  memory: WebAssembly.Memory;
+  sw3d_resize(w: number, h: number): void;
+  sw3d_fb_ptr(): number;
+  sw3d_fb_len(): number;
+  sw3d_set_camera(yaw: number, pitch: number, dist: number): void;
+  sw3d_set_theme(
+    bg: number,
+    gridMain: number,
+    gridCenter: number,
+    bounds: number,
+  ): void;
+  sw3d_set_flags(
+    showGrid: number,
+    wireframe: number,
+    matMode: number,
+    detail: number,
+    clipAxis: number,
+    clipPos: number,
+  ): void;
+  sw3d_begin_frame(): void;
+  sw3d_push_object(
+    shapeId: number,
+    x: number,
+    y: number,
+    z: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    rotY: number,
+    rotX: number,
+    rgb: number,
+    flags: number,
+  ): void;
+  sw3d_begin_line(closed: number, rgb: number): void;
+  sw3d_push_line_pt(x: number, y: number, z: number): void;
+  sw3d_set_cursor(
+    visible: number,
+    x: number,
+    y: number,
+    z: number,
+    rgb: number,
+  ): void;
+  sw3d_render(): void;
+  sw3d_project(x: number, y: number, z: number): number;
+  sw3d_proj_x(): number;
+  sw3d_proj_y(): number;
+  sw3d_proj_z(): number;
+  sw3d_unproject_z0(u: number, v: number): number;
+  sw3d_unproj_x(): number;
+  sw3d_unproj_y(): number;
+}
+
+export function parseHexColor(css: string, fallback = 0x0ea5e9): number {
+  const s = css.trim();
+  if (s.startsWith("#")) {
+    const h = s.slice(1);
+    if (h.length === 3) {
+      const r = parseInt(h[0] + h[0], 16);
+      const g = parseInt(h[1] + h[1], 16);
+      const b = parseInt(h[2] + h[2], 16);
+      if (Number.isFinite(r + g + b)) return (r << 16) | (g << 8) | b;
+    } else if (h.length >= 6) {
+      const n = parseInt(h.slice(0, 6), 16);
+      if (Number.isFinite(n)) return n & 0xffffff;
+    }
+  }
+  return fallback;
+}
+
+export class Sw3dRenderer {
+  private ex: Sw3dExports;
+  private w = 1;
+  private h = 1;
+  private imgData: ImageData | null = null;
+  private lastBuf: ArrayBufferLike | null = null;
+  private lastPtr = 0;
+
+  private constructor(exports: Sw3dExports) {
+    this.ex = exports;
+  }
+
+  static async load(url = SW3D_WASM_URL): Promise<Sw3dRenderer> {
+    if (typeof WebAssembly === "undefined") {
+      throw new Error("WebAssembly is unavailable in this browser");
+    }
+    let inst: WebAssembly.Instance;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url} (${res.status})`);
+    }
+    if (typeof WebAssembly.instantiateStreaming === "function") {
+      try {
+        const out = await WebAssembly.instantiateStreaming(res.clone(), {});
+        inst = out.instance;
+      } catch {
+        const bytes = await res.arrayBuffer();
+        const out = await WebAssembly.instantiate(bytes, {});
+        inst = out.instance;
+      }
+    } else {
+      const bytes = await res.arrayBuffer();
+      const out = await WebAssembly.instantiate(bytes, {});
+      inst = out.instance;
+    }
+    return new Sw3dRenderer(inst.exports as unknown as Sw3dExports);
+  }
+
+  resize(w: number, h: number): void {
+    const nw = Math.max(1, Math.min(2560, Math.round(w)));
+    const nh = Math.max(1, Math.min(1440, Math.round(h)));
+    if (nw === this.w && nh === this.h && this.imgData) return;
+    this.w = nw;
+    this.h = nh;
+    this.ex.sw3d_resize(nw, nh);
+    this.imgData = null;
+  }
+
+  setCamera(yaw: number, pitch: number, dist: number): void {
+    this.ex.sw3d_set_camera(yaw, pitch, dist);
+  }
+
+  setTheme(
+    bg: number,
+    gridMain: number,
+    gridCenter: number,
+    bounds: number,
+  ): void {
+    this.ex.sw3d_set_theme(bg, gridMain, gridCenter, bounds);
+  }
+
+  setFlags(opts: {
+    showGrid: boolean;
+    wireframe: boolean;
+    matMode: StudioMaterial;
+    detail: number;
+    clipAxis: ClipAxis;
+    clipPos: number;
+  }): void {
+    const mat = opts.matMode === "clay" ? 1 : opts.matMode === "flat" ? 2 : 0;
+    const axis =
+      opts.clipAxis === "x"
+        ? 1
+        : opts.clipAxis === "y"
+          ? 2
+          : opts.clipAxis === "z"
+            ? 3
+            : 0;
+    this.ex.sw3d_set_flags(
+      opts.showGrid ? 1 : 0,
+      opts.wireframe ? 1 : 0,
+      mat,
+      opts.detail,
+      axis,
+      opts.clipPos,
+    );
+  }
+
+  beginFrame(): void {
+    this.ex.sw3d_begin_frame();
+  }
+
+  pushObject(opts: {
+    shape: ShapeName;
+    x: number;
+    y: number;
+    z: number;
+    sx: number;
+    sy: number;
+    sz: number;
+    rotY: number;
+    rotX: number;
+    rgb: number;
+    hovered: boolean;
+    selected: boolean;
+  }): void {
+    const flags = (opts.hovered ? 1 : 0) | (opts.selected ? 2 : 0);
+    this.ex.sw3d_push_object(
+      SHAPE_IDS[opts.shape] ?? 0,
+      opts.x,
+      opts.y,
+      opts.z,
+      opts.sx,
+      opts.sy,
+      opts.sz,
+      opts.rotY,
+      opts.rotX,
+      opts.rgb,
+      flags,
+    );
+  }
+
+  pushLine(
+    pts: { x: number; y: number; z: number }[],
+    closed: boolean,
+    rgb: number,
+  ): void {
+    if (pts.length < 2) return;
+    this.ex.sw3d_begin_line(closed ? 1 : 0, rgb);
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      this.ex.sw3d_push_line_pt(p.x, p.y, p.z);
+    }
+  }
+
+  setCursor(
+    visible: boolean,
+    x: number,
+    y: number,
+    z: number,
+    rgb: number,
+  ): void {
+    this.ex.sw3d_set_cursor(visible ? 1 : 0, x, y, z, rgb);
+  }
+
+  renderAndBlit(ctx: CanvasRenderingContext2D): void {
+    this.ex.sw3d_render();
+    const ptr = this.ex.sw3d_fb_ptr();
+    const len = this.ex.sw3d_fb_len();
+    const buf = this.ex.memory.buffer;
+    if (
+      !this.imgData ||
+      this.lastBuf !== buf ||
+      this.lastPtr !== ptr ||
+      this.imgData.width !== this.w ||
+      this.imgData.height !== this.h
+    ) {
+      const view = new Uint8ClampedArray(buf, ptr, len);
+      this.imgData = new ImageData(view, this.w, this.h);
+      this.lastBuf = buf;
+      this.lastPtr = ptr;
+    }
+    ctx.putImageData(this.imgData, 0, 0);
+  }
+
+  project(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+    if (this.ex.sw3d_project(x, y, z) === 0) return null;
+    return {
+      x: this.ex.sw3d_proj_x(),
+      y: this.ex.sw3d_proj_y(),
+      z: this.ex.sw3d_proj_z(),
+    };
+  }
+
+  unprojectZ0(u: number, v: number): { x: number; y: number } | null {
+    if (this.ex.sw3d_unproject_z0(u, v) === 0) return null;
+    return {
+      x: this.ex.sw3d_unproj_x(),
+      y: this.ex.sw3d_unproj_y(),
+    };
+  }
+
+  get width(): number {
+    return this.w;
+  }
+
+  get height(): number {
+    return this.h;
+  }
+}

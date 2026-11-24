@@ -1,3 +1,4 @@
+import { onReducedMotionChange, prefersReducedMotion } from "./motion";
 /* HANDLAB 2D fallback engine — used when WebGL context creation fails.
  * Same public API surface as HandLabEngine (lib/engine.ts) so
  * components/HandLab.tsx can drive either one through a union type.
@@ -13,13 +14,16 @@ import {
   SHAPES,
   initialUiState,
   type CamState,
+  type ClipAxis,
   type EngineOpts,
   type HudNodes,
   type Measurement,
   type SceneData,
   type ShapeName,
+  type StudioMaterial,
   type UiState,
 } from "./engine";
+import { Sw3dRenderer, parseHexColor } from "./sw3d";
 import type { SceneSnap } from "./lessons/checks";
 import { pythagorasOf } from "./geometry/chainMath";
 import { shouldDetect } from "./handRate";
@@ -31,7 +35,10 @@ import {
   scaleFactorForDist,
 } from "./twoHandScale";
 import {
+  sceneThemeNow,
   ACCENTS,
+  SCENE_THEMES,
+  currentTheme,
   isAccentName,
   isValidCustomHex,
   onThemeChange,
@@ -39,6 +46,30 @@ import {
 
 export { SHAPES, initialUiState };
 export type { CamState, EngineOpts, HudNodes, Measurement, SceneData, ShapeName, UiState };
+
+const SOFTWARE_WEBGL_RE =
+  /swiftshader|llvmpipe|softpipe|software rasterizer|microsoft basic render|mesa offscreen|angle.*swiftshader/i;
+
+/** True when WebGL is backed by a slow CPU software rasterizer (SwiftShader,
+ *  llvmpipe, WARP) where the Rust/WASM 3D engine is significantly faster. */
+export function isSoftwareWebGL(): boolean {
+  try {
+    const cv = document.createElement("canvas");
+    const gl =
+      (cv.getContext("webgl2") as WebGLRenderingContext | null) ??
+      (cv.getContext("webgl") as WebGLRenderingContext | null);
+    if (!gl) return false;
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = dbg
+      ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? "")
+      : String(gl.getParameter(gl.RENDERER) ?? "");
+    const lose = gl.getExtension("WEBGL_lose_context");
+    lose?.loseContext();
+    return SOFTWARE_WEBGL_RE.test(renderer);
+  } catch {
+    return false;
+  }
+}
 
 export function isWebGLAvailable(): boolean {
   try {
@@ -164,6 +195,25 @@ export class HandLabFallbackEngine {
   private viewH = 0;
   private viewBase = 1;
   private themeOff: (() => void) | null = null;
+  private reducedMotion = prefersReducedMotion();
+  private motionOff: (() => void) | null = null;
+  // Rust/WASM software 3D rasterizer (loaded async, zero WebGL required).
+  private sw3d: Sw3dRenderer | null = null;
+  private wireframe = false;
+  private matMode: StudioMaterial = "standard";
+  private detail = 1;
+  private clipAxis: ClipAxis = null;
+  private clipPos = 0;
+  private camYaw = 0.22;
+  private camPitch = 0.26;
+  private camDist = 9.0;
+  private orbiting = false;
+  private pendingOrbit = false;
+  private orbitStartX = 0;
+  private orbitStartY = 0;
+  private orbitLastX = 0;
+  private orbitLastY = 0;
+  private lastSw3dSig = "";
   private cachedC: {
     bg: string;
     gridFaint: string;
@@ -216,6 +266,13 @@ export class HandLabFallbackEngine {
     this.onResize();
     this.refreshTheme();
     this.themeOff = onThemeChange(() => this.refreshTheme());
+    this.motionOff = onReducedMotionChange((reduced) => {
+      this.reducedMotion = reduced;
+      if (reduced && this.spin) {
+        this.spin = false;
+        this.emit();
+      }
+    });
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     // Zoom disabled: no wheel listener.
@@ -224,6 +281,23 @@ export class HandLabFallbackEngine {
     window.visualViewport?.addEventListener("resize", this.onResize);
     window.addEventListener("orientationchange", this.onResize);
     opts.canvas.addEventListener("pointerdown", this.onCanvasPointerDown);
+    opts.canvas.addEventListener("contextmenu", this.onContextMenu);
+    opts.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+
+    // Load the Rust/WASM 3D software rasterizer asynchronously (~59KB).
+    // Until it resolves, draw() uses the instant 2D canvas path so first paint
+    // is never blocked.
+    void Sw3dRenderer.load()
+      .then((renderer) => {
+        if (this.disposed) return;
+        this.sw3d = renderer;
+        this.syncSw3dTheme();
+        this.syncSw3dFlags();
+        renderer.setCamera(this.camYaw, this.camPitch, this.camDist);
+      })
+      .catch(() => {
+        /* stay on 2D canvas fallback if WASM fails to load */
+      });
 
     // Start with an empty scene — user places shapes.
     this.setCount();
@@ -239,6 +313,8 @@ export class HandLabFallbackEngine {
     cancelAnimationFrame(this.handRaf);
     this.themeOff?.();
     this.themeOff = null;
+    this.motionOff?.();
+    this.motionOff = null;
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
     // No wheel listener (zoom disabled) — nothing to remove.
@@ -250,6 +326,9 @@ export class HandLabFallbackEngine {
       "pointerdown",
       this.onCanvasPointerDown,
     );
+    this.opts.canvas.removeEventListener("contextmenu", this.onContextMenu);
+    this.opts.canvas.removeEventListener("wheel", this.onWheel);
+    this.sw3d = null;
     if (this.toastT) clearTimeout(this.toastT);
     try {
       this.landmarker?.close();
@@ -481,50 +560,73 @@ export class HandLabFallbackEngine {
     const stale = (): boolean => req !== this.camRequest;
     this.emitCam("loading");
     try {
-      const { FilesetResolver, HandLandmarker } = await withTimeout(
-        import("@mediapipe/tasks-vision"),
-        30000,
-        "vision module",
-      );
-      if (stale() || this.disposed) return;
-      const files = await withTimeout(
-        FilesetResolver.forVisionTasks(WASM_URL),
-        30000,
-        "wasm backend",
-      );
-      if (stale() || this.disposed) return;
-      // CPU delegate: works without WebGL/GPU (the whole point of 2D mode)
-      const nextLandmarker = await withTimeout(
-        HandLandmarker.createFromOptions(files, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-          runningMode: "VIDEO",
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        }),
-        30000,
-        "model load",
-      );
-      if (stale() || this.disposed) {
-        try {
-          nextLandmarker.close();
-        } catch {
-          /* noop */
-        }
-        return;
-      }
-      const stream = await withTimeout(
+      // Start webcam permission/hardware warm-up in parallel with MediaPipe WASM/model load.
+      const streamPromise = withTimeout(
         navigator.mediaDevices.getUserMedia({
           video: {
             width: 640,
             height: 480,
             facingMode: "user",
-            frameRate: { max: 45 },
+            frameRate: { ideal: 30, max: 30 },
           },
         }),
         30000,
         "camera",
       );
+      const modelPromise = (async () => {
+        const { FilesetResolver, HandLandmarker } = await withTimeout(
+          import("@mediapipe/tasks-vision"),
+          30000,
+          "vision module",
+        );
+        if (stale() || this.disposed) return null;
+        const files = await withTimeout(
+          FilesetResolver.forVisionTasks(WASM_URL),
+          30000,
+          "wasm backend",
+        );
+        if (stale() || this.disposed) return null;
+        // CPU delegate: works without WebGL/GPU (the whole point of 2D mode)
+        return withTimeout(
+          HandLandmarker.createFromOptions(files, {
+            baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+            runningMode: "VIDEO",
+            numHands: 2,
+            minHandDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          }),
+          30000,
+          "model load",
+        );
+      })();
+      let nextLandmarker: HandLandmarker | null = null;
+      let stream: MediaStream | null = null;
+      const [modelRes, streamRes] = await Promise.allSettled([
+        modelPromise,
+        streamPromise,
+      ]);
+      if (modelRes.status === "fulfilled") nextLandmarker = modelRes.value;
+      if (streamRes.status === "fulfilled") stream = streamRes.value;
+      if (modelRes.status === "rejected" || streamRes.status === "rejected") {
+        stream?.getTracks().forEach((t) => t.stop());
+        try {
+          nextLandmarker?.close();
+        } catch {
+          /* noop */
+        }
+        throw modelRes.status === "rejected"
+          ? modelRes.reason
+          : (streamRes as PromiseRejectedResult).reason;
+      }
+      if (!nextLandmarker || !stream) {
+        stream?.getTracks().forEach((t) => t.stop());
+        try {
+          nextLandmarker?.close();
+        } catch {
+          /* noop */
+        }
+        return;
+      }
       if (stale() || this.disposed) {
         stream.getTracks().forEach((t) => t.stop());
         try {
@@ -747,7 +849,68 @@ export class HandLabFallbackEngine {
     this.viewBase = Math.min(w / WORLD_W, h / WORLD_H) * this.zoom;
   }
 
+  /** Wireframe overlay for placed solids (Rust/WASM 3D Studio). */
+  setWireframe(on: boolean): void {
+    this.wireframe = on;
+    this.syncSw3dFlags();
+  }
+
+  /** Material shading mode (standard / clay / flat) in Rust/WASM 3D. */
+  setMaterialMode(mode: StudioMaterial): void {
+    this.matMode = mode;
+    this.syncSw3dFlags();
+  }
+
+  /** Tessellation level 0-2 in Rust/WASM 3D. */
+  setDetail(level: number): void {
+    this.detail = Math.min(2, Math.max(0, Math.round(level)));
+    this.syncSw3dFlags();
+  }
+
+  /** Cross-section slicing plane in Rust/WASM 3D. */
+  setClip(axis: ClipAxis, pos: number): void {
+    this.clipAxis = axis;
+    this.clipPos = Number.isFinite(pos) ? Math.min(3, Math.max(-3, pos)) : 0;
+    this.syncSw3dFlags();
+  }
+
+  /** Match WebGL camera distance framing (used by ShowcaseLab hero paint). */
+  setCameraDistance(d: number): void {
+    if (!Number.isFinite(d)) return;
+    this.camDist = Math.max(3.2, Math.min(16, d));
+    this.sw3d?.setCamera(this.camYaw, this.camPitch, this.camDist);
+  }
+
+  private onWheel = (e: WheelEvent): void => {
+    if (!this.sw3d) return;
+    e.preventDefault();
+    this.camDist = Math.max(3.2, Math.min(16, this.camDist + e.deltaY * 0.006));
+    this.sw3d.setCamera(this.camYaw, this.camPitch, this.camDist);
+  };
+
+  private syncSw3dFlags(): void {
+    this.sw3d?.setFlags({
+      showGrid: this.grid,
+      wireframe: this.wireframe,
+      matMode: this.matMode,
+      detail: this.detail,
+      clipAxis: this.clipAxis,
+      clipPos: this.clipPos,
+    });
+  }
+
+  private syncSw3dTheme(): void {
+    if (!this.sw3d) return;
+    const t = SCENE_THEMES[currentTheme()];
+    this.sw3d.setTheme(t.bg, t.gridMain, t.gridCenter, t.bounds);
+  }
+
+  private onContextMenu = (e: MouseEvent): void => {
+    if (this.sw3d) e.preventDefault();
+  };
+
   private refreshTheme(): void {
+    this.syncSw3dTheme();
     // Mirrors sceneAccentFor() in lib/theme.ts — keep the preset/custom
     // mapping in sync if that function changes.
     const dark = document.documentElement.dataset.theme === "dark";
@@ -771,7 +934,7 @@ export class HandLabFallbackEngine {
     const ag = (accentNum >> 8) & 255;
     const ab = accentNum & 255;
     this.cachedC = {
-      bg: dark ? "#100E12" : "#FCFCF9",
+      bg: dark ? "#11100E" : "#FCFCF9",
       gridFaint: dark ? "rgba(237,233,226,.10)" : "rgba(39,37,30,.12)",
       grid: dark ? "#2A2721" : "#CFC9B8",
       snap: dark ? "#3ddc84" : "#2E7D46",
@@ -788,6 +951,12 @@ export class HandLabFallbackEngine {
     // Cached viewport (see updateViewCache): canvas is fullscreen fixed.
     const w = this.viewW || window.innerWidth || 1;
     const h = this.viewH || window.innerHeight || 1;
+    // When the Rust/WASM 3D engine is active, intersect the perspective camera
+    // ray with the z=0 plane so picking/dragging aligns at any orbit angle.
+    if (this.sw3d) {
+      const hit = this.sw3d.unprojectZ0(clientX / w, clientY / h);
+      if (hit) return hit;
+    }
     const base = this.viewBase || Math.min(w / WORLD_W, h / WORLD_H);
     const px = clientX;
     const py = clientY;
@@ -894,6 +1063,23 @@ export class HandLabFallbackEngine {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    if (this.pendingOrbit && this.sw3d && !this.orbiting) {
+      if (Math.hypot(e.clientX - this.orbitStartX, e.clientY - this.orbitStartY) > 4) {
+        this.orbiting = true;
+        this.pinchHeld = false;
+        document.body.style.cursor = "grabbing";
+      }
+    }
+    if (this.orbiting && this.sw3d) {
+      const dx = e.clientX - this.orbitLastX;
+      const dy = e.clientY - this.orbitLastY;
+      this.orbitLastX = e.clientX;
+      this.orbitLastY = e.clientY;
+      this.camYaw -= dx * 0.008;
+      this.camPitch = Math.max(-1.25, Math.min(1.25, this.camPitch + dy * 0.008));
+      this.sw3d.setCamera(this.camYaw, this.camPitch, this.camDist);
+      return;
+    }
     if (this.handActive) return; // hand drives the cursor when live
     const p = this.toWorld(e.clientX, e.clientY);
     this.cursor.x = p.x;
@@ -903,11 +1089,18 @@ export class HandLabFallbackEngine {
       this.dragging.y = p.y;
     } else {
       this.hovered = this.nearestObj(p.x, p.y, 0.5);
-      document.body.style.cursor = this.hovered ? "pointer" : "default";
+      document.body.style.cursor = this.hovered ? "pointer" : this.sw3d ? "grab" : "default";
     }
   };
 
   private onCanvasPointerDown = (e: PointerEvent): void => {
+    if (this.sw3d && (e.button === 2 || e.button === 1 || e.altKey)) {
+      this.orbiting = true;
+      this.orbitLastX = e.clientX;
+      this.orbitLastY = e.clientY;
+      document.body.style.cursor = "grabbing";
+      return;
+    }
     const p = this.toWorld(e.clientX, e.clientY);
     this.cursor.x = p.x;
     this.cursor.y = p.y;
@@ -938,14 +1131,28 @@ export class HandLabFallbackEngine {
     if (hit) {
       this.selected = hit;
       this.dragging = hit;
+    } else if (this.sw3d) {
+      // In Rust/WASM 3D mode, left-dragging empty space orbits the camera
+      // (matching Three.js OrbitControls), while a quick click places a shape.
+      this.pendingOrbit = true;
+      this.orbitStartX = e.clientX;
+      this.orbitStartY = e.clientY;
+      this.orbitLastX = e.clientX;
+      this.orbitLastY = e.clientY;
     } else {
       this.placeShapeAt(p);
     }
   };
 
   private onPointerUp = (): void => {
+    if (this.pendingOrbit && !this.orbiting) {
+      this.placeShapeAt(this.downPos);
+    }
+    this.pendingOrbit = false;
+    this.orbiting = false;
     this.pinchHeld = false;
     this.dragging = null;
+    document.body.style.cursor = this.hovered ? "pointer" : this.sw3d ? "grab" : "default";
   };
 
   /** Shared shape spawn (mouse Shift+click, keyboard P, toolbar place). */
@@ -966,9 +1173,10 @@ export class HandLabFallbackEngine {
   }
 
   // Zoom disabled: view scale stays fixed — wheel does nothing.
-  private onWheel = (_e: WheelEvent): void => {};
+
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const target = e.target as HTMLElement | null;
     if (
       target &&
@@ -1255,10 +1463,16 @@ export class HandLabFallbackEngine {
       vw > 0 && vh > 0 ? W - (nx * vw * s - cropX) : (1 - nx) * W;
     const mapY = (ny: number): number =>
       vw > 0 && vh > 0 ? ny * vh * s - cropY : ny * H;
+    const accentNum = sceneThemeNow().cursor;
+    const ar = (accentNum >> 16) & 255;
+    const ag = (accentNum >> 8) & 255;
+    const ab = accentNum & 255;
+    const accentStroke = `rgba(${ar},${ag},${ab},.92)`;
+    const accentJoint = `rgb(${Math.min(255, ar + 45)},${Math.min(255, ag + 45)},${Math.min(255, ab + 45)})`;
     (all || []).forEach((lm) => {
       g.strokeStyle = pinched
         ? "rgba(61,220,132,.95)"
-        : "rgba(77,163,255,.9)";
+        : accentStroke;
       g.lineWidth = 1.4;
       g.beginPath();
       EDGES.forEach(([a, b]) => {
@@ -1266,7 +1480,7 @@ export class HandLabFallbackEngine {
         g.lineTo(mapX(lm[b].x), mapY(lm[b].y));
       });
       g.stroke();
-      g.fillStyle = pinched ? "#3ddc84" : "#9cc6ff";
+      g.fillStyle = pinched ? "#3ddc84" : accentJoint;
       lm.forEach((p, i) => {
         if (i === 0 || i === 4 || i === 8 || i === 12 || i === 16 || i === 20) {
           g.beginPath();
@@ -1285,7 +1499,7 @@ export class HandLabFallbackEngine {
     if (document.hidden) return;
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
-    if (this.spin) {
+    if (this.spin && !this.reducedMotion) {
       for (const o of this.objs) o.rot += dt * 0.6;
     }
     this.draw();
@@ -1299,6 +1513,10 @@ export class HandLabFallbackEngine {
   };
 
   private draw(): void {
+    if (this.sw3d) {
+      this.drawSw3d(this.sw3d);
+      return;
+    }
     const cv = this.opts.canvas;
     const g = this.ctx;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1409,6 +1627,115 @@ export class HandLabFallbackEngine {
         g.stroke();
       }
     }
+  }
+
+  /** Render the scene via the Rust/WASM 3D software rasterizer and blit to 2D canvas. */
+  private drawSw3d(sw: Sw3dRenderer): void {
+    const cv = this.opts.canvas;
+    const g = this.ctx;
+    const cssW = Math.max(1, this.viewW || window.innerWidth);
+    const cssH = Math.max(1, this.viewH || window.innerHeight);
+    if (cv.style.width !== `${cssW}px` || cv.style.height !== `${cssH}px`) {
+      cv.style.width = `${cssW}px`;
+      cv.style.height = `${cssH}px`;
+    }
+    // Render at full crisp native CSS resolution (and up to 1.25x on HiDPI
+    // when idle), stepping to 0.72x only while actively orbiting so drags
+    // stay fluid and snap immediately back to tack-sharp full res on release.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    const resScale = this.orbiting ? 0.72 : dpr;
+    const rw = Math.max(160, Math.min(1920, Math.round(cssW * resScale)));
+    const rh = Math.max(120, Math.min(1080, Math.round(cssH * resScale)));
+    if (cv.width !== rw || cv.height !== rh) {
+      cv.width = rw;
+      cv.height = rh;
+      this.lastSw3dSig = "";
+    }
+    // Render-on-demand: skip full CPU rasterization + putImageData when the
+    // scene, camera, cursor, theme, and studio flags are unchanged.
+    const sigParts = [
+      rw,
+      rh,
+      this.camYaw.toFixed(3),
+      this.camPitch.toFixed(3),
+      this.camDist.toFixed(2),
+      this.grid ? 1 : 0,
+      this.wireframe ? 1 : 0,
+      this.matMode,
+      this.detail,
+      this.clipAxis ?? "",
+      this.clipPos.toFixed(2),
+      this.cursor.x.toFixed(3),
+      this.cursor.y.toFixed(3),
+      this.pinchHeld ? 1 : 0,
+      currentTheme(),
+      this.objs.length,
+      this.chains.length,
+    ];
+    for (const o of this.objs) {
+      sigParts.push(
+        o.s,
+        o.x.toFixed(3),
+        o.y.toFixed(3),
+        (o.k ?? 1).toFixed(3),
+        o.rot.toFixed(3),
+        o.c,
+        o === this.hovered ? 1 : 0,
+        o === this.selected ? 1 : 0,
+      );
+    }
+    for (const L of this.chains) {
+      sigParts.push(L.closed ? 1 : 0, L.pts.length);
+      for (const p of L.pts) {
+        sigParts.push(p.x.toFixed(3), p.y.toFixed(3));
+      }
+    }
+    const sig = sigParts.join(",");
+    if (sig === this.lastSw3dSig) return;
+    this.lastSw3dSig = sig;
+
+    sw.resize(rw, rh);
+    this.syncSw3dFlags();
+    sw.beginFrame();
+
+    const C = this.cachedC;
+    const lineRgb = parseHexColor(C?.line ?? "#f59e0b", 0xf59e0b);
+    const snapRgb = parseHexColor(C?.snap ?? "#2e7d46", 0x2e7d46);
+    const themeFallback = sceneThemeNow().cursor;
+    const cursorRgb = parseHexColor(
+      this.pinchHeld ? (C?.pinch ?? "#2e7d46") : (C?.cursor ?? ""),
+      themeFallback,
+    );
+
+    for (const o of this.objs) {
+      const k = o.k ?? 1;
+      sw.pushObject({
+        shape: o.s,
+        x: o.x,
+        y: o.y,
+        z: 0,
+        sx: k,
+        sy: k,
+        sz: k,
+        rotY: o.rot,
+        rotX: 0.2,
+        rgb: parseHexColor(o.c, 0x0ea5e9),
+        hovered: o === this.hovered,
+        selected: o === this.selected,
+      });
+    }
+
+    for (const L of this.chains) {
+      if (L.pts.length < 2) continue;
+      sw.pushLine(
+        L.pts.map((p) => ({ x: p.x, y: p.y, z: 0 })),
+        L.closed,
+        L.closed ? snapRgb : lineRgb,
+      );
+    }
+
+    sw.setCursor(true, this.cursor.x, this.cursor.y, 0, cursorRgb);
+    sw.renderAndBlit(g);
   }
 
   private paintShape(

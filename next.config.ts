@@ -23,9 +23,13 @@ import type { NextConfig } from "next";
 //     fails with a bare network error rather than an obvious 403, so keep
 //     jsdelivr out and keep the vendored copy in sync with node_modules:
 //       cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.* public/ort/
+//   - Fonts are self-hosted at build time via `next/font/google`, so
+//     font-src and style-src stay same-origin without external Google Fonts
+//     hosts.
 //   - script-src keeps 'unsafe-eval'/'unsafe-inline': required by Next.js
-//     runtime + Transformers.js WASM workers. DOM XSS risk stays low —
-//     the codebase uses no dangerouslySetInnerHTML/innerHTML/eval.
+//     runtime + Transformers.js WASM workers, plus the static THEME_INIT
+//     bootstrap script injected via dangerouslySetInnerHTML in app/layout.tsx
+//     (which is a compile-time constant with no user-controlled input).
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
@@ -33,8 +37,8 @@ const CSP = [
   "connect-src 'self'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
-  "font-src 'self' https://fonts.gstatic.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
   "frame-ancestors 'self'",
   "object-src 'none'",
   "base-uri 'self'",

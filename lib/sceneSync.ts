@@ -15,7 +15,7 @@ export const SCENE_SYNC_MS = 100;
 export interface SceneSync {
   /** Request a sync. At most one notification fires per SCENE_SYNC_MS. */
   (): void;
-  /** Notify immediately if a sync is pending (used on unmount/teardown). */
+  /** Notify immediately if a sync is pending. */
   flush(): void;
   /** Cancel any pending notification. Safe to call twice. */
   dispose(): void;
@@ -41,7 +41,9 @@ export function createSceneSync(onChange: () => void): SceneSync {
     timer = setInterval(notify, SCENE_SYNC_MS);
   }) as SceneSync;
 
-  sync.flush = notify;
+  sync.flush = (): void => {
+    if (timer !== null) notify();
+  };
   sync.dispose = stop;
   return sync;
 }

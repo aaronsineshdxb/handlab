@@ -74,6 +74,6 @@ describe("shapes in line mode", () => {
   });
 
   it("VR toolbar exposes a place action that works in line mode", () => {
-    expect(renderToStaticMarkup(<HandLabVR />)).toMatch(/place /);
+    expect(renderToStaticMarkup(<HandLabVR />)).toMatch(/Place /);
   });
 });

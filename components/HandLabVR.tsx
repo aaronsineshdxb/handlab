@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   VR_SHAPES,
   VRHandLabEngine,
-  type VrShapeName,
   type VrUiState,
 } from "../lib/vr-engine";
 import { isVRSupported, supportHint, xrApiPresent } from "../lib/xr/session";
@@ -13,23 +12,19 @@ import Magnet from "./bits/Magnet";
 import ColorWell from "./bits/ColorWell";
 import ThemeToggle from "./bits/ThemeToggle";
 import { AccentSection } from "./bits/AccentPicker";
-
-const GLYPHS: Record<VrShapeName, { g: string; label: string }> = {
-  cube: { g: "◼", label: "cube" },
-  sphere: { g: "●", label: "sphere" },
-  cone: { g: "▲", label: "cone" },
-  torus: { g: "◎", label: "torus" },
-  cylinder: { g: "⬢", label: "cyl" },
-  icosa: { g: "⬣", label: "gem" },
-  knot: { g: "∿", label: "knot" },
-  tetra: { g: "△", label: "tetra" },
-  octa: { g: "◇", label: "octa" },
-  capsule: { g: "⬯", label: "capsule" },
-};
+import {
+  ArrowLeftIcon,
+  DownloadIcon,
+  HeadsetIcon,
+  LineToolIcon,
+  SHAPE_LABELS,
+  ShapeGlyph,
+  UploadIcon,
+} from "./icons";
 
 const initial: VrUiState = {
   shape: "cube",
-  color: "#5EEAD4",
+  color: "#0D9488",
   lineMode: false,
   grid: true,
   xr: "ready",
@@ -42,10 +37,24 @@ export default function HandLabVR() {
   const [fatal, setFatal] = useState<string | null>(null);
   const [supported, setSupported] = useState<boolean | null>(null);
   const [entering, setEntering] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [mobileHintOpen, setMobileHintOpen] = useState(false);
   const engineRef = useRef<VRHandLabEngine | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const toastRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const showToast = (msg: string) => {
+    const el = toastRef.current;
+    if (!el) return;
+    el.textContent = msg;
+    el.style.opacity = "1";
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      el.style.opacity = "0";
+    }, 2600);
+  };
 
   useEffect(() => {
     if (!canvasRef.current || !toastRef.current) return;
@@ -72,6 +81,7 @@ export default function HandLabVR() {
     }
     return () => {
       dead = true;
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       engine?.dispose();
       engineRef.current = null;
     };
@@ -87,6 +97,7 @@ export default function HandLabVR() {
       await e.enterVR();
     } catch (err) {
       console.error("Failed to enter VR", err);
+      showToast("Could not start VR session");
     } finally {
       setEntering(false);
     }
@@ -95,9 +106,12 @@ export default function HandLabVR() {
   const onImportFile = async (f: File) => {
     try {
       const text = await f.text();
-      eng()?.importSceneJson(text);
+      const ok = eng()?.importSceneJson(text);
+      if (ok === false) {
+        showToast("Invalid scene JSON file");
+      }
     } catch {
-      console.error("Unable to read selected file");
+      showToast("Unable to read selected scene file");
     }
   };
 
@@ -119,7 +133,7 @@ export default function HandLabVR() {
 
   if (fatal)
     return (
-      <div className="vr-fatal">
+      <main className="vr-fatal">
         <div>
           <h1>
             hand<span>lab</span> vr
@@ -131,79 +145,108 @@ export default function HandLabVR() {
             </Link>
           </p>
         </div>
-      </div>
+      </main>
     );
+
+  const shapeLabel = SHAPE_LABELS[ui.shape];
 
   return (
     <>
-      <canvas
-        id="scene"
-        ref={canvasRef}
-        role="img"
-        aria-label="Interactive 3D hand-lab VR workspace"
-        aria-describedby="scene-description"
-      >
-        Interactive 3D hand-lab VR scene. Use the VR palette and HUD controls to create and edit
-        objects.
-      </canvas>
-      <p id="scene-description" className="sr-only">
-        Interactive 3D VR workspace. The object count and current mode are available in the HUD.
-      </p>
+      <main>
+        <canvas
+          id="scene"
+          ref={canvasRef}
+          role="img"
+          aria-label="Interactive 3D hand-lab VR workspace"
+          aria-describedby="scene-description"
+        >
+          Interactive 3D hand-lab VR scene. Use the VR palette and HUD controls to create and edit
+          objects.
+        </canvas>
+        <p id="scene-description" className="sr-only">
+          Interactive 3D VR workspace. The object count and current mode are available in the HUD.
+        </p>
+      </main>
 
       <header className="hud-top">
         <div className="brand">
-          <h1>
-            HAND<span>LAB</span> VR
-          </h1>
-          <p>
-            <Link href="/" style={{ color: "inherit" }}>
-              &larr; desktop lab
-            </Link>{" "}
-            &middot; isolated /vr route &middot; scenes shared via save/load
-          </p>
+          <div className="brand__row">
+            <h1>
+              hand<span>lab</span> vr
+            </h1>
+            <Link href="/" className="vr-back-link">
+              <ArrowLeftIcon size={13} />
+              <span>Desktop lab</span>
+            </Link>
+          </div>
+          <p>WebXR workspace · scenes sync with desktop lab</p>
         </div>
         <div className="status-cards">
           <div className="stat">
-            <label>XR</label>
-            <b>{ui.xr === "presenting" ? "presenting" : supported === false ? "unsupported" : supported ? "ready" : "checking…"}</b>
+            <span className="stat__label">XR</span>
+            <b>{ui.xr === "presenting" ? "Presenting" : supported === false ? "Unsupported" : supported ? "Ready" : "Checking…"}</b>
           </div>
           <div className="stat">
-            <label>Objects</label>
+            <span className="stat__label">Objects</span>
             <b aria-live="polite" aria-atomic="true">
               {ui.count}
             </b>
           </div>
           <div className="stat">
-            <label>Mode</label>
-            <b>{ui.lineMode ? "line" : ui.shape}</b>
+            <span className="stat__label">Mode</span>
+            <b>{ui.lineMode ? "Line" : shapeLabel}</b>
           </div>
         </div>
       </header>
 
-      <nav className="toolbar" aria-label="VR palette">
+      <button
+        type="button"
+        className="btn ghost vr-tools-toggle"
+        aria-expanded={mobileToolsOpen}
+        aria-controls="vr-toolbar"
+        onClick={() => {
+          setMobileToolsOpen((v) => {
+            const next = !v;
+            if (next) setMobileHintOpen(false);
+            return next;
+          });
+        }}
+      >
+        {mobileToolsOpen ? "Hide tools" : "Tools"}
+      </button>
+
+      <nav
+        id="vr-toolbar"
+        className={"toolbar" + (mobileToolsOpen ? "" : " is-mobile-hidden")}
+        aria-label="VR palette"
+      >
         <h2>ENTER VR</h2>
         <button
-          className="shape-btn"
-          style={{ gridColumn: "1/-1", borderColor: "var(--good)" }}
+          type="button"
+          className="shape-btn shape-btn--full shape-btn--vr"
           disabled={supported !== true || entering}
           title={supported === false ? supportHint() : "Request immersive-vr session"}
           onClick={() => void onEnterVR()}
         >
-          <span className="g">VR</span>
+          <span className="g"><HeadsetIcon size={18} /></span>
           {ui.xr === "presenting"
-            ? "in headset"
+            ? "In headset"
             : entering
-              ? "entering…"
+              ? "Entering…"
               : supported === false
-                ? "not supported"
-                : "enter VR"}
+                ? "Not supported"
+                : "Enter VR"}
         </button>
         {supported === false && (
           <div className="m-sub">{supportHint()} — desktop orbit preview still works.</div>
         )}
         {ui.xr === "presenting" && (
-          <button className="mini" style={{ width: "100%" }} onClick={() => void eng()?.exitVR()}>
-            exit VR
+          <button
+            type="button"
+            className="mini mini--full"
+            onClick={() => void eng()?.exitVR()}
+          >
+            Exit VR
           </button>
         )}
         <h2>SPAWN SHAPE</h2>
@@ -211,12 +254,13 @@ export default function HandLabVR() {
           {VR_SHAPES.map((s) => (
             <Magnet key={s} strength={0.25}>
               <button
+                type="button"
                 className={"shape-btn" + (ui.shape === s ? " active" : "")}
                 aria-pressed={ui.shape === s}
                 onClick={() => eng()?.setShape(s)}
               >
-                <span className="g">{GLYPHS[s].g}</span>
-                {GLYPHS[s].label}
+                <span className="g"><ShapeGlyph shape={s} size={18} /></span>
+                <span>{SHAPE_LABELS[s]}</span>
               </button>
             </Magnet>
           ))}
@@ -226,62 +270,65 @@ export default function HandLabVR() {
         <h2>LINE</h2>
         <Magnet style={{ display: "block" }} strength={0.2}>
           <button
-            className={"shape-btn" + (ui.lineMode ? " active" : "")}
-            style={{ gridColumn: "1/-1", width: "100%" }}
+            type="button"
+            className={"shape-btn shape-btn--full" + (ui.lineMode ? " active" : "")}
             aria-pressed={ui.lineMode}
             aria-live="polite"
             aria-atomic="true"
             onClick={() => eng()?.setLineMode(!ui.lineMode)}
           >
-            <span className="g">╱</span>line mode: {ui.lineMode ? "on" : "off"}
+            <span className="g"><LineToolIcon size={18} /></span>
+            <span>Line mode: {ui.lineMode ? "On" : "Off"}</span>
           </button>
         </Magnet>
         <div className="tool-row">
-          <button className="mini" onClick={() => eng()?.finishLine()}>
-            finish
+          <button type="button" className="mini" onClick={() => eng()?.finishLine()}>
+            Finish
           </button>
-          <button className="mini" onClick={() => eng()?.clearLines()}>
-            clear lines
+          <button type="button" className="mini" onClick={() => eng()?.clearLines()}>
+            Clear lines
           </button>
         </div>
         <div className="tool-row">
           <button
-            className="mini"
-            style={{ width: "100%" }}
+            type="button"
+            className="mini mini--full"
             title="Place the current shape without leaving line mode"
             onClick={() => eng()?.placeCurrentShape()}
           >
-            place {ui.shape}
+            Place {shapeLabel}
           </button>
         </div>
         <div className="m-sub">
           {ui.lineMode
-            ? "line mode: trigger = point, solid tap = select, place button = new solid"
-            : "place button works in any mode"}
+            ? "Line mode: trigger places a point, tap a solid to select, Place adds a solid."
+            : "Place button works in any mode."}
         </div>
         <div className="tool-row">
-          <button className="mini" onClick={() => eng()?.undo()}>
-            undo
+          <button type="button" className="mini" onClick={() => eng()?.undo()}>
+            Undo
           </button>
-          <button className="mini" onClick={() => eng()?.clearAll()}>
-            clear
-          </button>
-        </div>
-        <h2>SCENE (shared with /)</h2>
-        <div className="tool-row">
-          <button className="mini" onClick={() => eng()?.saveToStorage()}>
-            save
-          </button>
-          <button className="mini" onClick={() => eng()?.loadFromStorage()}>
-            load
+          <button type="button" className="mini" onClick={() => eng()?.clearAll()}>
+            Clear
           </button>
         </div>
+        <h2>SCENE</h2>
         <div className="tool-row">
-          <button className="mini" onClick={onExportFile}>
-            file ↓
+          <button type="button" className="mini" onClick={() => eng()?.saveToStorage()}>
+            Save
           </button>
-          <button className="mini" onClick={() => fileRef.current?.click()}>
-            file ↑
+          <button type="button" className="mini" onClick={() => eng()?.loadFromStorage()}>
+            Load
+          </button>
+        </div>
+        <div className="tool-row">
+          <button type="button" className="mini" onClick={onExportFile}>
+            <DownloadIcon size={13} />
+            <span>Export</span>
+          </button>
+          <button type="button" className="mini" onClick={() => fileRef.current?.click()}>
+            <UploadIcon size={13} />
+            <span>Import</span>
           </button>
         </div>
         <input
@@ -296,8 +343,12 @@ export default function HandLabVR() {
           }}
         />
         <div className="tool-row">
-          <button className="mini" style={{ width: "100%" }} onClick={() => eng()?.toggleGrid()}>
-            grid: {ui.grid ? "on" : "off"}
+          <button
+            type="button"
+            className="mini mini--full"
+            onClick={() => eng()?.toggleGrid()}
+          >
+            Grid: {ui.grid ? "On" : "Off"}
           </button>
         </div>
         <h2>DISPLAY</h2>
@@ -307,7 +358,27 @@ export default function HandLabVR() {
         <AccentSection />
       </nav>
 
-      <aside className="hint" aria-label="VR gesture map">
+      <button
+        type="button"
+        className="btn ghost vr-hint-toggle"
+        aria-expanded={mobileHintOpen}
+        aria-controls="vr-controls-hint"
+        onClick={() => {
+          setMobileHintOpen((v) => {
+            const next = !v;
+            if (next) setMobileToolsOpen(false);
+            return next;
+          });
+        }}
+      >
+        {mobileHintOpen ? "Hide controls" : "VR controls"}
+      </button>
+
+      <aside
+        id="vr-controls-hint"
+        className={"hint vr-hint" + (mobileHintOpen ? "" : " is-mobile-hidden")}
+        aria-label="VR gesture map"
+      >
         <h2>VR CONTROLS</h2>
         <div><kbd>trigger</kbd> tap = place / line point</div>
         <div><kbd>grip</kbd> hold = grab + drag</div>
@@ -316,7 +387,7 @@ export default function HandLabVR() {
         <div><kbd>pinch</kbd> (hands) = same as trigger</div>
         <div><kbd>click</kbd> desktop preview = place</div>
         <div><kbd>Del</kbd> delete hovered (preview)</div>
-        {ui.hint && <div className="m-sub" style={{ marginTop: 8 }}>{ui.hint}</div>}
+        {ui.hint && <div className="m-sub lesson-panel__text">{ui.hint}</div>}
       </aside>
 
       <div

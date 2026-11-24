@@ -28,7 +28,8 @@ const manifestPath = join(process.cwd(), ".next/app-build-manifest.json");
 // Task 30 verification run build first.
 const hasBuild = existsSync(manifestPath);
 
-describe.skipIf(!hasBuild)("bundle budget", () => {
+if (hasBuild) {
+  describe("bundle budget", () => {
   const { pages } = JSON.parse(readFileSync(manifestPath, "utf8")) as {
     pages: Record<string, string[]>;
   };
@@ -68,4 +69,9 @@ describe.skipIf(!hasBuild)("bundle budget", () => {
       `three.js found in eager chunks: ${heavy.join(", ")}`,
     ).toHaveLength(0);
   });
-});
+  });
+} else {
+  describe.skip("bundle budget (requires a production build)", () => {
+    it("requires a production build", () => {});
+  });
+}

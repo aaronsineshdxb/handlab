@@ -16,7 +16,7 @@ describe("NumericCard", () => {
       />,
     );
     expect(html).toContain(
-      '<p style="font-weight:700;margin-bottom:8px">Volume in m³?</p>',
+      '<p class="numeric-card__q">Volume in m³?</p>',
     );
     expect(html).toContain("<input");
     expect(html).toContain("Submit");

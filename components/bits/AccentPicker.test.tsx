@@ -9,9 +9,9 @@ describe("AccentPicker", () => {
 
     expect(markup).toContain('role="group"');
     for (const id of ACCENT_IDS) {
-      expect(markup).toContain(`${ACCENTS[id].label} colour scheme`);
+      expect(markup).toContain(`${ACCENTS[id].label} color scheme`);
     }
-    expect(markup).toContain('aria-label="Custom colour scheme"');
+    expect(markup).toContain('aria-label="Custom color scheme"');
     expect(markup).toContain('type="color"');
   });
 
@@ -22,7 +22,7 @@ describe("AccentPicker", () => {
 
   it("exposes a shared section with heading", () => {
     const markup = renderToStaticMarkup(<AccentSection />);
-    expect(markup).toContain("COLOUR SCHEME");
+    expect(markup).toContain("Color scheme");
     expect(markup).toContain('role="group"');
   });
 });

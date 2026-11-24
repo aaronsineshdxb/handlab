@@ -1,16 +1,13 @@
 export default function Boot() {
   return (
-    <div
-      style={{
-        display: "grid",
-        placeItems: "center",
-        height: "100dvh",
-        font: "400 14px system-ui, sans-serif",
-        color: "var(--muted, #666)",
-        background: "var(--color-paper, #fcfcF9)",
-      }}
-    >
-      starting HANDLAB…
+    <div className="boot-screen" role="status" aria-live="polite">
+      <div className="boot-screen__inner">
+        <div className="boot-ring" aria-hidden="true">
+          <span className="boot-ring__core" />
+        </div>
+        <div className="boot-wordmark">handlab</div>
+        <div className="boot-status">initializing workspace…</div>
+      </div>
     </div>
   );
 }

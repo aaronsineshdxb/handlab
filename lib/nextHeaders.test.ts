@@ -89,4 +89,14 @@ describe("static asset cache headers", () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("default-src 'self'");
   });
+
+  it("keeps font-src and style-src free of external Google Fonts hosts for self-hosted fonts", async () => {
+    const all = await rules();
+    const rule = all.find((r) => r.source === "/(.*)");
+    const csp = rule!.headers.find((h) => h.key === "Content-Security-Policy")!
+      .value;
+    expect(csp).toContain("font-src 'self'");
+    expect(csp).not.toContain("fonts.gstatic.com");
+    expect(csp).not.toContain("fonts.googleapis.com");
+  });
 });

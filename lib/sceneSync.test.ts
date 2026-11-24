@@ -54,4 +54,11 @@ describe("createSceneSync", () => {
     vi.advanceTimersByTime(SCENE_SYNC_MS * 5);
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("flush is a no-op when no sync is pending", () => {
+    const onChange = vi.fn();
+    const sync = createSceneSync(onChange);
+    sync.flush();
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

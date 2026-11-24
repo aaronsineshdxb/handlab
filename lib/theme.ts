@@ -125,6 +125,14 @@ export const ACCENTS: Record<Exclude<AccentName, "custom">, AccentPreset> = {
 
 export const ACCENT_IDS = Object.keys(ACCENTS) as (keyof typeof ACCENTS)[];
 
+/** Returns the active theme's swatch hex for an accent preset so dots match the UI accent. */
+export function accentSwatchFor(
+  id: Exclude<AccentName, "custom">,
+  theme: ThemeName,
+): string {
+  return `#${ACCENTS[id][theme].scene.toString(16).padStart(6, "0")}`;
+}
+
 export const DEFAULT_SCHEME: AccentName = "teal";
 export const DEFAULT_CUSTOM_HEX = "#016A71";
 
@@ -252,11 +260,19 @@ export function applyAccent(scheme: AccentName, customHex?: string): void {
       "--color-accent-2",
       `color-mix(in oklch, ${custom} 72%, white)`,
     );
+    const n = hexToNumber(custom);
+    if (n != null) {
+      const r = (n >> 16) & 255;
+      const g = (n >> 8) & 255;
+      const b = n & 255;
+      el.style.setProperty("--color-accent-subtle", `rgba(${r}, ${g}, ${b}, 0.14)`);
+    }
     el.style.setProperty("--color-accent-ink", accentInkFor(custom));
   } else {
     el.style.removeProperty("--color-accent");
     el.style.removeProperty("--color-focus");
     el.style.removeProperty("--color-accent-2");
+    el.style.removeProperty("--color-accent-subtle");
     el.style.removeProperty("--color-accent-ink");
   }
   try {
@@ -343,25 +359,25 @@ export function sceneThemeNow(): SceneTheme {
  *  touched here — only background, grid, lights, and the cursor. */
 export const SCENE_THEMES: Record<ThemeName, SceneTheme> = {
   light: {
-    bg: 0xF8FAFC,
-    gridCenter: 0xCBD5E1,
-    gridMain: 0xE2E8F0,
-    bounds: 0xE2E8F0,
+    bg: 0xFCFCF9,
+    gridCenter: 0xD6D3CB,
+    gridMain: 0xE8E5DE,
+    bounds: 0xE2DFD7,
     cursor: 0x016A71,
     hemiSky: 0xffffff,
-    hemiGround: 0xe2e8f0,
+    hemiGround: 0xECE9E1,
     rim: 0x016A71,
     rimIntensity: 0.7,
     floorOpacity: 0.18,
   },
   dark: {
-    bg: 0x100E12,
+    bg: 0x11100e,
     gridCenter: 0x4A4438,
     gridMain: 0x2A2721,
     bounds: 0x3A352B,
     cursor: 0x34B4C4,
     hemiSky: 0x9a9384,
-    hemiGround: 0x100e12,
+    hemiGround: 0x1b1a17,
     rim: 0x34B4C4,
     rimIntensity: 0.5,
     floorOpacity: 0.6,

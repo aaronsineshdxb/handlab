@@ -3,27 +3,25 @@ import { useEffect, useState } from "react";
 /**
  * True when the primary pointer is a mouse/trackpad.
  *
- * The page mounts ten Magnets at once, so this caches the matchMedia result at
- * module scope: one query, one synchronous initial value, and no mount-time
- * state flip (the previous version rendered every Magnet twice on mount and
- * then swapped the DOM branch). Subscriptions are still per-instance so a
- * hybrid laptop switching to touch updates live.
+ * SSR-safe: initializes to `false` so server and initial client render always
+ * agree (no hydration mismatch), then reads and subscribes to the cached
+ * matchMedia query in `useEffect` so hybrid devices switching between mouse
+ * and touch update live.
  */
 let mql: MediaQueryList | null = null;
 
-function probe(): MediaQueryList {
-  if (!mql && typeof window !== "undefined") {
+function probe(): MediaQueryList | null {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return null;
+  }
+  if (!mql) {
     mql = window.matchMedia("(pointer: fine)");
   }
-  return mql as MediaQueryList;
+  return mql;
 }
 
 export function useFinePointer(): boolean {
-  // Probing in the state initialiser means the very first Magnet resolves the
-  // query during render; the other nine read the cache and never flip.
-  const [fine, setFine] = useState<boolean>(() =>
-    typeof window === "undefined" ? false : probe().matches,
-  );
+  const [fine, setFine] = useState<boolean>(false);
 
   useEffect(() => {
     const query = probe();

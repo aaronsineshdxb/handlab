@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import {
   SHAPE_DEFS,
   metricsFor,
@@ -8,7 +9,12 @@ import {
   type ShowcaseShapeId,
 } from "../lib/geometry/math";
 import type { ClipAxis, ShapeName, StudioMaterial } from "../lib/engine";
-import NetSvg from "./NetSvg";
+import NetSvg, { hasUnfoldableNet } from "./NetSvg";
+
+function sliderTrackStyle(value: number, min: number, max: number): CSSProperties {
+  const pct = max > min ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100)) : 0;
+  return { "--pct": `${pct.toFixed(1)}%` } as CSSProperties;
+}
 
 /** Map the hand-lab spawn palette onto the math engine. Knot has no
  *  elementary volume/area formula, so it gets a dedicated note card. */
@@ -17,144 +23,237 @@ export function mathIdFor(shape: ShapeName): ShowcaseShapeId | "knot" {
   return shape as ShowcaseShapeId;
 }
 
-/** Subset of the engine API the studio section drives. Everything is
- *  optional-chained at the call site so the 2D fallback (which lacks
- *  these) simply ignores studio input. */
-export interface StudioEngine {
-  setWireframe?: (on: boolean) => void;
-  setMaterialMode?: (mode: StudioMaterial) => void;
-  setDetail?: (level: number) => void;
-  setClip?: (axis: ClipAxis, pos: number) => void;
+export interface StudioState {
+  wireframe: boolean;
+  matMode: StudioMaterial;
+  detail: number;
+  clipAxis: ClipAxis;
+  clipPos: number;
 }
 
 interface SolidMathProps {
   shape: ShapeName;
   dims: ShapeDims;
-  onDims: (key: keyof ShapeDims, value: number) => void;
   onReset: () => void;
-  getEngine: () => StudioEngine | null;
-  /** Bumped when the async engine becomes ready; re-runs the push effects. */
-  readyRev: number;
   studio: boolean;
+  is2D: boolean;
+  studioState: StudioState;
+  onWireframe: (on: boolean) => void;
+  onMatMode: (mode: StudioMaterial) => void;
+  onDetail: (level: number) => void;
+  onClipAxis: (axis: ClipAxis) => void;
+  onClipPos: (pos: number) => void;
 }
 
-function Chip({ on, onClick, children, label }: { on?: boolean; onClick: () => void; children: React.ReactNode; label?: string }) {
+function Chip({
+  on,
+  onClick,
+  children,
+  label,
+}: {
+  on?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  label?: string;
+}) {
   return (
-    <button className={"sc-chip" + (on ? " on" : "")} aria-pressed={!!on} aria-label={label} onClick={onClick}>
+    <button
+      type="button"
+      className={"sc-chip" + (on ? " on" : "")}
+      aria-pressed={!!on}
+      aria-label={label}
+      onClick={onClick}
+    >
       {children}
     </button>
   );
 }
 
-function SolidMath({ shape, dims, onDims, onReset, getEngine, readyRev, studio }: SolidMathProps) {
+function SolidMath({
+  shape,
+  dims,
+  onReset,
+  studio,
+  is2D,
+  studioState,
+  onWireframe,
+  onMatMode,
+  onDetail,
+  onClipAxis,
+  onClipPos,
+}: SolidMathProps) {
   const id = mathIdFor(shape);
-  const [wireframe, setWireframe] = useState(false);
-  const [matMode, setMatMode] = useState<StudioMaterial>("standard");
-  const [detail, setDetail] = useState(1);
-  const [clipAxis, setClipAxis] = useState<ClipAxis>(null);
-  const [clipPos, setClipPos] = useState(0);
   const [netOpen, setNetOpen] = useState(false);
   const [unfold, setUnfold] = useState(0.7);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= 900,
+  );
+  const { wireframe, matMode, detail, clipAxis, clipPos } = studioState;
+  const reduce = useReducedMotion();
+  const unfoldable = hasUnfoldableNet(id);
 
   useEffect(() => {
-    getEngine()?.setWireframe?.(wireframe);
-  }, [getEngine, wireframe, readyRev]);
-  useEffect(() => {
-    getEngine()?.setMaterialMode?.(matMode);
-  }, [getEngine, matMode, readyRev]);
-  useEffect(() => {
-    getEngine()?.setDetail?.(detail);
-  }, [getEngine, detail, readyRev]);
-  useEffect(() => {
-    getEngine()?.setClip?.(clipAxis, clipPos);
-  }, [getEngine, clipAxis, clipPos, readyRev]);
+    const mq = window.matchMedia("(max-width: 900px)");
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const panelMotion = narrow
+    ? {
+        initial: reduce ? false : { opacity: 0, y: 12 },
+        animate: { opacity: 1, y: 0 },
+        exit: reduce ? { opacity: 0 } : { opacity: 0, y: 12 },
+      }
+    : {
+        initial: reduce ? false : { opacity: 0, x: 14, scale: 0.985 },
+        animate: { opacity: 1, x: 0, scale: 1 },
+        exit: reduce ? { opacity: 0 } : { opacity: 0, x: 14, scale: 0.985 },
+      };
 
   return (
-    <aside className="solid-math" aria-label="Solid mathematics">
+    <motion.aside
+      id="solid-math-panel"
+      className="solid-math"
+      aria-label="Solid mathematics"
+      {...panelMotion}
+      transition={{ duration: reduce ? 0 : 0.18, ease: [0.16, 1, 0.3, 1] }}
+    >
       <div className="solid-math__head">
-        <b>{id === "knot" ? "Torus knot" : SHAPE_DEFS[id].label} · live math</b>
-        <button className="mini" onClick={onReset} title="Reset dimensions to defaults">Reset</button>
+        <h2>{id === "knot" ? "Torus knot" : SHAPE_DEFS[id].label} · live math</h2>
+        <button
+          type="button"
+          className="mini"
+          onClick={onReset}
+          title="Reset dimensions to defaults"
+        >
+          Reset
+        </button>
       </div>
       {id === "knot" ? (
         <>
           <article className="sc-card">
-            <label>Volume V</label>
+            <span className="sc-card__label">Volume V</span>
             <b>—</b>
-            <code className="sub">No elementary formula — the tube follows a knotted centreline.</code>
+            <code className="sub">No elementary formula — the tube follows a knotted centerline.</code>
           </article>
           <article className="sc-card">
-            <label>Surface area A</label>
+            <span className="sc-card__label">Surface area A</span>
             <b>—</b>
             <code className="sub">Numerically integrated in CAD; not a classroom formula.</code>
           </article>
           <article className="sc-card">
-            <label>Topology</label>
+            <span className="sc-card__label">Topology</span>
             <b>genus-1 <span>tube</span></b>
             <code>Mesh Euler χ = 0 (same family as the torus)</code>
           </article>
-          <label className="sc-slider">
-            <span className="sc-slider__head"><span>size</span><b>{(dims.a ?? 1).toFixed(2)}×</b></span>
-            <input type="range" min={0.4} max={2.5} step={0.05} value={dims.a ?? 1} onChange={(e) => onDims("a", Number(e.target.value))} aria-label="knot size" />
-          </label>
         </>
       ) : (
-        <MathCards id={id} dims={dims} onDims={onDims} />
+        <MathCards id={id} dims={dims} />
       )}
 
       {studio && id !== "knot" && (
         <>
-          <h4 className="solid-math__h">Mesh &amp; material</h4>
+          <h3 className="solid-math__h">Mesh &amp; material</h3>
           <div className="sc-chips">
-            <Chip on={wireframe} onClick={() => setWireframe((w) => !w)}>Wireframe</Chip>
-            <Chip on={matMode === "standard"} onClick={() => setMatMode("standard")}>pastel</Chip>
-            <Chip on={matMode === "clay"} onClick={() => setMatMode("clay")}>clay</Chip>
-            <Chip on={matMode === "flat"} onClick={() => setMatMode("flat")}>flat</Chip>
+            <Chip on={wireframe} onClick={() => onWireframe(!wireframe)}>Wireframe</Chip>
+            <Chip on={matMode === "standard"} onClick={() => onMatMode("standard")}>Pastel</Chip>
+            <Chip on={matMode === "clay"} onClick={() => onMatMode("clay")}>Clay</Chip>
+            <Chip on={matMode === "flat"} onClick={() => onMatMode("flat")}>Flat</Chip>
           </div>
           <label className="sc-slider">
-            <span className="sc-slider__head"><span>Tessellation</span><b>level {detail}</b></span>
-            <input type="range" min={0} max={2} step={1} value={detail} onChange={(e) => setDetail(Number(e.target.value))} aria-label="Tessellation level" />
+            <span className="sc-slider__head"><span>Tessellation</span><b>Level {detail}</b></span>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={1}
+              value={detail}
+              style={sliderTrackStyle(detail, 0, 2)}
+              onChange={(e) => onDetail(Number(e.target.value))}
+              aria-label="Tessellation level"
+            />
           </label>
 
-          <h4 className="solid-math__h">Cross-section slice</h4>
+          <h3 className="solid-math__h">Cross-section slice</h3>
           <div className="sc-chips">
             {(["x", "y", "z"] as ClipAxis[]).map((ax) => (
-              <Chip key={String(ax)} on={clipAxis === ax} onClick={() => setClipAxis((c) => (c === ax ? null : ax))}>{String(ax).toUpperCase()}</Chip>
+              <Chip
+                key={String(ax)}
+                on={clipAxis === ax}
+                onClick={() => onClipAxis(clipAxis === ax ? null : ax)}
+              >
+                {String(ax).toUpperCase()}
+              </Chip>
             ))}
-            <Chip on={!clipAxis} onClick={() => { setClipAxis(null); }}>off</Chip>
+            <Chip on={!clipAxis} onClick={() => onClipAxis(null)}>Off</Chip>
           </div>
           <label className="sc-slider">
             <span className="sc-slider__head"><span>Slice position</span><b>{clipPos.toFixed(2)}</b></span>
-            <input type="range" min={-2} max={2} step={0.05} value={clipPos} onChange={(e) => { setClipPos(Number(e.target.value)); setClipAxis((c) => c ?? "y"); }} aria-label="Slice position" />
+            <input
+              type="range"
+              min={-2}
+              max={2}
+              step={0.05}
+              value={clipPos}
+              style={sliderTrackStyle(clipPos, -2, 2)}
+              onChange={(e) => {
+                onClipPos(Number(e.target.value));
+                if (!clipAxis) onClipAxis("y");
+              }}
+              aria-label="Slice position"
+            />
           </label>
+          {is2D && (
+            <p className="sc-note">
+              Software 3D (Rust/WASM) — drag empty space to orbit, scroll to zoom.
+            </p>
+          )}
         </>
       )}
 
       {studio && (
         <>
-          <h4 className="solid-math__h">Unfold · 2D net</h4>
+          <h3 className="solid-math__h">Unfold · 2D net</h3>
           <div className="sc-chips">
-            <Chip on={netOpen} onClick={() => setNetOpen((v) => !v)}>{netOpen ? "Hide net" : "Show net"}</Chip>
+            <Chip on={netOpen} onClick={() => setNetOpen((v) => !v)}>
+              {netOpen ? "Hide net" : "Show net"}
+            </Chip>
           </div>
           {netOpen && id !== "knot" && (
             <>
               <NetSvg shape={id} unfold={unfold} />
-              <label className="sc-slider">
-                <span className="sc-slider__head"><span>Unfold</span><b>{Math.round(unfold * 100)}%</b></span>
-                <input type="range" min={0} max={1} step={0.01} value={unfold} onChange={(e) => setUnfold(Number(e.target.value))} aria-label="Unfold amount" />
-              </label>
+              {unfoldable && (
+                <label className="sc-slider">
+                  <span className="sc-slider__head"><span>Unfold</span><b>{Math.round(unfold * 100)}%</b></span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={unfold}
+                    style={sliderTrackStyle(unfold, 0, 1)}
+                    onChange={(e) => setUnfold(Number(e.target.value))}
+                    aria-label="Unfold amount"
+                  />
+                </label>
+              )}
             </>
           )}
           {netOpen && id === "knot" && (
-            <p className="sc-note">Non-developable — no exact flat net for a knotted tube.</p>
+            <div className="net-empty">
+              <b>Torus knot net</b>
+              <span>Non-developable — no exact flat net for a knotted tube.</span>
+            </div>
           )}
         </>
       )}
-    </aside>
+    </motion.aside>
   );
 }
 
-/** Substitution line that never breaks mid-token: expression sits left,
- *  the ≈ result right — a wrap can only fall between the two. */
+/** Substitution line: expression sits left, ≈ result right with nowrap on the result. */
 function SubLine({ text }: { text: string }) {
   const i = text.indexOf(" ≈ ");
   if (i < 0) return <code className="sub">{text}</code>;
@@ -166,25 +265,25 @@ function SubLine({ text }: { text: string }) {
   );
 }
 
-function MathCards({ id, dims, onDims }: { id: ShowcaseShapeId; dims: ShapeDims; onDims: (key: keyof ShapeDims, value: number) => void }) {
+function MathCards({ id, dims }: { id: ShowcaseShapeId; dims: ShapeDims }) {
   const def = SHAPE_DEFS[id];
   const m = metricsFor(id, dims);
   return (
     <>
       <article className="sc-card sc-card--vol">
-        <label>Volume V</label>
+        <span className="sc-card__label">Volume V</span>
         <b>{m.volume.toFixed(2)}&nbsp;<span>cm³</span></b>
         <code>{m.volumeSym}</code>
         <SubLine text={m.volumeSub} />
       </article>
       <article className="sc-card sc-card--area">
-        <label>Surface area A</label>
+        <span className="sc-card__label">Surface area A</span>
         <b>{m.area.toFixed(2)}&nbsp;<span>cm²</span></b>
         <code>{m.areaSym}</code>
         <SubLine text={m.areaSub} />
       </article>
       <article className="sc-card sc-card--euler">
-        <label>Faces · Edges · Vertices</label>
+        <span className="sc-card__label">Faces · Edges · Vertices</span>
         {m.faces != null ? (
           <b>{m.faces}&nbsp;<span>F</span> · {m.edges}&nbsp;<span>E</span> · {m.vertices}&nbsp;<span>V</span></b>
         ) : (
@@ -193,16 +292,7 @@ function MathCards({ id, dims, onDims }: { id: ShowcaseShapeId; dims: ShapeDims;
         <code>{m.euler != null ? `V − E + F = ${m.vertices} − ${m.edges} + ${m.faces} = ${m.euler}` : (def.eulerNote ?? "V − E + F → Studio mesh χ")}</code>
         {def.eulerNote && m.euler != null && <code className="sub">{def.eulerNote}</code>}
       </article>
-      {def.params.map((p) => {
-        const v = Number(dims[p.key] ?? def.defaults[p.key]);
-        return (
-          <label className="sc-slider" key={p.key}>
-            <span className="sc-slider__head"><span>{p.label}</span><b>{v.toFixed(2)}&nbsp;cm</b></span>
-            <input type="range" min={p.min} max={p.max} step={p.step} value={v} onChange={(e) => onDims(p.key, Number(e.target.value))} aria-label={p.label} />
-          </label>
-        );
-      })}
-      <p className="sc-note">Sliders update the cards and the size of newly placed {def.label.toLowerCase()}s.</p>
+      <p className="sc-note">Dimension sliders in the bottom bar update these cards and newly placed {def.label.toLowerCase()}s.</p>
     </>
   );
 }

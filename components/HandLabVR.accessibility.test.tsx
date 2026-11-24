@@ -23,9 +23,9 @@ describe("HandLabVR accessibility", () => {
     const well = markup.match(/<input[^>]*type="color"[^>]*>/)?.[0] ?? "";
 
     expect(well).toContain('aria-label="Shape color"');
-    expect(well).toContain('value="#5EEAD4"');
+    expect(well).toContain('value="#0D9488"');
     expect(markup).toMatch(/<b aria-live="polite"[^>]*>0<\/b>/);
-    expect(markup).toMatch(/line mode: (on|off)/);
+    expect(markup).toMatch(/Line mode: (On|Off)/);
     expect(markup).toMatch(/<button[^>]*aria-live="polite"[^>]*aria-atomic="true"[^>]*>/);
     expect(elementById(markup, "toast")).toContain('role="status"');
     expect(elementById(markup, "toast")).toContain('aria-live="polite"');

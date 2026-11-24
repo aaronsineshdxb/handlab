@@ -5,6 +5,7 @@ import NumericCard from "./NumericCard";
 import QuizCard from "./QuizCard";
 import SegmentedControl from "./bits/SegmentedControl";
 import AnimatedList from "./bits/AnimatedList";
+import { CheckIcon } from "./icons";
 import type {
   CheckKind,
   Lesson,
@@ -60,6 +61,8 @@ export interface LessonPanelProps {
   /** Live scene snapshot. When provided, scene-based checks (place-count,
    *  chain-closed, area-gt) gate progression instead of being ignored. */
   snap?: SceneSnap;
+  /** When true, renders inside an existing drawer without a nested <aside> or duplicate heading. */
+  embedded?: boolean;
 }
 
 function LessonPanel({
@@ -73,6 +76,7 @@ function LessonPanel({
   onQuizAnswer,
   onNumericAnswer,
   snap,
+  embedded = false,
 }: LessonPanelProps) {
   const lesson = lessons.find(({ id }) => id === active);
   const [levelMode, setLevelMode] = useState<LessonLevelMode>("both");
@@ -177,10 +181,15 @@ function LessonPanel({
     setQuizRun((run) => run + 1);
   };
 
+  const Container = embedded ? "div" : "aside";
+  const containerProps = embedded
+    ? { className: "lesson-panel" }
+    : { className: "hint lesson-panel", "aria-label": "Lessons" };
+
   return (
-    <aside className="hint lesson-panel" aria-label="Lessons">
-      <h2>LESSONS</h2>
-      <div style={{ marginBottom: 8 }}>
+    <Container {...containerProps}>
+      {!embedded && <h2>LESSONS</h2>}
+      <div className="lesson-panel__seg">
         <SegmentedControl
           label="Lesson level mode"
           value={levelMode}
@@ -193,15 +202,7 @@ function LessonPanel({
         />
       </div>
       {lesson && progress && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-            marginBottom: 8,
-          }}
-        >
+        <div className="lesson-panel__progress">
           <span className="m-sub">Resume · Step {resumeStepIdx + 1}</span>
           <span
             role="progressbar"
@@ -209,29 +210,12 @@ function LessonPanel({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={scorePercent}
+            className="lesson-panel__ring"
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: `conic-gradient(var(--good) ${scorePercent}%, var(--border) 0)`,
-              display: "grid",
-              placeItems: "center",
-              flexShrink: 0,
+              background: `conic-gradient(var(--color-good) ${scorePercent}%, var(--color-rule) 0)`,
             }}
           >
-            <span
-              className="m-sub"
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: "50%",
-                background: "var(--surface)",
-                display: "grid",
-                placeItems: "center",
-                color: "var(--fg)",
-                fontSize: 8,
-              }}
-            >
+            <span className="lesson-panel__ring-inner">
               {scorePercent}%
             </span>
           </span>
@@ -253,10 +237,24 @@ function LessonPanel({
         </AnimatedList>
       </nav>
 
+      {/* Persistent live region mounted before text updates */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {step ? `Step ${activeStepPosition + 1}: ${step.title}` : ""}
+      </div>
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {quizIncorrect && step?.hint ? `Hint: ${step.hint}` : ""}
+      </div>
+
+      {!lesson && (
+        <p className="m-sub lesson-panel__empty">
+          Choose a lesson above to start a guided exercise.
+        </p>
+      )}
+
       {lesson && (
         <>
-          <h3 className="m-sub">OBJECTIVES</h3>
-          <ul className="m-sub" style={{ paddingLeft: 18, listStyle: "disc" }}>
+          <h3 className="solid-math__h lesson-panel__h">Objectives</h3>
+          <ul className="m-sub lesson-panel__objectives">
             {lesson.objectives.map((objective, index) => (
               <li key={`${objective}-${index}`}>{objective}</li>
             ))}
@@ -270,22 +268,15 @@ function LessonPanel({
 
           {step && (
             <>
-              {/* Announce step navigation only. A polite live region wrapping
-                  the checklist re-announced it on every scene sync, which is
-                  every 100ms while a student drags a shape. */}
-              <div aria-live="polite" aria-atomic="true">
-                <h3 className="m-sub">STEP {activeStepPosition + 1}</h3>
+              <div>
+                <h3 className="solid-math__h lesson-panel__h">Step {activeStepPosition + 1}</h3>
                 <p>{step.title}</p>
               </div>
-              <p className="m-sub" style={{ marginTop: 8 }}>
+              <p className="lesson-panel__prompt lesson-panel__text">
                 {step.prompt}
               </p>
               {step.hint && (
-                <p
-                  className="m-sub"
-                  style={{ marginTop: 8 }}
-                  aria-live={quizIncorrect ? "assertive" : undefined}
-                >
+                <p className="m-sub lesson-panel__text">
                   Hint: {step.hint}
                 </p>
               )}
@@ -293,25 +284,15 @@ function LessonPanel({
                 <ul
                   className="m-sub lesson-checks"
                   aria-label="Step requirements"
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: "8px 0 0",
-                    display: "grid",
-                    gap: 4,
-                  }}
                 >
                   {checkStatus.map(({ check, label, passed }, index) => (
                     <li
                       key={`${check.kind}-${index}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        color: passed ? "var(--good)" : "var(--muted)",
-                      }}
+                      className={"lesson-checks__item" + (passed ? " is-passed" : "")}
                     >
-                      <span aria-hidden="true">{passed ? "✓" : "○"}</span>
+                      <span className="lesson-checks__icon" aria-hidden="true">
+                        {passed ? <CheckIcon size={13} /> : "○"}
+                      </span>
                       <span>
                         <span className="sr-only">
                           {passed ? "Done: " : "Not done: "}
@@ -343,44 +324,44 @@ function LessonPanel({
               )}
             </>
           )}
+
+          <div className="tool-row lesson-panel__nav">
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={previousStepIdx === undefined}
+              onClick={() => {
+                if (previousStepIdx === undefined) return;
+                resetQuiz();
+                onBack(previousStepIdx);
+              }}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={nextStepIdx === undefined || stepBlocked}
+              aria-describedby={nextStepIdx !== undefined && stepBlocked ? "next-blocked" : undefined}
+              onClick={() => {
+                if (nextStepIdx === undefined) return;
+                resetQuiz();
+                onNext(nextStepIdx);
+              }}
+            >
+              Next
+            </button>
+          </div>
+          {nextStepIdx !== undefined && stepBlocked && (
+            <p id="next-blocked" className="m-sub lesson-panel__blocked" role="status">
+              {sceneIncomplete
+                ? "Finish the step requirements above to continue."
+                : "Answer the question correctly to continue."}
+            </p>
+          )}
         </>
       )}
-
-      <div className="tool-row" style={{ marginTop: 14 }}>
-        <button
-          type="button"
-          className="btn ghost"
-          disabled={previousStepIdx === undefined}
-          onClick={() => {
-            if (previousStepIdx === undefined) return;
-            resetQuiz();
-            onBack(previousStepIdx);
-          }}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={nextStepIdx === undefined || stepBlocked}
-          aria-describedby={nextStepIdx !== undefined && stepBlocked ? "next-blocked" : undefined}
-          onClick={() => {
-            if (nextStepIdx === undefined) return;
-            resetQuiz();
-            onNext(nextStepIdx);
-          }}
-        >
-          Next
-        </button>
-        {nextStepIdx !== undefined && stepBlocked && (
-          <p id="next-blocked" className="m-sub" role="status" style={{ marginTop: 6 }}>
-            {sceneIncomplete
-              ? "Finish the step requirements above to continue."
-              : "Answer the question correctly to continue."}
-          </p>
-        )}
-      </div>
-    </aside>
+    </Container>
   );
 }
 

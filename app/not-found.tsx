@@ -3,12 +3,12 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "404 — Out of tracking range | HANDLAB",
-  description: "This page slipped out of tracking range. Head back to the lab.",
+  description: "This route is outside the workspace. Head back to the lab.",
 };
 
 export default function NotFound() {
   return (
-    <div className="nf-wrap">
+    <main className="nf-wrap">
       <div className="nf-grid" aria-hidden="true" />
       <div className="nf-card">
         <p className="nf-brand">
@@ -19,9 +19,7 @@ export default function NotFound() {
         </div>
         <h1 className="nf-code">404</h1>
         <p className="nf-title">Out of tracking range</p>
-        <p className="nf-sub">
-          Go back home what are you trying to do
-        </p>
+        <p className="nf-sub">This route is outside the workspace.</p>
         <p className="nf-status" aria-hidden="true">
           ERR 404 · cursor xyz: —, —, — · pinch: open
         </p>
@@ -30,10 +28,7 @@ export default function NotFound() {
             Back to the lab
           </Link>
         </div>
-        <p className="nf-hint">
-          tip: press <kbd>R</kbd> to do something
-        </p>
       </div>
-    </div>
+    </main>
   );
 }

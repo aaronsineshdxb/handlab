@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, useReducedMotion } from "motion/react";
-import { memo, useId } from "react";
+import { memo } from "react";
 import type { SubjectDomain } from "../lib/lessons/types";
 
 const DOMAINS: { id: SubjectDomain; href: string; code: string; label: string }[] = [
@@ -19,8 +18,6 @@ function DomainSwitcher({
   active?: SubjectDomain;
 }) {
   const pathname = usePathname();
-  const reduce = useReducedMotion();
-  const pillId = useId();
   const resolved: SubjectDomain =
     active ??
     (pathname === "/physics"
@@ -40,23 +37,7 @@ function DomainSwitcher({
             className={"domain-btn" + (current ? " active" : "")}
             aria-current={current ? "page" : undefined}
           >
-            {current && !reduce && (
-              <motion.span
-                className="seg__thumb"
-                layoutId={pillId}
-                transition={{ type: "spring", stiffness: 400, damping: 40 }}
-                style={{ left: 0, right: 0, top: 0, bottom: 0, borderRadius: "inherit" }}
-                aria-hidden="true"
-              />
-            )}
-            {current && reduce && (
-              <span
-                className="seg__thumb"
-                style={{ left: 0, right: 0, top: 0, bottom: 0, borderRadius: "inherit" }}
-                aria-hidden="true"
-              />
-            )}
-            <span style={{ position: "relative", zIndex: 1 }}>
+            <span>
               <span aria-hidden="true">{code}</span> {label}
             </span>
           </Link>

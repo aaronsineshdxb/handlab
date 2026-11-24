@@ -49,67 +49,50 @@ export default function QuizCard({
   };
 
   return (
-    <section
-      aria-label="Quiz"
-      style={{
-        position: "relative",
-        marginTop: 14,
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        background: "var(--surface2)",
-      }}
-    >
-      <p style={{ fontWeight: 700, marginBottom: 8 }}>{question}</p>
-      <div role="group" aria-label={`Answers for ${question}`} style={{ display: "grid", gap: 6 }}>
+    <section className="quiz-card" aria-label="Quiz">
+      <div className="quiz-card__head">
+        <p className="quiz-card__q">{question}</p>
+        {correct && <QuizSuccessToast />}
+      </div>
+      <div
+        role="group"
+        aria-label={`Answers for ${question}`}
+        className="quiz-card__options"
+      >
         {options.map((option, index) => {
           const isSelected = selected === index;
           const isAnswer = index === answerIndex;
+          const stateClass =
+            correct && isAnswer
+              ? " is-correct"
+              : isSelected
+                ? " is-wrong"
+                : "";
           return (
             <button
               key={`${option}-${index}`}
               type="button"
-              className="btn ghost"
+              className={"btn ghost quiz-card__option" + stateClass}
               disabled={correct}
               aria-pressed={isSelected}
               onClick={() => chooseAnswer(index)}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                borderColor: correct && isAnswer
-                  ? "var(--good)"
-                  : isSelected
-                    ? "var(--bad)"
-                    : "var(--border)",
-              }}
             >
               {option}
             </button>
           );
         })}
       </div>
-      {correct && <QuizSuccessToast />}
-      {correct && (
-        <div
-          role="status"
-          style={{
-            marginTop: 10,
-            padding: "7px 9px",
-            borderRadius: 8,
-            background: "color-mix(in oklch, var(--color-good) 14%, transparent)",
-            color: "var(--color-good)",
-          }}
-        >
-          Correct! Great job.
-        </div>
-      )}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {correct && (
+          <div className="quiz-card__feedback--good">
+            Correct! Great job.
+          </div>
+        )}
+      </div>
       {!correct && selected !== null && (
-        <div
-          role="alert"
-          style={{ marginTop: 10, color: "var(--color-bad)" }}
-        >
+        <div role="alert" className="quiz-card__feedback--bad">
           Not quite. Try again.
-          {hint && <div style={{ marginTop: 6 }}>Hint: {hint}</div>}
+          {hint && <div className="quiz-card__hint">Hint: {hint}</div>}
         </div>
       )}
     </section>

@@ -20,9 +20,71 @@ export function clampDepth(v: number, lo = -9, hi = 9): number {
 }
 
 /**
- * Frame statistics for a cached depth map. Strided sampling keeps this cheap
- * (~1k reads on a 256px-wide map). Returns median + std of the frame plus the
- * bilinear tip value. Depth Anything V2: bigger predicted_depth = nearer.
+ * Compute strided median and standard deviation for a depth map once per
+ * inference (~1k reads on a 256px-wide map). Caching these on the DepthMap
+ * avoids sorting ~1k floats on every 30Hz hand-tracking tick.
+ */
+export function mapDistribution(
+  data: ArrayLike<number>,
+  w: number,
+  h: number,
+): { median: number; std: number } {
+  const n = w * h;
+  const stride = Math.max(1, Math.floor(n / 1024));
+  const count = Math.ceil(n / stride);
+  const vals = new Float32Array(count);
+  let mean = 0;
+  let k = 0;
+  for (let i = 0; i < n; i += stride) {
+    const v = data[i];
+    vals[k++] = v;
+    mean += v;
+  }
+  const len = Math.max(1, k);
+  mean /= len;
+  let va = 0;
+  for (let i = 0; i < k; i++) {
+    const d = vals[i] - mean;
+    va += d * d;
+  }
+  const std = Math.sqrt(va / len);
+  vals.subarray(0, k).sort();
+  const median = vals[Math.floor(k / 2)] ?? 0;
+  return { median, std };
+}
+
+/**
+ * Bilinear tip sample (u,v in 0..1, unmirrored video space).
+ * Depth Anything V2: bigger predicted_depth = nearer.
+ */
+export function sampleTip(
+  data: ArrayLike<number>,
+  w: number,
+  h: number,
+  u: number,
+  v: number,
+  fallback = 0,
+): number {
+  const fx = Math.min(w - 1.001, Math.max(0, u * w));
+  const fy = Math.min(h - 1.001, Math.max(0, v * h));
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const row0 = y0 * w;
+  const row1 = (y0 + 1) * w;
+  const v00 = data[row0 + x0] ?? fallback;
+  const v10 = data[row0 + x0 + 1] ?? fallback;
+  const v01 = data[row1 + x0] ?? fallback;
+  const v11 = data[row1 + x0 + 1] ?? fallback;
+  const ix0 = v00 + (v10 - v00) * tx;
+  const ix1 = v01 + (v11 - v01) * tx;
+  return ix0 + (ix1 - ix0) * ty;
+}
+
+/**
+ * Frame statistics for a cached depth map. Returns median + std of the frame
+ * plus the bilinear tip value.
  */
 export function frameStats(
   data: ArrayLike<number>,
@@ -31,32 +93,8 @@ export function frameStats(
   u: number,
   v: number,
 ): { tip: number; median: number; std: number } {
-  const n = w * h;
-  const stride = Math.max(1, Math.floor(n / 1024));
-  const vals: number[] = [];
-  for (let i = 0; i < n; i += stride) vals.push(data[i]);
-  vals.sort((a, b) => a - b);
-  const median = vals[Math.floor(vals.length / 2)] ?? 0;
-  let mean = 0;
-  for (const x of vals) mean += x;
-  mean /= Math.max(1, vals.length);
-  let va = 0;
-  for (const x of vals) va += (x - mean) * (x - mean);
-  const std = Math.sqrt(va / Math.max(1, vals.length));
-
-  // bilinear tip sample (u,v in 0..1, unmirrored video space)
-  const fx = Math.min(w - 1.001, Math.max(0, u * w));
-  const fy = Math.min(h - 1.001, Math.max(0, v * h));
-  const x0 = Math.floor(fx);
-  const y0 = Math.floor(fy);
-  const tx = fx - x0;
-  const ty = fy - y0;
-  const at = (x: number, y: number): number => data[y * w + x] ?? median;
-  const tip =
-    at(x0, y0) * (1 - tx) * (1 - ty) +
-    at(x0 + 1, y0) * tx * (1 - ty) +
-    at(x0, y0 + 1) * (1 - tx) * ty +
-    at(x0 + 1, y0 + 1) * tx * ty;
+  const { median, std } = mapDistribution(data, w, h);
+  const tip = sampleTip(data, w, h, u, v, median);
   return { tip, median, std };
 }
 

@@ -91,4 +91,11 @@ describe("scene accents", () => {
     expect(violet.cursor).toBe(ACCENTS.violet.light.scene);
     expect(violet.rim).toBe(ACCENTS.violet.light.scene);
   });
+
+  it("uses warm cream/stone palette for light scene chrome", () => {
+    const light = sceneThemeFor("light", "teal", null);
+    expect(light.bg).toBe(0xfcfcf9);
+    expect(light.gridCenter).toBe(0xd6d3cb);
+    expect(light.gridMain).toBe(0xe8e5de);
+  });
 });

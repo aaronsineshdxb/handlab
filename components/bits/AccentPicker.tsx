@@ -5,26 +5,38 @@ import {
   ACCENTS,
   ACCENT_IDS,
   DEFAULT_CUSTOM_HEX,
+  accentSwatchFor,
   applyAccent,
   currentCustomHex,
   currentScheme,
+  currentTheme,
   isValidCustomHex,
   onAppearanceChange,
   type AccentName,
+  type ThemeName,
 } from "../../lib/theme";
 
-/** Colour-scheme picker. Writes `data-accent` on <html> (tokens + 3D scene
- *  follow) and persists to localStorage. Presets are tuned per mode in
- *  tokens.css; `custom` paints any hex inline so the user can pick at will.
- *  Initial value is painted by the blocking init script in layout, so this
- *  only handles changes. */
+/** Color-scheme picker. Writes `data-accent` on <html> (tokens + 3D scene
+ *  follow) and persists to localStorage. Swatch dots adapt to the active theme
+ *  so each dot matches the rendered UI accent in both light and dark modes. */
 function AccentPicker() {
-  const [scheme, setScheme] = useState<AccentName>("teal");
-  const [custom, setCustom] = useState<string>(DEFAULT_CUSTOM_HEX);
+  const [theme, setTheme] = useState<ThemeName>(() =>
+    typeof window !== "undefined" ? currentTheme() : "light",
+  );
+  const [scheme, setScheme] = useState<AccentName>(() =>
+    typeof window !== "undefined" ? currentScheme() : "teal",
+  );
+  const [custom, setCustom] = useState<string>(() =>
+    typeof window !== "undefined"
+      ? (currentCustomHex() ?? DEFAULT_CUSTOM_HEX)
+      : DEFAULT_CUSTOM_HEX,
+  );
   useEffect(() => {
+    setTheme(currentTheme());
     setScheme(currentScheme());
     setCustom(currentCustomHex() ?? DEFAULT_CUSTOM_HEX);
-    return onAppearanceChange((_, s) => {
+    return onAppearanceChange((t, s) => {
+      setTheme(t);
       setScheme(s);
       setCustom(currentCustomHex() ?? DEFAULT_CUSTOM_HEX);
     });
@@ -37,7 +49,7 @@ function AccentPicker() {
   };
 
   return (
-    <div className="accent-picker" role="group" aria-label="Colour scheme">
+    <div className="accent-picker" role="group" aria-label="Color scheme">
       <div className="accent-picker__row">
         {ACCENT_IDS.map((id) => {
           const preset = ACCENTS[id];
@@ -48,9 +60,9 @@ function AccentPicker() {
               type="button"
               aria-pressed={active}
               title={`${preset.label} scheme`}
-              aria-label={`${preset.label} colour scheme`}
+              aria-label={`${preset.label} color scheme`}
               className={"accent-swatch" + (active ? " active" : "")}
-              style={{ backgroundColor: preset.swatch }}
+              style={{ backgroundColor: accentSwatchFor(id, theme) }}
               onClick={() => pick(id)}
             />
           );
@@ -60,19 +72,19 @@ function AccentPicker() {
             "accent-swatch accent-swatch--custom" +
             (scheme === "custom" ? " active" : "")
           }
-          title="Custom colour scheme — pick any colour"
+          title="Custom color scheme — pick any color"
           style={
             scheme === "custom" ? { backgroundColor: custom } : undefined
           }
         >
-          <span className="sr-only">Custom colour scheme</span>
+          <span className="sr-only">Custom color scheme</span>
           <span aria-hidden="true" className="accent-swatch__plus">
             +
           </span>
           <input
             type="color"
             className="accent-swatch__input"
-            aria-label="Custom colour scheme"
+            aria-label="Custom color scheme"
             value={custom}
             onChange={(e) => pick("custom", e.target.value)}
           />
@@ -85,12 +97,17 @@ function AccentPicker() {
   );
 }
 
-/** Shared DISPLAY subsection: heading + picker. Keeps the four lab
- *  toolbars (geometry / physics / chemistry / VR) identical. */
-export function AccentSection() {
+/** Shared DISPLAY subsection: heading + picker. Accepts headingLevel so
+ *  drawers with h2 titles can render h3 subsections cleanly. */
+export function AccentSection({
+  headingLevel = 2,
+}: {
+  headingLevel?: 2 | 3;
+} = {}) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   return (
     <>
-      <h2 className="accent-title">COLOUR SCHEME</h2>
+      <Heading className="accent-title">Color scheme</Heading>
       <AccentPicker />
     </>
   );

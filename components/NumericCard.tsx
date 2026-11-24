@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { CheckIcon } from "./icons";
 
 export interface NumericCardProps {
   question: string;
@@ -42,27 +43,13 @@ export default function NumericCard({
     onAnswer(parsed);
   };
 
-  const borderColor =
-    state === "correct"
-      ? "var(--good)"
-      : state === "wrong"
-        ? "var(--bad)"
-        : "var(--border)";
+  const stateClass =
+    state === "correct" ? " is-correct" : state === "wrong" ? " is-wrong" : "";
 
   return (
-    <section
-      aria-label="Numeric challenge"
-      style={{
-        position: "relative",
-        marginTop: 14,
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        background: "var(--surface2)",
-      }}
-    >
-      <p style={{ fontWeight: 700, marginBottom: 8 }}>{question}</p>
-      <div style={{ display: "flex", gap: 6 }}>
+    <section className="numeric-card" aria-label="Numeric challenge">
+      <p className="numeric-card__q">{question}</p>
+      <div className="numeric-card__row">
         <input
           id={inputId}
           type="number"
@@ -73,16 +60,7 @@ export default function NumericCard({
           disabled={state === "correct"}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "6px 10px",
-            borderRadius: 8,
-            border: `1px solid ${borderColor}`,
-            background: "var(--surface)",
-            color: "inherit",
-            fontVariantNumeric: "tabular-nums",
-          }}
+          className={"numeric-card__input" + stateClass}
         />
         <button
           type="button"
@@ -93,13 +71,16 @@ export default function NumericCard({
           Submit
         </button>
       </div>
-      {state === "correct" && (
-        <p className="m-sub" style={{ marginTop: 6, color: "var(--good)" }}>
-          Inside tolerance ✓
-        </p>
-      )}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {state === "correct" && (
+          <p className="m-sub numeric-card__ok">
+            <span>Inside tolerance</span>
+            <CheckIcon size={13} />
+          </p>
+        )}
+      </div>
       {state === "wrong" && (
-        <div role="alert" style={{ marginTop: 10, color: "var(--color-bad)" }}>
+        <div role="alert" className="quiz-card__feedback--bad">
           Not quite — try again.
         </div>
       )}

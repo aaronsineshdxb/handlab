@@ -1,6 +1,6 @@
 {
   "name": "handlab",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "HANDLAB — 3D hand-tracked cursor (Next.js + React + TypeScript + Three.js)",
   "scripts": {
@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "perf": "next build && node scripts/perf-report.mjs"
+    "perf": "next build && node scripts/perf-report.mjs",
+    "build:wasm": "bash scripts/build-wasm.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",

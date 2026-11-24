@@ -14,14 +14,18 @@ const HandLabVR = dynamic(() => import("./HandLabVR"), {
 });
 
 export default function VrEntry() {
-  // iPad has no WebXR — don't even load the Three.js/XR chunk there.
-  const [ipad, setIpad] = useState(false);
+  // iPad has no WebXR — hold on <Boot /> until client detection resolves so
+  // Three.js/XR chunks are never fetched on iPadOS.
+  const [ipad, setIpad] = useState<boolean | null>(null);
   useEffect(() => {
     setIpad(isIPadOS());
   }, []);
+  if (ipad === null) {
+    return <Boot />;
+  }
   if (ipad) {
     return (
-      <div className="vr-fatal">
+      <main className="vr-fatal">
         <div>
           <h1>
             hand<span>lab</span>
@@ -33,7 +37,7 @@ export default function VrEntry() {
             </Link>
           </p>
         </div>
-      </div>
+      </main>
     );
   }
   return <HandLabVR />;
