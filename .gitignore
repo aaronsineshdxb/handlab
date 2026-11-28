@@ -5,6 +5,8 @@ out/
 *.log
 tsconfig.tsbuildinfo
 dogfood-output/
+# classroom sessions (teacher-hosted classes live here at runtime)
+.handlab-classroom/
 # Audit §3.2: never commit local secrets / env files.
 .env
 .env.*

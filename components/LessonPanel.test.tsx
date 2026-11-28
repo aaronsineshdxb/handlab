@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Lesson, Progress } from "../lib/lessons/types";
+import type { SceneSnap } from "../lib/lessons/checks";
 import LessonPanel, { getVisibleStepIndexes } from "./LessonPanel";
+
+const emptySnap: SceneSnap = { objects: [], chains: [], quizAnswers: {} };
 
 const lesson: Lesson = {
   id: "lesson-1",
@@ -190,5 +193,71 @@ describe("LessonPanel numeric steps", () => {
     const nextButton = markup.match(/<button[^>]*>Next<\/button>/)?.[0];
     expect(nextButton).toBeDefined();
     expect(nextButton?.match(/disabled/g)).toBeNull();
+  });
+});
+
+describe("LessonPanel hint ladder", () => {
+  const hintedLesson: Lesson = {
+    id: "hinted-lesson",
+    title: "Hinted Lesson",
+    level: "intro",
+    objectives: [],
+    steps: [
+      {
+        id: "h1",
+        title: "Close a triangle",
+        prompt: "Close a loop.",
+        level: "intro",
+        hint: "Endpoints snap when close.",
+        checks: [{ kind: "chain-closed", minPoints: 3 }],
+      },
+    ],
+  };
+
+  it("hides the hint text behind a Show hint button before any failure", () => {
+    const markup = renderToStaticMarkup(
+      <LessonPanel
+        lessons={[hintedLesson]}
+        active={hintedLesson.id}
+        stepIdx={0}
+        onSelect={() => {}}
+        onNext={() => {}}
+        onBack={() => {}}
+        snap={emptySnap}
+      />,
+    );
+
+    expect(markup).toContain("Show hint");
+    expect(markup).not.toContain("Hint: Endpoints snap when close.");
+  });
+
+  it("keeps the solution ghost gated until an attempt fails", () => {
+    const ghostLesson: Lesson = {
+      ...hintedLesson,
+      steps: [
+        {
+          ...hintedLesson.steps[0]!,
+          solution: {
+            version: 1,
+            objects: [],
+            chains: [[[0, 0, 0], [1, 0, 0], [1, 1, 0]]],
+          },
+        },
+      ],
+    };
+    const markup = renderToStaticMarkup(
+      <LessonPanel
+        lessons={[ghostLesson]}
+        active={ghostLesson.id}
+        stepIdx={0}
+        onSelect={() => {}}
+        onNext={() => {}}
+        onBack={() => {}}
+        snap={emptySnap}
+      />,
+    );
+
+    expect(markup).toContain("Show hint");
+    expect(markup).not.toContain("Show me");
   });
 });

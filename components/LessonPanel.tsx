@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import NumericCard from "./NumericCard";
 import QuizCard from "./QuizCard";
 import SegmentedControl from "./bits/SegmentedControl";
@@ -14,6 +14,11 @@ import type {
   QuizCheck,
 } from "../lib/lessons/types";
 import { evalCheck, type SceneSnap } from "../lib/lessons/checks";
+import {
+  firstLockedIndex,
+  isPlaylistComplete,
+  type Playlist,
+} from "../lib/lessons/playlists";
 
 export type LessonLevelMode = "intro" | "advanced" | "both";
 
@@ -32,7 +37,9 @@ export function describeCheck(check: CheckKind): string {
     case "length-range":
       return `Draw a chain between ${check.min} m and ${check.max} m long`;
     case "numeric":
-      return check.tolerance > 0
+      // Templates resolve to numbers before display; Number() keeps template
+      // strings from taking the "±" branch.
+      return Number(check.tolerance) > 0
         ? `Type the value of ${check.question} (± ${check.tolerance})`
         : `Type the value of ${check.question}`;
     default:
@@ -63,7 +70,23 @@ export interface LessonPanelProps {
   snap?: SceneSnap;
   /** When true, renders inside an existing drawer without a nested <aside> or duplicate heading. */
   embedded?: boolean;
+  /** Ordered courses for the Courses tab; empty/undefined hides the tab. */
+  playlists?: Playlist[];
+  /** Progress for every lesson — courses unlock-gating reads this. */
+  progressAll?: Record<string, Progress>;
+  /** True when the active lesson is a randomized template (shows "New numbers"). */
+  showReroll?: boolean;
+  /** Re-rolls the template variables for the active lesson. */
+  onReroll?: () => void;
+  /** Renders the step's solution scene as a ghost overlay (null clears).
+   *  Returns false when the engine could not render it (e.g. the 2D
+   *  fallback has no ghost overlay) so the ladder doesn't claim success. */
+  onShowSolution?: (json: string | null) => boolean | void;
+  /** Fires whenever the student reveals a hint or a solution ghost. */
+  onHintUsed?: () => void;
 }
+
+type PanelView = "lessons" | "courses";
 
 function LessonPanel({
   lessons,
@@ -77,13 +100,25 @@ function LessonPanel({
   onNumericAnswer,
   snap,
   embedded = false,
+  playlists,
+  progressAll,
+  showReroll = false,
+  onReroll,
+  onShowSolution,
+  onHintUsed,
 }: LessonPanelProps) {
   const lesson = lessons.find(({ id }) => id === active);
   const [levelMode, setLevelMode] = useState<LessonLevelMode>("both");
+  const [view, setView] = useState<PanelView>("lessons");
   const [completedQuizKey, setCompletedQuizKey] = useState<string | null>(null);
   const [completedNumericKey, setCompletedNumericKey] = useState<string | null>(null);
   const [quizIncorrect, setQuizIncorrect] = useState(false);
   const [quizRun, setQuizRun] = useState(0);
+  // ---- hint ladder (#9): fails → hint → solution ghost ----
+  const [fails, setFails] = useState(0);
+  const [hintRevealed, setHintRevealed] = useState(false);
+  const [ghostOn, setGhostOn] = useState(false);
+  const ghostRef = useRef(false);
   const visibleStepIndexes = lesson ? getVisibleStepIndexes(lesson, levelMode) : [];
   const activeStepPosition = visibleStepIndexes.indexOf(stepIdx);
   const step = activeStepPosition >= 0 ? lesson?.steps[stepIdx] : undefined;
@@ -127,21 +162,38 @@ function LessonPanel({
     setCompletedQuizKey(null);
     setCompletedNumericKey(null);
     setQuizIncorrect(false);
+    setFails(0);
+    setHintRevealed(false);
+    setGhostOn(false);
   }, [active, stepIdx, step?.id, quizCheck?.question, quizRun]);
+
+  // Ghost overlay cleanup: leaving a step (or the lesson) that had the
+  // solution ghost showing clears it in the engine.
+  useEffect(() => {
+    ghostRef.current = ghostOn;
+    return () => {
+      if (ghostRef.current) onShowSolution?.(null);
+    };
+  }, [active, stepIdx, step?.id, ghostOn, onShowSolution]);
 
   const handleQuizAnswer = (answerIndex: number) => {
     if (quizCheck?.kind !== "quiz") return;
     const correct = answerIndex === quizCheck.answer;
     setCompletedQuizKey(correct ? quizKey : null);
     setQuizIncorrect(!correct);
+    if (!correct) setFails((f) => f + 1);
     onQuizAnswer?.(quizCheck, answerIndex);
   };
 
   const handleNumericAnswer = (value: number) => {
     if (numericCheck?.kind !== "numeric" || !Number.isFinite(value)) return;
-    const correct = Math.abs(value - numericCheck.answer) <= numericCheck.tolerance;
+    // Checks arrive instantiated (plain numbers); Number() only satisfies
+    // the NumVal authoring type.
+    const correct =
+      Math.abs(value - Number(numericCheck.answer)) <= Number(numericCheck.tolerance);
     setCompletedNumericKey(correct ? numericKey : null);
     setQuizIncorrect(!correct);
+    if (!correct) setFails((f) => f + 1);
     onNumericAnswer?.(numericCheck, value);
   };
 
@@ -181,6 +233,14 @@ function LessonPanel({
     setQuizRun((run) => run + 1);
   };
 
+  // Hint ladder: prompt always visible; hint text unlocks on demand or
+  // automatically after the first failed attempt; the solution ghost unlocks
+  // after a failed attempt (or after the hint was revealed).
+  const hintShown = hintRevealed || fails >= 1;
+  const ghostAvailable = fails >= 1 || hintRevealed;
+  const hasVars =
+    !!lesson?.vars && Object.keys(lesson.vars).length > 0;
+
   const Container = embedded ? "div" : "aside";
   const containerProps = embedded
     ? { className: "lesson-panel" }
@@ -201,6 +261,26 @@ function LessonPanel({
           ]}
         />
       </div>
+      {playlists && playlists.length > 0 && (
+        <div className="lesson-panel__seg">
+          <SegmentedControl
+            label="Browse mode"
+            value={view}
+            onChange={setView}
+            options={[
+              { id: "lessons", label: "Lessons" },
+              { id: "courses", label: "Courses" },
+            ]}
+          />
+        </div>
+      )}
+      {showReroll && hasVars && (
+        <div className="lesson-panel__seg">
+          <button type="button" className="btn ghost" onClick={onReroll}>
+            New numbers
+          </button>
+        </div>
+      )}
       {lesson && progress && (
         <div className="lesson-panel__progress">
           <span className="m-sub">Resume · Step {resumeStepIdx + 1}</span>
@@ -221,21 +301,73 @@ function LessonPanel({
           </span>
         </div>
       )}
-      <nav aria-label="Lesson list">
-        <AnimatedList>
-          {lessons.map(({ id, title, level }) => (
-            <button
-              key={id}
-              type="button"
-              className={"mini" + (active === id ? " active" : "")}
-              aria-pressed={active === id}
-              onClick={() => onSelect(id)}
-            >
-              {title} · {level}
-            </button>
-          ))}
-        </AnimatedList>
-      </nav>
+      {view === "lessons" ? (
+        <nav aria-label="Lesson list">
+          <AnimatedList>
+            {lessons.map(({ id, title, level }) => (
+              <button
+                key={id}
+                type="button"
+                className={"mini" + (active === id ? " active" : "")}
+                aria-pressed={active === id}
+                onClick={() => onSelect(id)}
+              >
+                {title} · {level}
+              </button>
+            ))}
+          </AnimatedList>
+        </nav>
+      ) : (
+        <div className="lesson-playlists">
+          {(playlists ?? []).map((playlist) => {
+            const unlockedUpTo = firstLockedIndex(
+              playlist,
+              lessons,
+              progressAll ?? {},
+            );
+            const complete = isPlaylistComplete(
+              playlist,
+              lessons,
+              progressAll ?? {},
+            );
+            return (
+              <section key={playlist.id} className="lesson-playlist" aria-label={playlist.title}>
+                <h4 className="solid-math__h lesson-playlist__title">
+                  {playlist.title}
+                  {complete && (
+                    <span className="lesson-playlist__badge" aria-label="Course complete">
+                      <CheckIcon size={13} />
+                    </span>
+                  )}
+                </h4>
+                <ol className="lesson-playlist__list">
+                  {playlist.lessonIds.map((id, index) => {
+                    const entry = lessons.find(({ id: lid }) => lid === id);
+                    if (!entry) return null;
+                    const locked = index >= unlockedUpTo;
+                    const done = progressAll?.[id]?.done === true;
+                    return (
+                      <li key={id}>
+                        <button
+                          type="button"
+                          className={"mini" + (active === id ? " active" : "")}
+                          disabled={locked}
+                          title={locked ? "Finish the previous lesson to unlock" : undefined}
+                          onClick={() => onSelect(id)}
+                        >
+                          {done ? "✓ " : ""}
+                          {entry.title}
+                          {locked ? " · locked" : ""}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       {/* Persistent live region mounted before text updates */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
@@ -275,9 +407,41 @@ function LessonPanel({
               <p className="lesson-panel__prompt lesson-panel__text">
                 {step.prompt}
               </p>
-              {step.hint && (
+              {step.hint && !hintShown && (
+                <button
+                  type="button"
+                  className="btn ghost lesson-panel__ladder-btn"
+                  onClick={() => {
+                    setHintRevealed(true);
+                    onHintUsed?.();
+                  }}
+                >
+                  Show hint
+                </button>
+              )}
+              {step.hint && hintShown && (
                 <p className="m-sub lesson-panel__text">
                   Hint: {step.hint}
+                </p>
+              )}
+              {step.solution && ghostAvailable && !ghostOn && (
+                <button
+                  type="button"
+                  className="btn ghost lesson-panel__ladder-btn"
+                  onClick={() => {
+                    const accepted = onShowSolution?.(JSON.stringify(step.solution));
+                    if (accepted === false) return;
+                    setGhostOn(true);
+                    onHintUsed?.();
+                  }}
+                >
+                  Show me
+                </button>
+              )}
+              {ghostOn && (
+                <p className="m-sub lesson-panel__text" role="status">
+                  Solution ghost showing — match it, then hide it by going back
+                  or forward.
                 </p>
               )}
               {checkStatus.length > 0 && (
@@ -317,8 +481,8 @@ function LessonPanel({
                 <NumericCard
                   key={`${active}:${step.id}:${numericCheck.question}:${quizRun}`}
                   question={numericCheck.question}
-                  answer={numericCheck.answer}
-                  tolerance={numericCheck.tolerance}
+                  answer={Number(numericCheck.answer)}
+                  tolerance={Number(numericCheck.tolerance)}
                   onAnswer={handleNumericAnswer}
                 />
               )}

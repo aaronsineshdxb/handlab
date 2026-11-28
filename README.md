@@ -38,6 +38,52 @@ Teachers can author lesson JSON matching `lib/lessons/types.ts`, export the
 active lesson with `lesson ↓`, then import validated custom lessons with
 `lesson ↑`; lesson IDs must be unique.
 
+### Randomized lessons (template vars)
+
+A lesson can define `vars` (`{ name: { min, max, step?, decimals? } }`) and
+reference them as `{{name}}` in prompts/hints/questions and in numeric check
+fields (e.g. `{ "kind": "numeric", "answer": "{{h}}", "tolerance": "{{tol}}" }`).
+Numbers are rolled per browser and persisted (`handlab.rolls.v1`), so a
+refresh keeps the same numbers; the `New numbers` button in the Lessons drawer
+re-rolls. Validation rejects references to undefined vars.
+
+### Hint ladder
+
+Each step escalates: prompt → `Show hint` (also auto-revealed after one wrong
+quiz/numeric answer) → `Show me`, which renders the step's optional `solution`
+scene JSON as a translucent ghost overlay in the 3D scene. Hint/ghost reveals
+are counted per lesson (`Progress.hintsUsed`) and reported to the classroom.
+
+### Courses (playlists)
+
+The Lessons drawer has a `Lessons | Courses` switch. Courses are ordered
+lesson chains (`lib/lessons/playlists.ts`): a lesson unlocks when the previous
+one is done, and the course shows a badge when every lesson in it is done.
+Custom playlists import like lessons (`{ id, title, domain?, lessonIds }`).
+
+### Ghost diff overlay
+
+The Settings drawer's `Ghost overlay` section loads any exported scene JSON as
+a translucent target to match. Ghosts are display-only: they never enter
+picking, measurement, lesson checks, or scene export.
+
+## Classroom (teacher desk)
+
+Hosted at `/teacher` (also linked from the Lessons drawer). The teacher picks
+a built-in lesson or imports lesson JSON, presses `Host a class`, and shares
+the 5-character code. Students open the same address, enter the code in the
+Lessons drawer's `Join your teacher's class` card, and the assigned lesson is
+injected into their lab; step completions, scores, and hint usage upload to
+the teacher's roster, which polls live (3 s) and exports as CSV.
+
+Hosting uses this app's own server (`next dev` / `npm start`) with one JSON
+session file per class under `.handlab-classroom/` (gitignored; override the
+directory with `HANDLAB_CLASSROOM_DIR`). No accounts, no external services —
+the code is the join capability, the host token (kept in the teacher browser)
+gates roster/close endpoints, and sessions expire after 12 h. On serverless
+hosts (e.g. Vercel) hosting reports that it needs a persistent machine;
+the rest of the app is unaffected.
+
 ## Structure
 
 | Path | What |

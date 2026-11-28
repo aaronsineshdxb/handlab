@@ -140,7 +140,7 @@
   border: 1px solid var(--color-rule);
 }
 
-/* Non-blocking top banners container (coach pill + fallback notice) inside .sc-top-stack */
+/* Non-blocking top banners container (fallback notice) inside .sc-top-stack */
 .sc-top-banners {
   position: relative;
   align-self: center;
@@ -152,50 +152,6 @@
   pointer-events: none;
   max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
 }
-.sc-coach-pill {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--color-paper-2);
-  background: var(--surface-hud);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  border: 1px solid var(--color-rule);
-  border-radius: var(--radius-pill);
-  padding: 6px 8px 6px 14px;
-  box-shadow: var(--shadow-card);
-  font-size: 12px;
-  color: var(--color-ink-2);
-  line-height: 1.35;
-}
-.sc-coach-pill__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  flex-shrink: 0;
-}
-.sc-coach-pill__text strong {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-.sc-coach-pill__btn {
-  flex-shrink: 0;
-  border: 1px solid var(--color-ink);
-  background: var(--color-ink);
-  color: var(--color-paper);
-  border-radius: var(--radius-pill);
-  padding: 5px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color var(--dur-micro) var(--ease-out),
-    border-color var(--dur-micro) var(--ease-out),
-    transform 100ms var(--ease-out);
-}
-.sc-coach-pill__btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.sc-coach-pill__btn:active { transform: scale(0.97); }
 
 /* Top-anchored compact rail leaves the bottom-left completely clear for .video-dock and .sc-status */
 .sc-rail {
@@ -556,21 +512,6 @@
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
 }
-/* expression left, ≈ result right — wraps gracefully with nowrap only on ≈ result */
-.sc-symline {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 4px 10px;
-}
-.sc-symline b {
-  font-weight: 500;
-  color: var(--color-ink);
-  font-size: inherit;
-  margin: 0;
-  white-space: nowrap;
-}
 .sc-card code.sub {
   color: var(--color-ink-2);
   background: transparent;
@@ -614,21 +555,21 @@
   top: calc(92px + env(safe-area-inset-top, 0px));
   max-height: calc(100dvh - 184px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   z-index: var(--z-raised);
-  width: 308px;
+  width: 260px;
   background: var(--color-paper-2);
   background: var(--surface-hud);
   backdrop-filter: blur(14px) saturate(1.15);
   -webkit-backdrop-filter: blur(14px) saturate(1.15);
   border: 1px solid var(--color-rule);
   border-radius: var(--radius-card);
-  padding: 14px 14px 20px;
+  padding: 12px 12px 14px;
   box-shadow: var(--shadow-card);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--color-rule-2) transparent;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .solid-math__head {
   display: flex;
@@ -653,10 +594,46 @@
   color: var(--color-muted);
   margin: 6px 0 0;
 }
-/* Recessed metric cards inside SolidMath read cleanly against the frosted HUD panel */
+/* Spec-sheet metric cards: flat hairline-separated sections that match the
+   drawer/teacher-card register — no nested bordered chips inside the HUD. */
 .solid-math .sc-card {
-  background: var(--color-paper);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--color-rule);
+  border-radius: 0;
   box-shadow: none;
+  padding: 9px 2px 1px;
+}
+.solid-math .sc-card:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.solid-math .sc-card b {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 2px 0;
+}
+.solid-math .sc-card b span { color: var(--color-muted); }
+.solid-math .sc-card code {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 6px;
+  color: var(--color-muted);
+}
+.solid-math .sc-card code.sub {
+  border-top: 1px solid var(--color-rule);
+  padding-top: 6px;
+  margin-top: 6px;
+  color: var(--color-ink-2);
+}
+/* The Euler note is prose, not a data readout — mono is for the latter */
+.solid-math .sc-card--euler code {
+  font-family: var(--font-body);
+  line-height: 1.5;
 }
 .solid-math .sc-slider { min-width: 0; }
 
@@ -826,10 +803,6 @@
     background: var(--color-ink-2);
     border-color: var(--color-ink-2);
   }
-  .sc-coach-pill__btn:hover {
-    background: var(--color-ink-2);
-    border-color: var(--color-ink-2);
-  }
   .sc-fab:hover,
   .sc-chip:hover,
   .sc-shape:hover,
@@ -963,11 +936,6 @@
     max-width: none;
     align-items: flex-start;
   }
-  .sc-coach-pill {
-    border-radius: var(--radius-input);
-    flex-wrap: wrap;
-    gap: 6px 10px;
-  }
 }
 
 @media (pointer: coarse) {
@@ -976,8 +944,7 @@
   .sc-mode button,
   .sc-shape,
   .sc-drawer__head button,
-  .sc-fallback-note button,
-  .sc-coach-pill__btn {
+  .sc-fallback-note button {
     min-width: 44px;
     min-height: 44px;
   }
@@ -1001,8 +968,7 @@
   .sc-shape,
   .sc-mode button,
   .sc-btn,
-  .sc-drawer__head button,
-  .sc-coach-pill__btn {
+  .sc-drawer__head button {
     transition: none;
   }
   .sc-btn:active,
@@ -1010,8 +976,116 @@
   .sc-chip:active,
   .sc-shape:active,
   .sc-mode button:active,
-  .sc-drawer__head button:active,
-  .sc-coach-pill__btn:active {
+  .sc-drawer__head button:active {
     transform: none;
   }
+}
+
+/* ---------- classroom (#13): student join card in the lessons drawer ---------- */
+.class-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.class-card--joined {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.class-card__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.class-card__code {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  color: var(--color-accent);
+}
+.class-card__name {
+  color: var(--color-ink-2);
+  font-size: 12px;
+}
+.class-card__row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.class-card__input {
+  min-width: 0;
+  flex: 0 0 96px;
+  padding: 6px 10px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--color-rule);
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+.class-card__input--name {
+  flex: 1 1 120px;
+  text-transform: none;
+}
+.class-card__input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.class-card__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-bad);
+}
+
+/* ---------- courses (#10): playlist cards in the lessons drawer ---------- */
+.lesson-playlists {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0;
+}
+.lesson-playlist {
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-input);
+  padding: 10px 12px;
+  background: var(--color-paper-2);
+}
+.lesson-playlist__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.lesson-playlist__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-good);
+  color: var(--color-paper);
+}
+.lesson-playlist__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---------- hint ladder (#9): reveal buttons ---------- */
+.lesson-panel__ladder-btn {
+  align-self: flex-start;
+  margin: 2px 0;
 }

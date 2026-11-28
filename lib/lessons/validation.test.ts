@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { SceneData } from "../engine";
 import type { Lesson } from "./types";
 import {
   addImportedLesson,
@@ -177,5 +178,74 @@ describe("numeric checks", () => {
     expect(isLessonCheck({ kind: "numeric", question: "v?", answer: 5, tolerance: -1 })).toBe(false);
     expect(isLessonCheck({ kind: "numeric", question: "v?", answer: Number.NaN, tolerance: 1 })).toBe(false);
     expect(isLessonCheck({ kind: "numeric", question: "", answer: 5, tolerance: 1 })).toBe(false);
+  });
+});
+
+describe("lesson template vars", () => {
+  const varLesson = mutate((draft) => {
+    draft.vars = { h: { min: 3, max: 5, step: 1 }, tol: { min: 0.05, max: 0.2, decimals: 2 } };
+    draft.steps[0]!.prompt = "Build a prism {{h}} m tall.";
+    draft.steps[0]!.checks = [
+      { kind: "place-count", shape: "prism", count: "{{h}}" },
+      { kind: "numeric", question: "Volume?", answer: "{{h}}", tolerance: "{{tol}}" },
+    ];
+  });
+
+  it("accepts vars with template references that resolve", () => {
+    expect(isLesson(varLesson)).toBe(true);
+    expect(isLessonCheck({ kind: "area-gt", min: "{{h}}" }, new Set(["h"]))).toBe(true);
+  });
+
+  it("rejects references to undefined vars and malformed specs", () => {
+    const dangling = mutate((draft) => {
+      draft.steps[0]!.prompt = "Build a prism {{missing}} m tall.";
+    });
+    expect(isLesson(dangling)).toBe(false);
+
+    // NaN min fails isFiniteNumber, standing in for a missing field while
+    // keeping the draft type-correct.
+    const badSpec = mutate((draft) => {
+      draft.vars = { h: { min: NaN, max: 5 } };
+    });
+    expect(isLesson(badSpec)).toBe(false);
+
+    const inverted = mutate((draft) => {
+      draft.vars = { h: { min: 5, max: 3 } };
+    });
+    expect(isLesson(inverted)).toBe(false);
+
+    expect(isLessonCheck({ kind: "area-gt", min: "{{nope}}" }, new Set(["h"]))).toBe(false);
+    expect(isLessonCheck({ kind: "area-gt", min: "~{{h}}" }, new Set(["h"]))).toBe(false);
+  });
+});
+
+describe("solution scene ghosts", () => {
+  const scene: SceneData = {
+    version: 1,
+    objects: [{ s: "cube", c: "#0D9488", p: [0, 0, 0], r: [0, 0, 0], k: [1, 1, 1] }],
+    chains: [[[0, 0, 0], [1, 0, 0], [1, 1, 0]]],
+  };
+
+  it("accepts a well-formed solution scene on a step", () => {
+    const withSolution = mutate((draft) => {
+      draft.steps[0]!.solution = scene;
+    });
+    expect(isLesson(withSolution)).toBe(true);
+  });
+
+  it("rejects malformed solution scenes", () => {
+    const badVersion = mutate((draft) => {
+      draft.steps[0]!.solution = { ...scene, version: 2 } as unknown as SceneData;
+    });
+    expect(isLesson(badVersion)).toBe(false);
+
+    const badCoord = mutate((draft) => {
+      draft.steps[0]!.solution = {
+        version: 1,
+        objects: [{ s: "cube", c: "#0D9488", p: [1e300, 0, 0], r: [0, 0, 0] }],
+        chains: [],
+      };
+    });
+    expect(isLesson(badCoord)).toBe(false);
   });
 });

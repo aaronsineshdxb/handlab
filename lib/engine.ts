@@ -90,6 +90,10 @@ export interface LabEngine {
   exportScene: () => SceneData;
   exportCheckSnap: (quizAnswers?: Record<string, number>) => SceneSnap;
   importSceneJson: (text: string) => boolean;
+  /** Ghost overlay: render a target scene JSON as a translucent overlay the
+   *  student can match. 3D-only; the 2D fallback does not implement these. */
+  setGhostScene?: (text: string) => boolean;
+  clearGhost?: () => void;
   enableWebcam: () => Promise<void> | void;
   cancelWebcamLoad: () => void;
   setDepthEnabled?: (on: boolean) => Promise<void> | void;
@@ -581,6 +585,29 @@ export class HandLabEngine {
   private handleOffset = new THREE.Vector3();
   private polylines: Polyline[] = [];
   private junctionGroup = new THREE.Group();
+  /* ---------- ghost scene overlay (hint ladder / target diff) ----------
+   * A separate group rendered on top of the workspace: translucent target
+   * objects + chain outlines the student can match. Contents never enter
+   * spawnables/polylines, so picking (nearestTo scans spawnables only),
+   * measurement, exportScene and exportCheckSnap are untouched for free. */
+  private ghostGroup = new THREE.Group();
+  private ghostObjectMat = new THREE.MeshStandardMaterial({
+    color: 0x7c86a0,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+    roughness: 0.7,
+    metalness: 0,
+  });
+  private ghostLineMat = new THREE.LineBasicMaterial({
+    color: 0x7c86a0,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  /** Per-chain buffer geometries created for ghost lines — disposed on clear. */
+  private ghostGeos: THREE.BufferGeometry[] = [];
+
   private snapMarker: THREE.Mesh;
   private previewLine: THREE.Line;
   private SEG_GEO = new THREE.CylinderGeometry(0.035, 0.035, 1, 10);
@@ -863,6 +890,7 @@ export class HandLabEngine {
 
     /* ---------- lines infra ---------- */
     this.scene.add(this.junctionGroup);
+    this.scene.add(this.ghostGroup);
     // two-hand ruler label park — same group lifecycle as junctionGroup
     this.scene.add(this.rulerGroup);
     this.snapMarker = new THREE.Mesh(
@@ -1066,6 +1094,9 @@ export class HandLabEngine {
     disposeGroup(this.rulerGroup);
     this.scene.remove(this.rulerGroup);
     this.rulerLabel = null;
+    this.clearGhostMeshes();
+    this.ghostObjectMat.dispose();
+    this.ghostLineMat.dispose();
     const disposeObj = (o: THREE.Object3D): void => {
       const mesh = o as THREE.Mesh;
       mesh.geometry?.dispose?.();
@@ -1378,6 +1409,85 @@ export class HandLabEngine {
       this.toast("scene file is not valid JSON");
       return false;
     }
+  }
+
+  /* ---------- ghost scene overlay ---------- */
+
+  /**
+   * Render a target scene (same JSON format as scene export) as a
+   * translucent overlay. Unlike importScene, nothing in the live scene is
+   * touched: ghost meshes live in their own group, never enter
+   * spawnables/polylines, and are therefore invisible to picking,
+   * measurement, lesson checks, and scene export by construction.
+   * Returns false (with a toast) on invalid JSON or an unknown shape.
+   */
+  setGhostScene(text: string): boolean {
+    let data: SceneData;
+    try {
+      data = JSON.parse(text) as SceneData;
+    } catch {
+      this.toast("ghost scene is not valid JSON");
+      return false;
+    }
+    const bad = (): boolean => {
+      this.toast("ghost scene data invalid");
+      return false;
+    };
+    if (!data || data.version !== 1) return bad();
+    if (
+      !Array.isArray(data.objects) ||
+      !Array.isArray(data.chains) ||
+      data.objects.length > 500 ||
+      data.chains.length > 100
+    )
+      return bad();
+    for (const o of data.objects) {
+      if (
+        !o ||
+        !SHAPES.includes(o.s) ||
+        typeof o.c !== "string" ||
+        !isNum3(o.p) ||
+        !isNum3(o.r)
+      )
+        return bad();
+    }
+    for (const ch of data.chains) {
+      if (!Array.isArray(ch) || ch.length > 200 || !ch.every(isNum3))
+        return bad();
+    }
+    this.clearGhostMeshes();
+    for (const o of data.objects) {
+      const m = new THREE.Mesh(this.geoFor(o.s), this.ghostObjectMat);
+      m.position.set(o.p[0], o.p[1], o.p[2]);
+      m.rotation.set(o.r[0], o.r[1], o.r[2]);
+      if (o.k) m.scale.set(o.k[0], o.k[1], o.k[2]);
+      m.renderOrder = 5;
+      this.ghostGroup.add(m);
+    }
+    for (const ch of data.chains) {
+      if (ch.length < 2) continue;
+      const geo = new THREE.BufferGeometry().setFromPoints(
+        ch.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
+      );
+      this.ghostGeos.push(geo);
+      const line = new THREE.Line(geo, this.ghostLineMat);
+      line.renderOrder = 6;
+      this.ghostGroup.add(line);
+    }
+    this.toast(
+      `ghost loaded — ${data.objects.length} objects, ${data.chains.length} chains`,
+    );
+    return true;
+  }
+
+  clearGhost(): void {
+    this.clearGhostMeshes();
+  }
+
+  private clearGhostMeshes(): void {
+    this.ghostGroup.clear();
+    for (const geo of this.ghostGeos) geo.dispose();
+    this.ghostGeos.length = 0;
   }
 
   private static STORE_KEY = "handlab.scene.v1";

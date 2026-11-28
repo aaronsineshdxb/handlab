@@ -1,4 +1,4 @@
-import type { CheckKind } from "./types";
+import type { CheckKind, NumVal } from "./types";
 import {
   chainLength,
   interiorAnglesDeg,
@@ -64,12 +64,12 @@ function anyClosedChain(
 export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
   switch (c.kind) {
     case "place-count":
-      return snap.objects.filter((object) => object.s === c.shape).length >= c.count;
+      return snap.objects.filter((object) => object.s === c.shape).length >= num(c.count);
     case "chain-closed":
-      return anyClosedChain(snap, c.minPoints) !== undefined;
+      return anyClosedChain(snap, num(c.minPoints)) !== undefined;
     case "area-gt":
       return snap.chains.some(
-        (chain) => isClosedLoop(chain) && polygonArea(chain) > c.min,
+        (chain) => isClosedLoop(chain) && polygonArea(chain) > num(c.min),
       );
     case "angle-at": {
       // Any interior angle in any chain (open joints + closed wrap-around)
@@ -77,7 +77,7 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
       for (const chain of snap.chains) {
         const closed = chain.length >= 3 && sameEnds(chain);
         for (const angle of interiorAnglesDeg(chain as unknown as readonly Pt[], closed)) {
-          if (angle >= c.min && angle <= c.max) return true;
+          if (angle >= num(c.min) && angle <= num(c.max)) return true;
         }
       }
       return false;
@@ -86,7 +86,7 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
       for (const chain of snap.chains) {
         const closed = chain.length >= 3 && sameEnds(chain);
         const length = chainLength(chain as unknown as readonly Pt[], closed);
-        if (length >= c.min && length <= c.max) return true;
+        if (length >= num(c.min) && length <= num(c.max)) return true;
       }
       return false;
     }
@@ -94,10 +94,12 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
       // Reuses the quizAnswers record: index semantics don't apply, the
       // stored value IS the number the student typed.
       const value = snap.quizAnswers[c.question];
+      const answer = num(c.answer);
+      const tolerance = num(c.tolerance);
       return (
         typeof value === "number" &&
         Number.isFinite(value) &&
-        Math.abs(value - c.answer) <= c.tolerance
+        Math.abs(value - answer) <= tolerance
       );
     }
     case "quiz":
@@ -105,6 +107,14 @@ export function evalCheck(c: CheckKind, snap: SceneSnap): boolean {
     default:
       return false;
   }
+}
+
+/** Numeric check fields are authored as `number | "{{var}}"` (NumVal) but
+ *  instantiated to plain numbers before evaluation. Coercion keeps evalCheck
+ *  honest even if handed a raw template: unresolvable refs become NaN, and
+ *  every NaN comparison below fails the check rather than passing it. */
+function num(value: NumVal): number {
+  return typeof value === "number" ? value : Number(value);
 }
 
 /** A step is complete when every one of its checks passes. */

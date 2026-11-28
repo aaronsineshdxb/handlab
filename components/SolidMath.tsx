@@ -253,16 +253,11 @@ function SolidMath({
   );
 }
 
-/** Substitution line: expression sits left, ≈ result right with nowrap on the result. */
+/** Substitution line: the worked expression with real dimensions. The ≈
+ *  result is not repeated here — the card's headline number already is it. */
 function SubLine({ text }: { text: string }) {
   const i = text.indexOf(" ≈ ");
-  if (i < 0) return <code className="sub">{text}</code>;
-  return (
-    <code className="sub sc-symline">
-      <span>{text.slice(0, i)}</span>
-      <b>≈&nbsp;{text.slice(i + 3)}</b>
-    </code>
-  );
+  return <code className="sub">{i < 0 ? text : text.slice(0, i)}</code>;
 }
 
 function MathCards({ id, dims }: { id: ShowcaseShapeId; dims: ShapeDims }) {
@@ -292,7 +287,6 @@ function MathCards({ id, dims }: { id: ShowcaseShapeId; dims: ShapeDims }) {
         <code>{m.euler != null ? `V − E + F = ${m.vertices} − ${m.edges} + ${m.faces} = ${m.euler}` : (def.eulerNote ?? "V − E + F → Studio mesh χ")}</code>
         {def.eulerNote && m.euler != null && <code className="sub">{def.eulerNote}</code>}
       </article>
-      <p className="sc-note">Dimension sliders in the bottom bar update these cards and newly placed {def.label.toLowerCase()}s.</p>
     </>
   );
 }

@@ -47,6 +47,12 @@ import {
 import { LESSONS } from "../lib/lessons/lessons.geometry";
 import { loadProgress, saveStep } from "../lib/lessons/store";
 import { addImportedLesson } from "../lib/lessons/validation";
+import { PLAYLISTS } from "../lib/lessons/playlists";
+import {
+  ensureRolls,
+  instantiateLesson,
+  rerollLesson,
+} from "../lib/lessons/vars";
 import type {
   Lesson,
   NumericCheck,
@@ -54,11 +60,16 @@ import type {
   QuizCheck,
 } from "../lib/lessons/types";
 import type { SceneSnap } from "../lib/lessons/checks";
+import {
+  clearJoinState,
+  loadJoinState,
+  postProgress,
+  type JoinState,
+} from "../lib/classroom/client";
+import ClassCard from "./ClassCard";
 import { createSceneSync } from "../lib/sceneSync";
 
 const FOUNDATIONS: ShapeName[] = ["cube", "prism", "sphere", "cylinder", "cone", "pyramid"];
-
-const HINT_STORAGE_KEY = "handlab-hint-seen";
 
 type DrawerId = "shapes" | "line" | "settings" | "help" | "lessons";
 type LabMode = "learn" | "studio";
@@ -91,15 +102,6 @@ function isNarrowViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth <= 900;
 }
 
-function readHintSeen(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(HINT_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 function UnifiedLab() {
   const reduceMotion = useReducedMotion();
   const [narrow, setNarrow] = useState(() => isNarrowViewport());
@@ -117,8 +119,7 @@ function UnifiedLab() {
   const [mathOpen, setMathOpen] = useState(() => !isNarrowViewport());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
-  // non-blocking, persistent first-run coach pill + dismissable 2D-fallback notice
-  const [hintDismissed, setHintDismissed] = useState<boolean>(() => readHintSeen());
+  // dismissable 2D-fallback notice
   const [fallbackDismissed, setFallbackDismissed] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [engineRev, setEngineRev] = useState(0);
@@ -130,6 +131,14 @@ function UnifiedLab() {
   const [progressMap, setProgressMap] = useState<Record<string, Progress>>({});
   const lessonFileRef = useRef<HTMLInputElement>(null);
   const quizRef = useRef<Record<string, number>>({});
+  // Randomized template vars (#5): one roll per templated lesson, persisted
+  // per browser; rollsVersion re-renders instantiated lessons after re-roll.
+  const [rollsVersion, setRollsVersion] = useState(0);
+  // Classroom (#13): joined class + per-lesson hint-ladder usage that rides
+  // along with classroom progress uploads.
+  const [classState, setClassState] = useState<JoinState | null>(() => loadJoinState());
+  const hintsRef = useRef<Record<string, number>>({});
+  const ghostFileRef = useRef<HTMLInputElement>(null);
   const [sceneTick, setSceneTick] = useState(0);
   const engineRef = useRef<LabEngine | null>(null);
 
@@ -165,15 +174,6 @@ function UnifiedLab() {
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  const dismissHint = useCallback(() => {
-    setHintDismissed(true);
-    try {
-      localStorage.setItem(HINT_STORAGE_KEY, "1");
-    } catch {
-      /* private mode */
-    }
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -213,7 +213,6 @@ function UnifiedLab() {
       emit: setUi,
       onCamLive: () => {
         if (isNarrowViewport()) { setDrawer(null); setMathOpen(false); } setPreviewOpen(true);
-        dismissHint();
       },
       onFatal: (msg: string) => setFatal(msg),
       onScene: (): void => { sceneSync(); },
@@ -261,7 +260,7 @@ function UnifiedLab() {
       engine?.dispose();
       engineRef.current = null;
     };
-  }, [dismissHint]);
+  }, []);
 
   // Sync lifted Studio inspection state to both WebGL and Rust/WASM 3D engines.
   useEffect(() => {
@@ -415,6 +414,28 @@ function UnifiedLab() {
     }
   }, [showToast]);
 
+  // ---- ghost overlay (#8): translucent target-scene diff in the viewport ----
+  const onGhostImport = useCallback(
+    async (f: File) => {
+      try {
+        const text = await f.text();
+        const eng = engineRef.current;
+        if (!eng || typeof eng.setGhostScene !== "function") {
+          showToast("Ghost overlay needs the 3D engine");
+          return;
+        }
+        eng.setGhostScene(text);
+      } catch {
+        showToast("Could not read ghost scene file");
+      }
+    },
+    [showToast],
+  );
+
+  const onGhostClear = useCallback(() => {
+    engineRef.current?.clearGhost?.();
+  }, []);
+
   // ---- lessons: live scene snapshot + step flow handlers ----
   const engineSnap = useMemo<SceneSnap | undefined>(() => {
     const eng = engineRef.current;
@@ -422,6 +443,82 @@ function UnifiedLab() {
     return eng.exportCheckSnap({ ...quizRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneTick, engineRev]);
+
+  // Lessons the panel sees: templated lessons are instantiated with the
+  // browser's persisted roll; plain lessons pass through unchanged.
+  const rolledLessons = useMemo<Lesson[]>(() => {
+    void rollsVersion;
+    return lessons.map((l) => {
+      if (!l.vars || Object.keys(l.vars).length === 0) return l;
+      return instantiateLesson(l, ensureRolls(l));
+    });
+  }, [lessons, rollsVersion]);
+
+  const handleReroll = useCallback(() => {
+    if (!lessonId) return;
+    const template = lessonsRef.current.find(({ id }) => id === lessonId);
+    if (!template?.vars) return;
+    rerollLesson(template);
+    quizRef.current = {};
+    setRollsVersion((v) => v + 1);
+  }, [lessonId]);
+
+  const handleShowSolution = useCallback(
+    (json: string | null): boolean | void => {
+      const eng = engineRef.current;
+      if (!eng) return false;
+      if (json === null) {
+        eng.clearGhost?.();
+        return;
+      }
+      if (typeof eng.setGhostScene !== "function") {
+        showToast("Ghost overlay needs the 3D engine");
+        return false;
+      }
+      return eng.setGhostScene(json);
+    },
+    [showToast],
+  );
+
+  const handleHintUsed = useCallback(() => {
+    if (!lessonId) return;
+    const hints = (hintsRef.current[lessonId] ?? 0) + 1;
+    hintsRef.current[lessonId] = hints;
+    const cls = classState;
+    if (cls && cls.lessonId === lessonId) {
+      postProgress(cls.code, cls.studentId, {
+        lessonId,
+        stepIdx: lessonStep,
+        done: false,
+        score: 0,
+        updatedAt: Date.now(),
+        hintsUsed: hints,
+      });
+    }
+  }, [lessonId, lessonStep, classState]);
+
+  const handleClassJoined = useCallback(
+    (state: JoinState, lesson: Lesson | null) => {
+      setClassState(state);
+      if (lesson) {
+        const next = addImportedLesson(lessonsRef.current, lesson);
+        if (next !== lessonsRef.current) {
+          lessonsRef.current = next;
+          setLessons(next);
+        }
+        // Class assignments always start the student at step 0.
+        quizRef.current = {};
+        setLessonId(lesson.id);
+        setLessonStep(0);
+      }
+    },
+    [],
+  );
+
+  const handleClassLeft = useCallback(() => {
+    setClassState(null);
+    clearJoinState();
+  }, []);
 
   const selectLesson = useCallback(
     (nextId: string) => {
@@ -449,11 +546,24 @@ function UnifiedLab() {
         done: true,
         score: 1,
         updatedAt: Date.now(),
+        hintsUsed: hintsRef.current[lessonId] ?? 0,
       };
       saveStep(next);
       setProgressMap((cur) => ({ ...cur, [lessonId]: next }));
+      // Fire-and-forget classroom upload when this lesson was assigned.
+      const cls = classState;
+      if (cls && cls.lessonId === lessonId) {
+        postProgress(cls.code, cls.studentId, {
+          lessonId,
+          stepIdx,
+          done: true,
+          score: 1,
+          updatedAt: next.updatedAt,
+          hintsUsed: next.hintsUsed,
+        });
+      }
     },
-    [lessonId],
+    [lessonId, classState],
   );
 
   const handleQuizAnswer = useCallback(
@@ -472,7 +582,7 @@ function UnifiedLab() {
       setSceneTick((t) => t + 1);
       if (
         Number.isFinite(value) &&
-        Math.abs(value - check.answer) <= check.tolerance
+        Math.abs(value - Number(check.answer)) <= Number(check.tolerance)
       )
         bumpProgress(lessonStep);
     },
@@ -514,22 +624,16 @@ function UnifiedLab() {
     [studio],
   );
 
-  const showHint = !hintDismissed && ui.cam === "idle" && engineRev > 0;
-
   useEffect(() => {
-    if (!showHint && !drawer) return;
+    if (!drawer) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
-      if (drawer) {
-        closeDrawer(true);
-      } else if (showHint) {
-        dismissHint();
-      }
+      closeDrawer(true);
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [showHint, drawer, closeDrawer, dismissHint]);
+  }, [drawer, closeDrawer]);
 
   const mid = mathIdFor(ui.shape);
   const shapeLabel = SHAPE_LABELS[ui.shape];
@@ -578,9 +682,6 @@ function UnifiedLab() {
           className="sc-canvas"
           role="img"
           aria-label="Interactive 3D hand-lab workspace"
-          onPointerDown={() => {
-            if (!hintDismissed) dismissHint();
-          }}
         />
         <div className="sc-grid-overlay" aria-hidden="true" />
       </main>
@@ -607,7 +708,6 @@ function UnifiedLab() {
               type="button"
               className="sc-btn"
               onClick={() => {
-                dismissHint();
                 if (ui.cam === "loading") {
                   engineRef.current?.cancelWebcamLoad();
                 } else {
@@ -631,33 +731,6 @@ function UnifiedLab() {
         </div>
 
         <div className="sc-top-banners" aria-live="polite">
-          <AnimatePresence>
-            {showHint && (
-              <motion.div
-                key="coach-pill"
-                className="sc-coach-pill"
-                role="status"
-                initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
-                transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <span className="sc-coach-pill__dot" aria-hidden="true" />
-                <span className="sc-coach-pill__text">
-                  <strong>Pinch to place</strong> · drag canvas to orbit · scroll to zoom
-                </span>
-                <button
-                  type="button"
-                  className="sc-coach-pill__btn"
-                  aria-label="Dismiss hint"
-                  onClick={dismissHint}
-                >
-                  Got it
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <AnimatePresence>
             {is2D && !fallbackDismissed && (
               <motion.div
@@ -858,6 +931,17 @@ function UnifiedLab() {
               </button>
             </div>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImportFile(f); e.target.value = ""; }} />
+            <h3 className="solid-math__h">Ghost overlay</h3>
+            <div className="sc-chips">
+              <button type="button" className="sc-chip" onClick={() => ghostFileRef.current?.click()}>
+                Import ghost
+              </button>
+              <button type="button" className="sc-chip" onClick={onGhostClear}>
+                Clear ghost
+              </button>
+            </div>
+            <p className="sc-note">Load a target scene as a translucent ghost to match — ghosts ignore checks, picking, and exports.</p>
+            <input ref={ghostFileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onGhostImport(f); e.target.value = ""; }} />
           </motion.aside>
         )}
 
@@ -983,7 +1067,7 @@ function UnifiedLab() {
             </div>
             <LessonPanel
               embedded
-              lessons={lessons}
+              lessons={rolledLessons}
               active={lessonId}
               stepIdx={lessonStep}
               onSelect={selectLesson}
@@ -993,6 +1077,17 @@ function UnifiedLab() {
               onQuizAnswer={handleQuizAnswer}
               onNumericAnswer={handleNumericAnswer}
               snap={engineSnap}
+              playlists={PLAYLISTS}
+              progressAll={progressMap}
+              showReroll={!!lessonId}
+              onReroll={handleReroll}
+              onShowSolution={handleShowSolution}
+              onHintUsed={handleHintUsed}
+            />
+            <ClassCard
+              classState={classState}
+              onJoined={handleClassJoined}
+              onLeft={handleClassLeft}
             />
             <div className="sc-chips sc-chips--lessons">
               <button type="button" className="sc-chip" disabled={!lessonId} onClick={onLessonExport}>
@@ -1003,6 +1098,9 @@ function UnifiedLab() {
                 <UploadIcon size={13} />
                 <span>Import lesson</span>
               </button>
+              <a className="sc-chip" href="/teacher">
+                Teacher desk
+              </a>
             </div>
             <input ref={lessonFileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onLessonImport(f); e.target.value = ""; }} />
           </motion.aside>

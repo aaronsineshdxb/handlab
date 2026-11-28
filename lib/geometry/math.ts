@@ -81,7 +81,7 @@ export const SHAPE_DEFS: Record<ShowcaseShapeId, ShapeDef> = {
     id: "sphere", label: "Sphere", kind: "simple",
     params: [{ key: "r", label: "radius r", min: 0.5, max: 5, step: 0.1 }],
     defaults: D(3, 4, 5, 6, 2.5), faces: null, vertices: null, edges: null, netKind: "sphere",
-    eulerNote: "Smooth solid — no vertices or edges. See Studio for live mesh χ = 2.",
+    eulerNote: "Smooth solid — no vertices or edges.",
     blurb: "Minimal surface for a given volume.",
   },
   cylinder: {
@@ -91,7 +91,7 @@ export const SHAPE_DEFS: Record<ShowcaseShapeId, ShapeDef> = {
       { key: "h", label: "height h", min: 1, max: 10, step: 0.1 },
     ],
     defaults: D(3, 4, 5, 6, 2), faces: null, vertices: null, edges: null, netKind: "cylinder",
-    eulerNote: "Smooth solid with 2 circular rims — no vertices. See Studio for live mesh χ = 2.",
+    eulerNote: "Smooth solid with 2 circular rims — no vertices.",
     blurb: "Prism with a circular base.",
   },
   cone: {
@@ -101,7 +101,7 @@ export const SHAPE_DEFS: Record<ShowcaseShapeId, ShapeDef> = {
       { key: "h", label: "height h", min: 1, max: 10, step: 0.1 },
     ],
     defaults: D(3, 4, 5, 6, 2), faces: null, vertices: null, edges: null, netKind: "cone",
-    eulerNote: "Smooth lateral surface + apex — not a polyhedron. See Studio for live mesh χ = 2.",
+    eulerNote: "Smooth lateral surface + apex — not a polyhedron.",
     blurb: "⅓ the volume of its enclosing cylinder.",
   },
   pyramid: {
