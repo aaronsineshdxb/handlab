@@ -10,6 +10,7 @@
 //!   object, and polyline slices are borrowed directly during rasterization.
 //! - Incremental edge-equation rasterizer: barycentric weights and depth step
 //!   via addition in the inner pixel loop rather than per-pixel multiplies.
+//! - Object rotation sin/cos hoisted out of the per-triangle loop (`rot_xy`).
 
 use std::f32::consts::PI;
 
@@ -64,16 +65,18 @@ impl Vec3 {
             Self::new(0.0, 1.0, 0.0)
         }
     }
-    #[inline]
-    fn rotate_y(self, a: f32) -> Self {
-        let (s, c) = a.sin_cos();
-        Self::new(self.x * c + self.z * s, self.y, -self.x * s + self.z * c)
-    }
-    #[inline]
-    fn rotate_x(self, a: f32) -> Self {
-        let (s, c) = a.sin_cos();
-        Self::new(self.x, self.y * c - self.z * s, self.y * s + self.z * c)
-    }
+}
+
+/// Combined `rotate_x(a)` then `rotate_y(b)` using precomputed sin/cos.
+/// Same float ops in the same order as the two-method version, so results
+/// are bit-identical — it just skips a `sin_cos()` pair per call. An object
+/// has one (rot_x, rot_y) pair shared by every triangle; hoisting it turns
+/// ~12 transcendental calls per triangle into pure multiplies.
+#[inline]
+fn rot_xy(v: Vec3, srx: f32, crx: f32, sry: f32, cry: f32) -> Vec3 {
+    let y = v.y * crx - v.z * srx;
+    let z1 = v.y * srx + v.z * crx;
+    Vec3::new(v.x * cry + z1 * sry, y, -v.x * sry + z1 * cry)
 }
 
 struct Mesh {
@@ -818,6 +821,8 @@ impl Canvas {
     fn draw_mesh(&mut self, obj: &SceneObj, mesh: &Mesh) {
         let key_light = Vec3::new(4.0, 7.0, 5.0).normalize();
         let rim_light = Vec3::new(-5.0, 3.0, -4.0).normalize();
+        let (srx, crx) = obj.rot_x.sin_cos();
+        let (sry, cry) = obj.rot_y.sin_cos();
         let w_f = self.width as i32;
         let h_f = self.height as i32;
 
@@ -847,7 +852,7 @@ impl Canvas {
 
             let xform_p = |v: Vec3| -> Vec3 {
                 let s = Vec3::new(v.x * obj.scale.x, v.y * obj.scale.y, v.z * obj.scale.z);
-                s.rotate_x(obj.rot_x).rotate_y(obj.rot_y).add(obj.pos)
+                rot_xy(s, srx, crx, sry, cry).add(obj.pos)
             };
             let wp0 = xform_p(mesh.verts[i0]);
             let wp1 = xform_p(mesh.verts[i1]);
@@ -906,9 +911,9 @@ impl Canvas {
             let smooth = self.mat_mode != 2;
 
             // Precompute world-space vertex normals & half-vector for smooth Phong shading
-            let n0 = mesh.norms[i0].rotate_x(obj.rot_x).rotate_y(obj.rot_y).scale(flip);
-            let n1 = mesh.norms[i1].rotate_x(obj.rot_x).rotate_y(obj.rot_y).scale(flip);
-            let n2 = mesh.norms[i2].rotate_x(obj.rot_x).rotate_y(obj.rot_y).scale(flip);
+            let n0 = rot_xy(mesh.norms[i0], srx, crx, sry, cry).scale(flip);
+            let n1 = rot_xy(mesh.norms[i1], srx, crx, sry, cry).scale(flip);
+            let n2 = rot_xy(mesh.norms[i2], srx, crx, sry, cry).scale(flip);
             let center = wp0.add(wp1).add(wp2).scale(1.0 / 3.0);
             let half_v = key_light.add(self.cam_pos.sub(center).normalize()).normalize();
 
@@ -1393,5 +1398,37 @@ mod tests {
         assert!(c.unproject_z0(sx / 640.0, sy / 360.0));
         assert!((c.last_unproj[0] - pt.x).abs() < 1e-3);
         assert!((c.last_unproj[1] - pt.y).abs() < 1e-3);
+    }
+
+    /// Timing harness, not an assertion test. Run with:
+    /// `cargo test --release bench_render -- --nocapture --ignored`
+    /// Renders the heaviest realistic scene (knot + sphere + torus) and prints
+    /// ms/frame so rasterizer changes can be compared before/after.
+    #[test]
+    #[ignore]
+    fn bench_render() {
+        let mut r = Renderer::new();
+        r.canvas.resize(1280, 720);
+        for (shape, y) in [(6u8, -0.6f32), (1, 0.6), (3, 0.0)] {
+            r.objs.push(SceneObj {
+                shape_id: shape,
+                pos: Vec3::new(0.0, y, 0.0),
+                scale: Vec3::new(1.0, 1.0, 1.0),
+                rot_y: 0.3,
+                rot_x: 0.15,
+                color: [14, 165, 233],
+                flags: 0,
+            });
+        }
+        r.render(); // warm meshes + caches
+        let frames = 60;
+        let t0 = std::time::Instant::now();
+        for i in 0..frames {
+            r.canvas.cam_yaw = i as f32 * 0.01;
+            r.canvas.update_camera();
+            r.render();
+        }
+        let per_frame = t0.elapsed().as_secs_f64() * 1000.0 / frames as f64;
+        println!("bench_render: {per_frame:.2} ms/frame at 1280x720, 3 objects");
     }
 }
