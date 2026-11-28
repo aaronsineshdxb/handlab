@@ -26,6 +26,7 @@ import {
 import { Sw3dRenderer, parseHexColor } from "./sw3d";
 import type { SceneSnap } from "./lessons/checks";
 import { pythagorasOf } from "./geometry/chainMath";
+import { MODEL_URL, WASM_URL } from "./handAssets";
 import { shouldDetect } from "./handRate";
 import {
   SCALE_MAX,
@@ -94,10 +95,8 @@ export function isWebGLAvailable(): boolean {
   }
 }
 
-// Supply-chain hardening (audit §2.1): same vendored assets as lib/engine.ts.
-// See the comment there for re-vendoring + checksum verification steps.
-const WASM_URL = "/wasm";
-const MODEL_URL = "/models/hand_landmarker.task";
+// Same vendored assets as lib/engine.ts; constants + supply-chain notes live
+// in lib/handAssets.ts.
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;

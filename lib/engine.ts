@@ -7,6 +7,7 @@ import type {
 import { fuseDepth } from "./depth/fusion";
 import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
+import { MODEL_URL, WASM_URL } from "./handAssets";
 import { shouldDetect } from "./handRate";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
@@ -385,14 +386,7 @@ interface Anchor {
   base: THREE.Vector3;
 }
 
-// Supply-chain hardening (audit §2.1): WASM runtime + hand-landmarker model
-// are vendored under /public so no third-party CDN executes WASM at runtime.
-//   public/wasm/  <- copy of node_modules/@mediapipe/tasks-vision@1.0.1/wasm/
-//   public/models/hand_landmarker.task <- float16/1 from GCS, md5 15318430ea3851670fe9914116a9cfad
-// Re-vendor with: cp node_modules/@mediapipe/tasks-vision/wasm/* public/wasm/
-// and re-download the .task URL below, verifying the md5 against x-goog-hash.
-const WASM_URL = "/wasm";
-const MODEL_URL = "/models/hand_landmarker.task";
+// MODEL_URL/WASM_URL and their supply-chain notes live in lib/handAssets.ts.
 
 /**
  * Create the HandLandmarker, preferring the GPU delegate.

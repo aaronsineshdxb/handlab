@@ -14,6 +14,7 @@ import {
   type UiState,
 } from "../lib/engine";
 import SolidMath, { mathIdFor, type StudioState } from "./SolidMath";
+import { prefetchHandAssets } from "../lib/handAssets";
 import {
   SHAPE_DEFS,
   spawnScaleFor,
@@ -274,6 +275,12 @@ function UnifiedLab() {
 
   // Lessons progress (handlab.progress.v1) — persisted in this browser only.
   useEffect(() => setProgressMap(loadProgress()), []);
+
+  // Warm the ~19.5MB hand-tracking cache while the student reads onboarding,
+  // instead of on the camera click (see lib/handAssets.ts).
+  useEffect(() => {
+    prefetchHandAssets();
+  }, []);
 
   const setDim = useCallback((key: keyof ShapeDims, value: number) => {
     setDims((d) => ({ ...d, [key]: value }));
