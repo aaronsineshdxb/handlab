@@ -1,10 +1,19 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { CODE_ALPHABET, CODE_LENGTH } from "./constants";
 import type { Lesson } from "../lessons/types";
 import {
   MAX_CLASS_NAME_LENGTH,
+  MAX_SESSIONS,
   MAX_STUDENTS,
   type ClassProgressEntry,
   type ClassSession,
@@ -72,6 +81,9 @@ export function loadSession(code: string): ClassSession | null {
     const raw = readFileSync(sessionPath(code), "utf8");
     const parsed: unknown = JSON.parse(raw);
     if (!isSession(parsed)) return null;
+    // Enforce TTL on read too — prune-on-host alone would let an expired
+    // class keep accepting joins until someone hosts again.
+    if (Date.now() - parsed.createdAt > CLASS_TTL_MS) return null;
     return parsed;
   } catch {
     return null;
@@ -95,7 +107,12 @@ function saveSession(session: ClassSession): boolean {
   try {
     const dir = classDir();
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(sessionPath(session.code), JSON.stringify(session), "utf8");
+    // Write-then-rename: a crash mid-write must never leave a torn class
+    // file, which would read back as "no class with that code is live"
+    // for every student mid-lesson. renameSync is atomic on POSIX.
+    const path = sessionPath(session.code);
+    writeFileSync(`${path}.tmp`, JSON.stringify(session), "utf8");
+    renameSync(`${path}.tmp`, path);
     return true;
   } catch {
     // Read-only filesystem (e.g. serverless) — hosting is unavailable here.
@@ -145,13 +162,22 @@ export function hostSession(
 ): { code: string; token: string } | { error: string } {
   pruneExpired();
   const dir = classDir();
+  let sessionFiles = 0;
   try {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     // Probe writability before committing to a code.
     writeFileSync(join(dir, ".probe"), "ok");
+    sessionFiles = readdirSync(dir).filter((e) => e.endsWith(".json")).length;
   } catch {
     return {
       error: "hosting needs a persistent server — run `npm start` (or `npm run dev`) on the teacher machine, then students join over the classroom network",
+    };
+  }
+  // Host is the only unauthenticated write endpoint; without a cap, a
+  // scripted loop of POSTs fills the teacher machine's disk.
+  if (sessionFiles >= MAX_SESSIONS) {
+    return {
+      error: `too many saved classes (limit ${MAX_SESSIONS}) — old class records expire 12 h after they start`,
     };
   }
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -263,12 +289,18 @@ export function recordProgress(
   if (!student) {
     return { ok: false, status: 404, error: "join the class first" };
   }
-  const cleanEntry: ClassProgressEntry = { ...entry, stepIdx: Math.max(0, Math.floor(entry.stepIdx)) };
+  const cleanEntry: ClassProgressEntry = {
+    ...entry,
+    stepIdx: Math.max(0, Math.floor(entry.stepIdx)),
+    // Server clock — the teacher's "last activity" column must not depend
+    // on each student's device clock being right.
+    updatedAt: Date.now(),
+  };
   const prev = student.progress[cleanEntry.lessonId];
   // Merge, don't replace: hint/ghost events ride the same endpoint as
   // completions, and a step-0 hint must never regress a completed record.
   // Completion is monotonic (best attempt so far); only hints + timestamp
-  // take the incoming value unconditionally.
+  // are taken unconditionally.
   student.progress[cleanEntry.lessonId] = prev
     ? {
         lessonId: cleanEntry.lessonId,

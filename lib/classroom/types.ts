@@ -58,3 +58,6 @@ export interface ClassState {
 
 export const MAX_CLASS_NAME_LENGTH = 40;
 export const MAX_STUDENTS = 60;
+/** Session files on disk at once (live + closed records awaiting TTL sweep);
+ *  caps disk use since POST /api/class/host needs no auth. */
+export const MAX_SESSIONS = 100;

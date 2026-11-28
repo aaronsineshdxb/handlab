@@ -14,7 +14,7 @@ import {
   teacherState,
 } from "./store";
 import { CODE_LENGTH } from "./constants";
-import type { ClassSession } from "./types";
+import { MAX_SESSIONS, type ClassSession } from "./types";
 
 const minimalLesson = {
   id: "class-lesson",
@@ -153,6 +153,7 @@ describe("host → join → progress → close roundtrip", () => {
       hintsUsed: 1,
     }).ok).toBe(true);
     // A later hint/ghost event at step 0 must not regress the record.
+    const beforeHint = Date.now();
     expect(recordProgress(hosted.code, "abcd1234abcd", {
       lessonId: "dogfood-vol",
       stepIdx: 0,
@@ -164,12 +165,13 @@ describe("host → join → progress → close roundtrip", () => {
     const state = teacherState(hosted.code, hosted.token);
     if (!state.ok) return unreachable();
     const entry = state.state.students[0]!.progress["dogfood-vol"]!;
-    expect(entry).toEqual({
+    // updatedAt is server-stamped: the client's 2000 must not win.
+    expect(entry.updatedAt).toBeGreaterThanOrEqual(beforeHint);
+    expect(entry).toMatchObject({
       lessonId: "dogfood-vol",
       stepIdx: 2,
       done: true,
       score: 1,
-      updatedAt: 2000,
       hintsUsed: 3,
     });
   });
@@ -182,6 +184,59 @@ describe("storage failure and TTL", () => {
     process.env.HANDLAB_CLASSROOM_DIR = blocker; // mkdir under a file fails
     const result = hostSession(null);
     expect("error" in result).toBe(true);
+  });
+
+  it("rejects joins, progress and teacher state on expired (not yet pruned) sessions", () => {
+    const hosted = hostSession(null);
+    if ("error" in hosted) return unreachable();
+    const path = join(dir, `${hosted.code}.json`);
+    const expired: ClassSession = {
+      code: hosted.code,
+      token: hosted.token,
+      createdAt: Date.now() - 13 * 60 * 60 * 1000,
+      closed: false,
+      lesson: null,
+      students: {},
+    };
+    writeFileSync(path, JSON.stringify(expired));
+    expect(joinSession(hosted.code, "abcd1234abcd", "Ada").ok).toBe(false);
+    expect(
+      recordProgress(hosted.code, "abcd1234abcd", {
+        lessonId: "x",
+        stepIdx: 0,
+        done: true,
+        score: 1,
+        updatedAt: Date.now(),
+      }).ok,
+    ).toBe(false);
+    expect(teacherState(hosted.code, hosted.token).ok).toBe(false);
+  });
+
+  it("caps the number of session files on disk", () => {
+    for (let i = 0; i < MAX_SESSIONS; i++) {
+      // Junk JSON still counts — the cap is a file count, not a validity check.
+      writeFileSync(join(dir, `${newCode()}-${i}.json`), "{}");
+    }
+    const result = hostSession(null);
+    expect("error" in result).toBe(true);
+    if (!("error" in result)) return unreachable();
+    expect(result.error).toContain(`limit ${MAX_SESSIONS}`);
+  });
+
+  it("leaves no temp files behind after writes", () => {
+    const hosted = hostSession(null);
+    if ("error" in hosted) return unreachable();
+    expect(joinSession(hosted.code, "abcd1234abcd", "Ada").ok).toBe(true);
+    expect(
+      recordProgress(hosted.code, "abcd1234abcd", {
+        lessonId: "x",
+        stepIdx: 0,
+        done: true,
+        score: 1,
+        updatedAt: Date.now(),
+      }).ok,
+    ).toBe(true);
+    expect(readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toHaveLength(0);
   });
 
   it("prunes expired sessions", () => {
