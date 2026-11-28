@@ -24,7 +24,7 @@ import {
 
 const initial: VrUiState = {
   shape: "cube",
-  color: "#0D9488",
+  color: "#2563eb",
   lineMode: false,
   grid: true,
   xr: "ready",

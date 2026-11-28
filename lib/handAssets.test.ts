@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MODEL_URL, SIMD_PROBE, handAssetUrls, prefetchHandAssets } from "./handAssets";
+import {
+  MODEL_URL,
+  SIMD_PROBE,
+  handAssetUrls,
+  prefetchHandAssets,
+  resetGzProbe,
+} from "./handAssets";
+
+const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe("hand asset prefetch", () => {
   it("probe bytes are a valid SIMD module (guards against typos)", () => {
@@ -21,14 +29,35 @@ describe("hand asset prefetch", () => {
     expect(urls[2]).toBe(MODEL_URL);
   });
 
-  it("fetches exactly the chosen variant's files", () => {
+  it("fetches exactly the chosen variant's files", async () => {
+    resetGzProbe();
     const fetched: string[] = [];
-    prefetchHandAssets(((url: string) => {
-      fetched.push(url);
+    prefetchHandAssets(((url: string, init?: { method?: string }) => {
+      // the /gz/ availability probe is a HEAD, not an asset fetch
+      if (init?.method !== "HEAD") fetched.push(url);
       return Promise.resolve({
+        ok: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
       });
-    }) as typeof fetch);
+    }) as unknown as typeof fetch);
+    await flush();
     expect(fetched).toEqual(handAssetUrls(WebAssembly.validate(SIMD_PROBE)));
+  });
+
+  it("fetches precompressed variants when the /gz/ siblings exist", async () => {
+    resetGzProbe();
+    const fetched: string[] = [];
+    prefetchHandAssets(((url: string, init?: { method?: string }) => {
+      if (init?.method !== "HEAD") fetched.push(url);
+      return Promise.resolve({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      });
+    }) as unknown as typeof fetch);
+    await flush();
+    expect(fetched).toEqual(
+      handAssetUrls(WebAssembly.validate(SIMD_PROBE), true),
+    );
+    expect(JSON.stringify(fetched)).toContain("/wasm/gz/");
   });
 });

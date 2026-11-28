@@ -1,0 +1,25 @@
+{
+  "windowNote": "2048-sample ring buffers",
+  "frames": {
+    "count": 138,
+    "p50": 133.6,
+    "p95": 266.5,
+    "max": 465.4,
+    "jankRatio": 1
+  },
+  "detect": {
+    "count": 138,
+    "p50": 130.5,
+    "p95": 252.4,
+    "max": 413.9
+  },
+  "detectHz": 6.9,
+  "engine": "wasm-fallback",
+  "url": "http://127.0.0.1:3101",
+  "sec": 20,
+  "pageErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Refused to execute script from 'http://127.0.0.1:3101/_vercel/insights/script.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled.",
+    "INFO: Created TensorFlow Lite XNNPACK delegate for CPU."
+  ]
+}

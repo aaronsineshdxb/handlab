@@ -15,6 +15,7 @@ import {
 } from "../lib/engine";
 import SolidMath, { mathIdFor, type StudioState } from "./SolidMath";
 import { prefetchHandAssets } from "../lib/handAssets";
+import { createWorkerTracker } from "../lib/handTracker";
 import {
   SHAPE_DEFS,
   spawnScaleFor,
@@ -120,8 +121,6 @@ function UnifiedLab() {
   const [mathOpen, setMathOpen] = useState(() => !isNarrowViewport());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [is2D, setIs2D] = useState(false);
-  // dismissable 2D-fallback notice
-  const [fallbackDismissed, setFallbackDismissed] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [engineRev, setEngineRev] = useState(0);
   // ---- lessons: seed data, active lesson/step, persisted progress ----
@@ -165,6 +164,7 @@ function UnifiedLab() {
   const tCountRef = useRef<HTMLElement>(null);
   const tModelRef = useRef<HTMLSpanElement>(null);
   const tFpsRef = useRef<HTMLSpanElement>(null);
+  const tDetectRef = useRef<HTMLSpanElement>(null);
   const tPrRef = useRef<HTMLSpanElement>(null);
   const tZRef = useRef<HTMLSpanElement>(null);
   const depthiRef = useRef<HTMLElement>(null);
@@ -195,6 +195,7 @@ function UnifiedLab() {
       !cursor2dRef.current || !toastRef.current || !dHandRef.current ||
       !tHandRef.current || !tPinchRef.current || !tXyzRef.current ||
       !tCountRef.current || !tModelRef.current || !tFpsRef.current ||
+      !tDetectRef.current ||
       !tPrRef.current || !tZRef.current || !depthiRef.current
     )
       return;
@@ -202,7 +203,8 @@ function UnifiedLab() {
       "d-hand": dHandRef.current, "t-hand": tHandRef.current,
       "t-pinch": tPinchRef.current, "t-xyz": tXyzRef.current,
       "t-count": tCountRef.current, "t-model": tModelRef.current,
-      "t-fps": tFpsRef.current, "t-pr": tPrRef.current,
+      "t-fps": tFpsRef.current, "t-detect": tDetectRef.current,
+      "t-pr": tPrRef.current,
       "t-z": tZRef.current, depthi: depthiRef.current,
     };
     let engine: LabEngine | null = null;
@@ -217,6 +219,9 @@ function UnifiedLab() {
       },
       onFatal: (msg: string) => setFatal(msg),
       onScene: (): void => { sceneSync(); },
+      // Worker-backed MediaPipe: inference off the main thread. The engines
+      // fall back to inline detection when the worker path is unavailable.
+      trackerFactory: () => createWorkerTracker(),
     };
     void (async () => {
       try {
@@ -736,27 +741,6 @@ function UnifiedLab() {
           <span aria-hidden="true">·</span>
           <span><b id="t-count" ref={tCountRef}>0</b> placed</span>
         </div>
-
-        <div className="sc-top-banners" aria-live="polite">
-          <AnimatePresence>
-            {is2D && !fallbackDismissed && (
-              <motion.div
-                key="fallback-note"
-                className="sc-fallback-note"
-                role="status"
-                initial={reduceMotion ? false : { opacity: 0, y: -8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
-                transition={{ duration: reduceMotion ? 0 : 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <span>Rust/WASM 3D mode — WebGL unavailable. Full 3D shapes, studio tools, webcam + save/load active.</span>
-                <button type="button" aria-label="Dismiss notice" onClick={() => setFallbackDismissed(true)}>
-                  <CloseXIcon size={14} />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
 
       <nav className="sc-rail" aria-label="Showcase controls">
@@ -1179,6 +1163,7 @@ function UnifiedLab() {
         <div className="bar">
           <span id="t-model" ref={tModelRef}>hand model: loading…</span>
           <span id="t-fps" ref={tFpsRef}>— fps</span>
+          <span id="t-detect" ref={tDetectRef}>— ms</span>
           <span id="t-pr" ref={tPrRef}>render —</span>
         </div>
         <div className="video-dock__media">

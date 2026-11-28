@@ -34,10 +34,10 @@ describe("resolveScheme", () => {
     expect(resolveScheme("custom")).toBe("custom");
   });
 
-  it("falls back to teal on garbage", () => {
-    expect(resolveScheme(null)).toBe("teal");
-    expect(resolveScheme("midnight")).toBe("teal");
-    expect(resolveScheme("")).toBe("teal");
+  it("falls back to blue on garbage", () => {
+    expect(resolveScheme(null)).toBe("blue");
+    expect(resolveScheme("midnight")).toBe("blue");
+    expect(resolveScheme("")).toBe("blue");
   });
 });
 

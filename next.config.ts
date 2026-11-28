@@ -58,6 +58,44 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       // Order matters: these specific rules must precede the /(.*) catch-all.
+      // Precompressed hand-tracking payload (scripts/compress-assets.mjs
+      // writes gzip siblings under public/{wasm,models}/gz/): served with
+      // Content-Encoding so the browser decodes transparently — tasks-vision
+      // and its worker fetch these URLs internally and get compressed
+      // transfer with no client code and no CSP change. Only the /gz/
+      // directories declare Content-Encoding: their siblings are generated
+      // gzip, while the originals must stay un-declared or browsers would
+      // double-decode them into garbage.
+      {
+        source: "/wasm/gz/:path*",
+        headers: [
+          { key: "Content-Encoding", value: "gzip" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/models/gz/:path*",
+        headers: [
+          { key: "Content-Encoding", value: "gzip" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/ort/gz/:path*",
+        headers: [
+          { key: "Content-Encoding", value: "gzip" },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
       // The vendored MediaPipe runtime (22MB: 11MB simd + 10MB nosimd;
       // module_internal duplicate removed — FilesetResolver uses the
       // non-module build by default), hand model (7.8MB), ORT

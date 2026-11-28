@@ -6,7 +6,7 @@ system needs to grow.
 
 Going with: audience = students · use = studying · tone = technical.
 Genre: modern-minimal, Perplexity register — warm cream canvas, quiet chrome,
-single teal voltage, pill-first geometry.
+single standard-blue voltage, pill-first geometry.
 
 ## Genre
 modern-minimal
@@ -21,8 +21,8 @@ they vary only in component archetypes.
 - Content pages: Long Document — 404 + error states, centred card, typography only.
 
 ## Theme
-Custom OKLCH light, Perplexity DNA (cream canvas, warm ink, single teal voltage).
-Vibe: "warm paper, quiet chrome, teal voltage".
+Custom OKLCH light, Perplexity DNA (cream canvas, warm ink, single standard-blue voltage).
+Vibe: "warm paper, quiet chrome, blue voltage". (2026-11-28: default moved teal → standard blue #2563EB; teal remains a selectable preset.)
 Axes: light / geometric-sans / cool.
 
 - `--color-paper`   oklch(98.6% 0.005 95)  — canvas #FCFCF9
@@ -34,10 +34,10 @@ Axes: light / geometric-sans / cool.
 - `--color-rule-2`  oklch(82% 0.01 85)     — stronger rules
 - `--color-muted`   oklch(50% 0.01 85)     — smoke #66635B
 - `--color-neutral` oklch(45% 0.01 85)     — mid neutral
-- `--color-accent`  oklch(45% 0.075 202)   — teal voltage #016A71
-- `--color-accent-2` oklch(62% 0.10 198)   — bright teal #00A1AC
-- `--color-accent-ink` oklch(98.6% 0.005 95) — cream text on teal
-- `--color-focus`   oklch(45% 0.075 202)   — teal rings everywhere
+- `--color-accent`  oklch(54.6% 0.215 263) — standard blue #2563EB
+- `--color-accent-2` oklch(62% 0.2 258)    — bright blue #3B82F6
+- `--color-accent-ink` oklch(98.6% 0.005 95) — cream text on blue
+- `--color-focus`   oklch(54.6% 0.215 263) — blue rings everywhere
 - `--color-good`    oklch(46% 0.13 155)    — positive #1F7A4C family
 - `--color-warn`    oklch(52% 0.13 55)     — warning #97431A family
 - `--color-bad`     oklch(50% 0.14 20)     — negative #A23544 family

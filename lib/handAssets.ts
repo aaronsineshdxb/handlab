@@ -16,14 +16,41 @@ export const MODEL_URL = "/models/hand_landmarker.task";
 /** Directory holding the vendored tasks-vision binaries. */
 export const WASM_URL = "/wasm";
 
+/**
+ * Precompressed variants (scripts/compress-assets.mjs + Content-Encoding:
+ * gzip via next.config.ts). Same bytes; ~13MB less over the wire cold.
+ * The engines probe once and fall back to the plain URLs when the generated
+ * siblings are missing.
+ */
+export const WASM_GZ_URL = "/wasm/gz";
+export const MODEL_GZ_URL = "/models/gz/hand_landmarker.task";
+
+let gzProbe: Promise<boolean> | null = null;
+
+/** True when the precompressed /gz/ siblings exist (HEAD probe, cached). */
+export function gzAssetsAvailable(
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  gzProbe ??= fetchImpl("/wasm/gz/vision_wasm_internal.js", { method: "HEAD" })
+    .then((r) => r.ok)
+    .catch(() => false);
+  return gzProbe;
+}
+
+/** Test hook: forget the cached probe result (per-test isolation). */
+export function resetGzProbe(): void {
+  gzProbe = null;
+}
+
 /** The files `FilesetResolver.forVisionTasks` will fetch for this browser —
  *  wasm SIMD support picks the variant, the same check tasks-vision makes. */
-export function handAssetUrls(simd: boolean): string[] {
+export function handAssetUrls(simd: boolean, gz = false): string[] {
   const flavor = simd ? "" : "nosimd_";
+  const dir = gz ? WASM_GZ_URL : WASM_URL;
   return [
-    `/wasm/vision_wasm_${flavor}internal.js`,
-    `/wasm/vision_wasm_${flavor}internal.wasm`,
-    MODEL_URL,
+    `${dir}/vision_wasm_${flavor}internal.js`,
+    `${dir}/vision_wasm_${flavor}internal.wasm`,
+    gz ? MODEL_GZ_URL : MODEL_URL,
   ];
 }
 
@@ -38,12 +65,32 @@ export const SIMD_PROBE = new Uint8Array([
  * still reading onboarding, instead of on the camera click. Assets are
  * immutable-cached, so MediaPipe's own later fetches hit the cache. Reading
  * each body is what stores it; failures are irrelevant by design.
+ *
+ * Scheduled at idle: ~13MB of fetches competes with first-paint work for
+ * bandwidth otherwise.
  */
 export function prefetchHandAssets(fetchImpl: typeof fetch = fetch): void {
   if (typeof WebAssembly === "undefined") return;
-  for (const url of handAssetUrls(WebAssembly.validate(SIMD_PROBE))) {
-    void fetchImpl(url)
-      .then((r) => r.arrayBuffer())
+  const run = (): void => {
+    const simd = WebAssembly.validate(SIMD_PROBE);
+    void gzAssetsAvailable(fetchImpl)
+      .then((gz) => {
+        for (const url of handAssetUrls(simd, gz)) {
+          void fetchImpl(url)
+            .then((r) => r.arrayBuffer())
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
-  }
+  };
+  const ric =
+    typeof window !== "undefined"
+      ? (
+          window as {
+            requestIdleCallback?: (cb: () => void) => number;
+          }
+        ).requestIdleCallback
+      : undefined;
+  if (typeof ric === "function") ric(() => run());
+  else run();
 }

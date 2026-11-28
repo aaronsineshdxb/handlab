@@ -1,5 +1,5 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
-/* Perplexity DNA: cream canvas #FCFCF9 · ink #27251E · single teal voltage #016A71
+/* Perplexity DNA: cream canvas #FCFCF9 · ink #27251E · single standard-blue voltage #2563EB
  * Warm graphite dark canvas #11100E · elevated #1B1A17 · specular rim + frosted HUD materiality.
  * Hex/RGB defaults ensure older browsers (Chrome < 111, Safari < 15.4) still render the full palette;
  * @supports upgrades to perceptual OKLCH where supported. */
@@ -14,11 +14,11 @@
   --color-rule-2: #c9c6bc;
   --color-muted: #66635b;
   --color-neutral: #5a5750;
-  --color-accent: #016a71;
-  --color-accent-2: #129aa3;
+  --color-accent: #2563eb;
+  --color-accent-2: #3b82f6;
   --color-accent-ink: #fcfcf9;
-  --color-accent-subtle: rgba(1, 106, 113, 0.13);
-  --color-focus: #016a71;
+  --color-accent-subtle: rgba(37, 99, 235, 0.13);
+  --color-focus: #2563eb;
   --color-good: #1f7a4c;
   --color-warn: #9a5b13;
   --color-bad: #a62b2b;
@@ -86,11 +86,11 @@
   --color-rule-2: #47443d;
   --color-muted: #a8a49b;
   --color-neutral: #858178;
-  --color-accent: #34b4c4;
-  --color-accent-2: #4ac8d8;
+  --color-accent: #60a5fa;
+  --color-accent-2: #93c5fd;
   --color-accent-ink: #11100e;
-  --color-accent-subtle: rgba(52, 180, 196, 0.14);
-  --color-focus: #34b4c4;
+  --color-accent-subtle: rgba(96, 165, 250, 0.14);
+  --color-focus: #60a5fa;
   --color-good: #45c785;
   --color-warn: #d49a45;
   --color-bad: #e06c6c;
@@ -101,6 +101,21 @@
 }
 
 /* User-selectable colour schemes (hex fallbacks). */
+/* Teal is no longer the default (standard blue is), so it needs its own
+   explicit override for users who pick it in the accent picker. */
+[data-accent="teal"] {
+  --color-accent: #016a71;
+  --color-accent-2: #129aa3;
+  --color-accent-subtle: rgba(1, 106, 113, 0.13);
+  --color-focus: #016a71;
+}
+[data-theme="dark"][data-accent="teal"] {
+  --color-accent: #34b4c4;
+  --color-accent-2: #4ac8d8;
+  --color-accent-subtle: rgba(52, 180, 196, 0.14);
+  --color-focus: #34b4c4;
+}
+
 [data-accent="violet"] {
   --color-accent: #6344b8;
   --color-accent-2: #8668d6;
@@ -150,16 +165,16 @@
   --color-focus: #e2727e;
 }
 [data-accent="blue"] {
-  --color-accent: #255cb8;
-  --color-accent-2: #417cd9;
-  --color-accent-subtle: rgba(37, 92, 184, 0.13);
-  --color-focus: #255cb8;
+  --color-accent: #2563eb;
+  --color-accent-2: #3b82f6;
+  --color-accent-subtle: rgba(37, 99, 235, 0.13);
+  --color-focus: #2563eb;
 }
 [data-theme="dark"][data-accent="blue"] {
-  --color-accent: #7aa7f0;
-  --color-accent-2: #94b9f5;
-  --color-accent-subtle: rgba(122, 167, 240, 0.14);
-  --color-focus: #7aa7f0;
+  --color-accent: #60a5fa;
+  --color-accent-2: #93c5fd;
+  --color-accent-subtle: rgba(96, 165, 250, 0.14);
+  --color-focus: #60a5fa;
 }
 
 @supports (color: oklch(0% 0 0)) {
@@ -173,11 +188,11 @@
     --color-rule-2: oklch(82% 0.01 85);
     --color-muted: oklch(50% 0.01 85);
     --color-neutral: oklch(45% 0.01 85);
-    --color-accent: oklch(45% 0.075 202);
-    --color-accent-2: oklch(62% 0.1 198);
+    --color-accent: oklch(54.6% 0.215 263);
+    --color-accent-2: oklch(62% 0.2 258);
     --color-accent-ink: oklch(98.6% 0.005 95);
     --color-accent-subtle: color-mix(in oklch, var(--color-accent) 13%, transparent);
-    --color-focus: oklch(45% 0.075 202);
+    --color-focus: oklch(54.6% 0.215 263);
     --color-good: oklch(46% 0.13 155);
     --color-warn: oklch(52% 0.13 55);
     --color-bad: oklch(50% 0.14 20);
@@ -197,11 +212,11 @@
     --color-rule-2: oklch(36% 0.01 85);
     --color-muted: oklch(66% 0.01 85);
     --color-neutral: oklch(56% 0.01 85);
-    --color-accent: oklch(72% 0.09 205);
-    --color-accent-2: oklch(76% 0.1 198);
+    --color-accent: oklch(70.9% 0.165 254.6);
+    --color-accent-2: oklch(78.9% 0.14 255);
     --color-accent-ink: oklch(14.5% 0.006 85);
     --color-accent-subtle: color-mix(in oklch, var(--color-accent) 13%, transparent);
-    --color-focus: oklch(72% 0.09 205);
+    --color-focus: oklch(70.9% 0.165 254.6);
     --color-good: oklch(73% 0.14 155);
     --color-warn: oklch(72% 0.12 65);
     --color-bad: oklch(72% 0.13 20);
@@ -209,6 +224,17 @@
     --edge-highlight: oklch(100% 0 0 / 0.07);
     --shadow-sm: inset 0 1px 0 var(--edge-highlight), 0 1px 2px oklch(0% 0 0 / 0.4);
     --shadow-card: inset 0 1px 0 var(--edge-highlight), 0 8px 24px -4px oklch(0% 0 0 / 0.5), 0 2px 6px -2px oklch(0% 0 0 / 0.4);
+  }
+
+  [data-accent="teal"] {
+    --color-accent: oklch(45% 0.075 202);
+    --color-accent-2: oklch(62% 0.1 198);
+    --color-focus: oklch(45% 0.075 202);
+  }
+  [data-theme="dark"][data-accent="teal"] {
+    --color-accent: oklch(72% 0.09 205);
+    --color-accent-2: oklch(76% 0.1 198);
+    --color-focus: oklch(72% 0.09 205);
   }
 
   [data-accent="violet"] {
@@ -252,13 +278,13 @@
     --color-focus: oklch(70% 0.13 20);
   }
   [data-accent="blue"] {
-    --color-accent: oklch(48% 0.13 260);
-    --color-accent-2: oklch(62% 0.14 260);
-    --color-focus: oklch(48% 0.13 260);
+    --color-accent: oklch(54.6% 0.215 263);
+    --color-accent-2: oklch(62% 0.2 258);
+    --color-focus: oklch(54.6% 0.215 263);
   }
   [data-theme="dark"][data-accent="blue"] {
-    --color-accent: oklch(74% 0.11 260);
-    --color-accent-2: oklch(78% 0.1 260);
-    --color-focus: oklch(74% 0.11 260);
+    --color-accent: oklch(70.9% 0.165 254.6);
+    --color-accent-2: oklch(78.9% 0.14 255);
+    --color-focus: oklch(70.9% 0.165 254.6);
   }
 }

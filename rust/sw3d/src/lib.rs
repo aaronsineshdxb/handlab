@@ -672,15 +672,21 @@ impl Canvas {
 
     fn clear(&mut self) {
         let [r, g, b] = self.bg_rgb;
-        for px in self.fb.chunks_exact_mut(4) {
-            px[0] = r;
-            px[1] = g;
-            px[2] = b;
-            px[3] = 255;
-        }
-        for z in &mut self.zbuf {
-            *z = f32::INFINITY;
-        }
+        // Little-endian wasm32: byte 0 (r) is the least significant u32 byte,
+        // so a packed fill produces the same RGBA byte layout the JS bridge
+        // reads. Vec allocations are pointer-aligned (≥4), asserted below;
+        // one vectorized u32 fill replaces the former per-byte loop.
+        debug_assert!(self.fb.as_ptr() as usize % 4 == 0);
+        let packed =
+            (r as u32) | ((g as u32) << 8) | ((b as u32) << 16) | (0xFF << 24);
+        let px = unsafe {
+            std::slice::from_raw_parts_mut(
+                self.fb.as_mut_ptr() as *mut u32,
+                self.fb.len() / 4,
+            )
+        };
+        px.fill(packed);
+        self.zbuf.fill(f32::INFINITY);
     }
 
     #[inline]
@@ -1114,6 +1120,10 @@ pub struct Renderer {
     meshes: [Option<Mesh>; 15],
     objs: Vec<SceneObj>,
     lines: Vec<SceneLine>,
+    /// Scratch buffer the JS bridge writes packed line points into
+    /// (sw3d_line_scratch / sw3d_push_line_pts) — one FFI round-trip per
+    /// polyline instead of one per vertex.
+    line_scratch: Vec<f32>,
 }
 
 impl Renderer {
@@ -1124,6 +1134,7 @@ impl Renderer {
             meshes: Default::default(),
             objs: Vec::with_capacity(64),
             lines: Vec::with_capacity(16),
+            line_scratch: Vec::new(),
         }
     }
 
@@ -1257,6 +1268,36 @@ pub extern "C" fn sw3d_begin_line(closed: u32, rgb: u32) {
 pub extern "C" fn sw3d_push_line_pt(x: f32, y: f32, z: f32) {
     if let Some(l) = state().lines.last_mut() {
         l.pts.push(Vec3::new(x, y, z));
+    }
+}
+
+/// Hand the JS bridge a scratch buffer (n f32 values) in wasm linear memory
+/// for packed polyline points. The returned pointer stays valid until the
+/// next scratch request or memory growth.
+#[no_mangle]
+pub extern "C" fn sw3d_line_scratch(n: usize) -> *const f32 {
+    let s = state();
+    s.line_scratch.clear();
+    s.line_scratch.resize(n, 0.0);
+    s.line_scratch.as_ptr()
+}
+
+/// Push a whole polyline from packed triples (x,y,z)* in linear memory —
+/// one FFI call instead of one per vertex.
+///
+/// # Safety
+/// `ptr` must reference `len` readable f32s, per sw3d_line_scratch above.
+#[no_mangle]
+pub unsafe extern "C" fn sw3d_push_line_pts(ptr: *const f32, len: usize) {
+    if ptr.is_null() || len < 3 {
+        return;
+    }
+    if let Some(l) = state().lines.last_mut() {
+        let pts = std::slice::from_raw_parts(ptr, len);
+        l.pts.reserve(pts.len() / 3);
+        for c in pts.chunks_exact(3) {
+            l.pts.push(Vec3::new(c[0], c[1], c[2]));
+        }
     }
 }
 

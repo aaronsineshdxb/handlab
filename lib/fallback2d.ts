@@ -13,6 +13,7 @@ import type {
 import {
   SHAPES,
   initialUiState,
+  unpackLandmarks,
   type CamState,
   type ClipAxis,
   type EngineOpts,
@@ -26,8 +27,17 @@ import {
 import { Sw3dRenderer, parseHexColor } from "./sw3d";
 import type { SceneSnap } from "./lessons/checks";
 import { pythagorasOf } from "./geometry/chainMath";
-import { MODEL_URL, WASM_URL } from "./handAssets";
+import {
+  MODEL_URL,
+  MODEL_GZ_URL,
+  WASM_URL,
+  WASM_GZ_URL,
+  gzAssetsAvailable,
+} from "./handAssets";
 import { shouldDetect } from "./handRate";
+import { perf } from "./perf/recorder";
+import { PalmDepthProvider } from "./depth/palm";
+import type { HandTracker, TrackerResult } from "./handTracker";
 import {
   SCALE_MAX,
   SCALE_MIN,
@@ -122,6 +132,8 @@ interface Obj2D {
   c: string;
   x: number;
   y: number;
+  /** Depth (toward the camera). 0 = the original single plane. */
+  z: number;
   rot: number;
   /** Uniform scale (two-hand pinch). Defaults to 1 for legacy objects. */
   k: number;
@@ -174,7 +186,7 @@ export class HandLabFallbackEngine {
   private activeLine: Chain2D | null = null;
   private idSeq = 0;
 
-  private cursor = { x: 0, y: 0 };
+  private cursor = { x: 0, y: 0, z: 0 };
   private hovered: Obj2D | null = null;
   private selected: Obj2D | null = null;
   private dragging: Obj2D | null = null;
@@ -212,7 +224,7 @@ export class HandLabFallbackEngine {
   private orbitStartY = 0;
   private orbitLastX = 0;
   private orbitLastY = 0;
-  private lastSw3dSig = "";
+  private lastSw3dSig = 0;
   private cachedC: {
     bg: string;
     gridFaint: string;
@@ -228,6 +240,10 @@ export class HandLabFallbackEngine {
 
   // webcam / hand tracking
   private landmarker: HandLandmarker | null = null;
+  // Worker-backed detector (see lib/handTracker.ts) with the same
+  // one-bitmap-in-flight backpressure as the WebGL engine.
+  private tracker: HandTracker | null = null;
+  private bmpInFlight = false;
   private stream: MediaStream | null = null;
   private camStarting = false;
   private camRequest = 0;
@@ -237,7 +253,18 @@ export class HandLabFallbackEngine {
   private lastDetectAt = -Infinity;
   private frames = 0;
   private fT = performance.now();
+  // 1s-window detect-cost accumulator feeding the "t-detect" HUD readout.
+  private detectAccum = 0;
+  private detectN = 0;
   private lostFrames = 0;
+  // Cursor depth (parity with the WebGL engine's drive): palm-size baseline
+  // rate-limited through smoothZ, plus the second-hand height slider.
+  // Positive = toward the camera; the sw3d path renders objects off the
+  // z=0 plane, the plain top-down canvas path ignores z by design.
+  private palm = new PalmDepthProvider();
+  private smoothZ = 0;
+  private fSize = 0;
+  private sizeInit = false;
   private pinchState = false;
   private pinchState2 = false;
   private handActive = false;
@@ -303,6 +330,12 @@ export class HandLabFallbackEngine {
     this.emit();
     this.lastT = performance.now();
     this.loop(this.lastT);
+
+    // Debug handle, mirrors lib/engine.ts (console: __lab.cursor/.engine).
+    (window as unknown as Record<string, unknown>).__lab = {
+      cursor: this.cursor,
+      engine: this,
+    };
   }
 
   dispose(): void {
@@ -335,8 +368,11 @@ export class HandLabFallbackEngine {
       /* noop */
     }
     this.landmarker = null;
+    this.tracker?.dispose();
+    this.tracker = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    delete (window as unknown as Record<string, unknown>).__lab;
   }
 
   /* ---------- public UI API (mirrors HandLabEngine) ---------- */
@@ -379,6 +415,8 @@ export class HandLabFallbackEngine {
   }
   recenter(): void {
     this.anchor = null;
+    this.smoothZ = 0;
+    this.palm.reset();
     this.toast("recentered — hold hand still, move from here");
   }
   /** Place the current shape at the live cursor — works in any mode,
@@ -418,7 +456,7 @@ export class HandLabFallbackEngine {
       objects: this.objs.map((o) => ({
         s: o.s,
         c: o.c,
-        p: [o.x, o.y, 0],
+        p: [o.x, o.y, o.z ?? 0],
         r: [0, 0, o.rot],
         k: [o.k, o.k, 1],
       })),
@@ -479,6 +517,7 @@ export class HandLabFallbackEngine {
         c: o.c,
         x: o.p[0],
         y: o.p[1],
+        z: Math.max(-4, Math.min(4, o.p[2] ?? 0)),
         rot: o.r[2] ?? 0,
         k: o.k?.[0] && Number.isFinite(o.k[0]) ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, o.k[0])) : 1,
       });
@@ -572,7 +611,32 @@ export class HandLabFallbackEngine {
         30000,
         "camera",
       );
+      // Preferred: worker-backed detector (same rationale as the WebGL
+      // engine); any failure degrades to inline CPU detection below.
+      const nextTracker = this.opts.trackerFactory?.() ?? null;
+      // Precompressed vendored payload when present (~13MB less cold).
+      const gz = await gzAssetsAvailable();
+      if (stale() || this.disposed) return;
+      const wasmUrl = gz ? WASM_GZ_URL : WASM_URL;
+      const modelUrl = gz ? MODEL_GZ_URL : MODEL_URL;
       const modelPromise = (async () => {
+        if (nextTracker) {
+          try {
+            await withTimeout(
+              nextTracker.start(wasmUrl, modelUrl),
+              30000,
+              "model load",
+            );
+            if (stale() || this.disposed) {
+              nextTracker.dispose();
+              return null;
+            }
+            return null;
+          } catch {
+            nextTracker.dispose();
+            // fall through to the inline path
+          }
+        }
         const { FilesetResolver, HandLandmarker } = await withTimeout(
           import("@mediapipe/tasks-vision"),
           30000,
@@ -580,7 +644,7 @@ export class HandLabFallbackEngine {
         );
         if (stale() || this.disposed) return null;
         const files = await withTimeout(
-          FilesetResolver.forVisionTasks(WASM_URL),
+          FilesetResolver.forVisionTasks(wasmUrl),
           30000,
           "wasm backend",
         );
@@ -588,7 +652,7 @@ export class HandLabFallbackEngine {
         // CPU delegate: works without WebGL/GPU (the whole point of 2D mode)
         return withTimeout(
           HandLandmarker.createFromOptions(files, {
-            baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+            baseOptions: { modelAssetPath: modelUrl, delegate: "CPU" },
             runningMode: "VIDEO",
             numHands: 2,
             minHandDetectionConfidence: 0.5,
@@ -604,7 +668,8 @@ export class HandLabFallbackEngine {
         modelPromise,
         streamPromise,
       ]);
-      if (modelRes.status === "fulfilled") nextLandmarker = modelRes.value;
+      if (modelRes.status === "fulfilled" && modelRes.value)
+        nextLandmarker = modelRes.value;
       if (streamRes.status === "fulfilled") stream = streamRes.value;
       if (modelRes.status === "rejected" || streamRes.status === "rejected") {
         stream?.getTracks().forEach((t) => t.stop());
@@ -613,26 +678,26 @@ export class HandLabFallbackEngine {
         } catch {
           /* noop */
         }
+        nextTracker?.dispose();
         throw modelRes.status === "rejected"
           ? modelRes.reason
           : (streamRes as PromiseRejectedResult).reason;
       }
-      if (!nextLandmarker || !stream) {
+      // At least one model path (worker or inline) must have succeeded.
+      const modelReady = !!(nextLandmarker || nextTracker);
+      if (!modelReady) {
         stream?.getTracks().forEach((t) => t.stop());
-        try {
-          nextLandmarker?.close();
-        } catch {
-          /* noop */
-        }
+        return;
+      }
+      if (!stream) {
+        nextLandmarker?.close();
+        nextTracker?.dispose();
         return;
       }
       if (stale() || this.disposed) {
         stream.getTracks().forEach((t) => t.stop());
-        try {
-          nextLandmarker.close();
-        } catch {
-          /* noop */
-        }
+        nextLandmarker?.close();
+        nextTracker?.dispose();
         return;
       }
       try {
@@ -640,6 +705,11 @@ export class HandLabFallbackEngine {
       } catch {
         /* noop */
       }
+      this.tracker?.dispose();
+      this.tracker = nextTracker;
+      this.tracker?.onResult(this.onTrackerResult);
+      this.tracker?.onError(this.onTrackerError);
+      this.bmpInFlight = false;
       this.stream?.getTracks().forEach((t) => t.stop());
       this.landmarker = nextLandmarker;
       this.stream = stream;
@@ -659,6 +729,9 @@ export class HandLabFallbackEngine {
       this.stream = null;
       try { this.landmarker?.close(); } catch {}
       this.landmarker = null;
+      this.tracker?.dispose();
+      this.tracker = null;
+      this.bmpInFlight = false;
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.camLive) {
@@ -1083,6 +1156,9 @@ export class HandLabFallbackEngine {
     const p = this.toWorld(e.clientX, e.clientY);
     this.cursor.x = p.x;
     this.cursor.y = p.y;
+    // The mouse ray intersects the z=0 plane (toWorld/unprojectZ0) — depth is
+    // hand-only, so a pointer move lands the cursor back on the base plane.
+    this.cursor.z = 0;
     if (this.dragging) {
       this.dragging.x = p.x;
       this.dragging.y = p.y;
@@ -1103,6 +1179,7 @@ export class HandLabFallbackEngine {
     const p = this.toWorld(e.clientX, e.clientY);
     this.cursor.x = p.x;
     this.cursor.y = p.y;
+    this.cursor.z = 0;
     this.downPos = { ...p };
     this.pinchDownAt = performance.now();
     this.pinchHeld = true;
@@ -1154,14 +1231,16 @@ export class HandLabFallbackEngine {
     document.body.style.cursor = this.hovered ? "pointer" : this.sw3d ? "grab" : "default";
   };
 
-  /** Shared shape spawn (mouse Shift+click, keyboard P, toolbar place). */
-  private placeShapeAt(p: { x: number; y: number }): void {
+  /** Shared shape spawn (mouse Shift+click, keyboard P, toolbar place).
+   *  z defaults to the live cursor depth (mouse hits the z=0 plane). */
+  private placeShapeAt(p: { x: number; y: number; z?: number }): void {
     const o: Obj2D = {
       id: this.idSeq++,
       s: this.shape,
       c: this.color,
       x: p.x,
       y: p.y,
+      z: p.z ?? this.cursor.z,
       rot: 0,
       k: 1,
     };
@@ -1237,12 +1316,20 @@ export class HandLabFallbackEngine {
     this.frames++;
     if (now - this.fT > 1000) {
       this.setText("t-fps", this.frames + " fps (2D)");
+      this.setText(
+        "t-detect",
+        this.detectN
+          ? (this.detectAccum / this.detectN).toFixed(1) + " ms"
+          : "— ms",
+      );
       this.frames = 0;
       this.fT = now;
+      this.detectAccum = 0;
+      this.detectN = 0;
     }
     const video = this.opts.video;
     if (
-      !this.landmarker ||
+      (!this.landmarker && !this.tracker) ||
       video.readyState < 2 ||
       video.currentTime === this.lastVideoT ||
       !shouldDetect(now, this.lastDetectAt)
@@ -1250,16 +1337,36 @@ export class HandLabFallbackEngine {
       return;
     this.lastVideoT = video.currentTime;
     this.lastDetectAt = now;
+    if (this.tracker) {
+      // Worker path: one bitmap in flight, results arrive in onTrackerResult.
+      if (this.bmpInFlight) return;
+      this.bmpInFlight = true;
+      void createImageBitmap(video)
+        .then((bmp) => this.tracker?.submit(bmp, now))
+        .catch(() => {
+          this.bmpInFlight = false;
+        });
+      return;
+    }
     let res: {
       landmarks?: NormalizedLandmark[][];
       handednesses?: { categoryName?: string }[][];
     };
+    const inferT0 = performance.now();
     try {
-      res = this.landmarker.detectForVideo(video, now) as unknown as typeof res;
+      res = this.landmarker!.detectForVideo(video, now) as unknown as typeof res;
     } catch {
       return;
     }
-    const hands = res.landmarks ?? [];
+    const inferMs = performance.now() - inferT0;
+    perf.detect.push(inferMs, performance.now());
+    this.detectAccum += inferMs;
+    this.detectN++;
+    this.processHands(res.landmarks ?? []);
+  };
+
+  /** Shared tail of both detection paths (inline + worker), 2D flavor. */
+  private processHands(hands: NormalizedLandmark[][]): void {
     this.drawSkel(hands, this.pinchState || this.pinchState2);
     if (!hands.length) {
       if (++this.lostFrames >= 4) {
@@ -1270,6 +1377,8 @@ export class HandLabFallbackEngine {
         this.pinchHeld = false;
         this.dragging = null;
         this.anchor = null;
+        this.smoothZ = 0;
+        this.sizeInit = false;
         this.opts.hud["d-hand"].className = "dot off";
         this.opts.hud["t-hand"].textContent = "none";
         this.setText("t-pinch", "waiting");
@@ -1282,6 +1391,20 @@ export class HandLabFallbackEngine {
     this.opts.hud["t-hand"].textContent =
       hands.length + (hands.length > 1 ? " hands" : " hand");
     this.drive(hands);
+  }
+
+  /** Worker result: unpack packed landmarks, then the usual 2D pipeline. */
+  private onTrackerResult = (r: TrackerResult): void => {
+    this.bmpInFlight = false;
+    if (this.disposed) return;
+    perf.detect.push(r.detectMs, performance.now());
+    this.detectAccum += r.detectMs;
+    this.detectN++;
+    this.processHands(r.hands.map((h) => unpackLandmarks(h.pts)));
+  };
+
+  private onTrackerError = (): void => {
+    this.bmpInFlight = false;
   };
 
   private interPinchDist2D(
@@ -1358,6 +1481,28 @@ export class HandLabFallbackEngine {
     this.cursor.x = Math.max(-WORLD_W / 2, Math.min(WORLD_W / 2, this.cursor.x));
     this.cursor.y = Math.max(-WORLD_H / 2, Math.min(WORLD_H / 2, this.cursor.y));
 
+    // Depth inputs (same semantics as lib/engine.ts drive): pushing the hand
+    // toward the camera grows the palm in frame → smoothZ toward the viewer;
+    // a second un-pinched hand's height owns the slider outright.
+    const rawSize = Math.max(
+      Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y),
+      1e-4,
+    );
+    if (!this.sizeInit) {
+      this.fSize = rawSize;
+      this.sizeInit = true;
+    } else {
+      this.fSize += (rawSize - this.fSize) * 0.3;
+    }
+    this.palm.observe(this.fSize);
+    const palmS = this.palm.sample();
+    const dzRaw = palmS ? palmS.dzMeters : 0;
+    const dzDelta = Math.max(-0.6, Math.min(0.6, dzRaw - this.smoothZ));
+    this.smoothZ += dzDelta * 0.35;
+    const bothHeld = !!(other && this.pinchState && this.pinchState2);
+    const z = other && !bothHeld ? (0.5 - other[8].y) * 8 : this.smoothZ;
+    this.cursor.z = Math.max(-4, Math.min(4, z));
+
     const d = Math.hypot(thumb.x - tip.x, thumb.y - tip.y);
     // second-hand pinch (same absolute thresholds as the 2D main latch)
     if (other) {
@@ -1399,6 +1544,7 @@ export class HandLabFallbackEngine {
               c: this.color,
               x: this.cursor.x,
               y: this.cursor.y,
+              z: this.cursor.z,
               rot: 0,
               k: 1,
             };
@@ -1496,7 +1642,10 @@ export class HandLabFallbackEngine {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     if (document.hidden) return;
-    const dt = Math.min(0.05, (now - this.lastT) / 1000);
+    // Raw delta before the clamp so perf.render sees real jank.
+    const rawDtMs = now - this.lastT;
+    perf.render.push(rawDtMs, now);
+    const dt = Math.min(0.05, rawDtMs / 1000);
     this.lastT = now;
     if (this.spin && !this.reducedMotion) {
       for (const o of this.objs) o.rot += dt * 0.6;
@@ -1505,10 +1654,10 @@ export class HandLabFallbackEngine {
     if (!this.handActive) {
       this.setText(
         "t-xyz",
-        `${this.cursor.x.toFixed(1)}, ${this.cursor.y.toFixed(1)}, 0.0`,
+        `${this.cursor.x.toFixed(1)}, ${this.cursor.y.toFixed(1)}, ${this.cursor.z.toFixed(1)}`,
       );
     }
-    this.setText("t-z", "0.0");
+    this.setText("t-z", this.cursor.z.toFixed(1));
   };
 
   private draw(): void {
@@ -1648,48 +1797,64 @@ export class HandLabFallbackEngine {
     if (cv.width !== rw || cv.height !== rh) {
       cv.width = rw;
       cv.height = rh;
-      this.lastSw3dSig = "";
+      this.lastSw3dSig = 0;
     }
     // Render-on-demand: skip full CPU rasterization + putImageData when the
     // scene, camera, cursor, theme, and studio flags are unchanged.
-    const sigParts = [
-      rw,
-      rh,
-      this.camYaw.toFixed(3),
-      this.camPitch.toFixed(3),
-      this.camDist.toFixed(2),
-      this.grid ? 1 : 0,
-      this.wireframe ? 1 : 0,
-      this.matMode,
-      this.detail,
-      this.clipAxis ?? "",
-      this.clipPos.toFixed(2),
-      this.cursor.x.toFixed(3),
-      this.cursor.y.toFixed(3),
-      this.pinchHeld ? 1 : 0,
-      currentTheme(),
-      this.objs.length,
-      this.chains.length,
-    ];
+    // Numeric FNV-1a over quantized fields — same coverage as the old string
+    // signature (toFixed(3) → round(x*1000)) with zero per-frame allocation,
+    // mirroring the skeleton preview hash.
+    let sig = 0x01000193;
+    const q = (v: number): void => {
+      sig = Math.imul(sig ^ (Math.round(v * 1000) | 0), 0x01000193);
+    };
+    const qStr = (s: string): void => {
+      for (let i = 0; i < s.length; i++) {
+        sig = Math.imul(sig ^ s.charCodeAt(i), 0x01000193);
+      }
+    };
+    q(rw);
+    q(rh);
+    q(this.camYaw);
+    q(this.camPitch);
+    q(this.camDist);
+    sig = Math.imul(sig ^ (this.grid ? 1 : 0), 0x01000193);
+    sig = Math.imul(sig ^ (this.wireframe ? 1 : 0), 0x01000193);
+    q(this.matMode === "clay" ? 2 : this.matMode === "flat" ? 3 : 1);
+    q(this.detail);
+    sig = Math.imul(
+      sig ^ (this.clipAxis ? this.clipAxis.charCodeAt(0) : 0),
+      0x01000193,
+    );
+    q(this.clipPos);
+    q(this.cursor.x);
+    q(this.cursor.y);
+    q(this.cursor.z);
+    sig = Math.imul(sig ^ (this.pinchHeld ? 1 : 0), 0x01000193);
+    qStr(currentTheme());
+    sig = Math.imul(sig ^ this.objs.length, 0x01000193);
+    sig = Math.imul(sig ^ this.chains.length, 0x01000193);
     for (const o of this.objs) {
-      sigParts.push(
-        o.s,
-        o.x.toFixed(3),
-        o.y.toFixed(3),
-        (o.k ?? 1).toFixed(3),
-        o.rot.toFixed(3),
-        o.c,
-        o === this.hovered ? 1 : 0,
-        o === this.selected ? 1 : 0,
-      );
+      qStr(o.s);
+      q(o.x);
+      q(o.y);
+      q(o.z ?? 0);
+      q(o.k ?? 1);
+      q(o.rot);
+      qStr(o.c);
+      sig = Math.imul(sig ^ (o === this.hovered ? 1 : 0), 0x01000193);
+      sig = Math.imul(sig ^ (o === this.selected ? 2 : 0), 0x01000193);
     }
     for (const L of this.chains) {
-      sigParts.push(L.closed ? 1 : 0, L.pts.length);
+      sig = Math.imul(
+        sig ^ ((L.closed ? 1 : 0) ^ L.pts.length),
+        0x01000193,
+      );
       for (const p of L.pts) {
-        sigParts.push(p.x.toFixed(3), p.y.toFixed(3));
+        q(p.x);
+        q(p.y);
       }
     }
-    const sig = sigParts.join(",");
     if (sig === this.lastSw3dSig) return;
     this.lastSw3dSig = sig;
 
@@ -1712,7 +1877,7 @@ export class HandLabFallbackEngine {
         shape: o.s,
         x: o.x,
         y: o.y,
-        z: 0,
+        z: o.z ?? 0,
         sx: k,
         sy: k,
         sz: k,
@@ -1733,7 +1898,7 @@ export class HandLabFallbackEngine {
       );
     }
 
-    sw.setCursor(true, this.cursor.x, this.cursor.y, 0, cursorRgb);
+    sw.setCursor(true, this.cursor.x, this.cursor.y, this.cursor.z, cursorRgb);
     sw.renderAndBlit(g);
   }
 

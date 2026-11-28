@@ -140,30 +140,21 @@
   border: 1px solid var(--color-rule);
 }
 
-/* Non-blocking top banners container (fallback notice) inside .sc-top-stack */
-.sc-top-banners {
-  position: relative;
-  align-self: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  pointer-events: none;
-  max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-}
-
-/* Top-anchored compact rail leaves the bottom-left completely clear for .video-dock and .sc-status */
+/* Rail hugs the left edge, vertically centered (shapes/lines/camera/etc.).
+   Scrolls if the viewport is too short for all seven fabs; leaves the
+   bottom-left clear for .video-dock and .sc-status. */
 .sc-rail {
   position: absolute;
   left: calc(16px + env(safe-area-inset-left, 0px));
-  top: calc(92px + env(safe-area-inset-top, 0px));
-  transform: none;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   gap: 6px;
   z-index: var(--z-sticky);
   scrollbar-width: none;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
 }
 .sc-fab {
   width: 46px;
@@ -662,7 +653,8 @@
 }
 .sc-status b { color: var(--color-ink); font-variant-numeric: tabular-nums; }
 
-/* Dock video preview cleanly at bottom-left below top-anchored .sc-rail and above .sc-status */
+/* Dock the camera preview centered on the bottom-left corner column: same
+   left gutter as .sc-rail, above .sc-status so they never collide. */
 .video-dock.sc-viddock {
   left: calc(16px + env(safe-area-inset-left, 0px));
   bottom: calc(58px + env(safe-area-inset-bottom, 0px));
@@ -673,43 +665,6 @@
 .video-dock.sc-viddock #cam {
   height: 86px;
 }
-
-.sc-fallback-note {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--color-paper-2);
-  background: var(--surface-hud);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  border: 1px solid var(--color-rule);
-  box-shadow: var(--shadow-card);
-  color: var(--color-ink-2);
-  font-size: 12px;
-  padding: 6px 8px 6px 16px;
-  border-radius: var(--radius-card);
-  white-space: normal;
-}
-.sc-fallback-note button {
-  flex-shrink: 0;
-  border: 1px solid var(--color-rule-2);
-  background: var(--color-paper-3);
-  color: var(--color-ink);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  transition: border-color var(--dur-micro) var(--ease-out),
-    background-color var(--dur-micro) var(--ease-out),
-    transform 100ms var(--ease-out);
-}
-.sc-fallback-note button:hover { color: var(--color-ink); border-color: var(--color-rule-2); background: var(--color-paper-2); }
-.sc-fallback-note button:active { transform: scale(0.95); }
-.sc-fallback-note button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
 .sc-brand {
   display: flex;
@@ -860,16 +815,8 @@
     border-radius: var(--radius-card);
     max-width: calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   }
-  .sc-rail {
-    left: 50%;
-    top: auto;
-    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
-    transform: translateX(-50%);
-    flex-direction: row;
-    max-width: calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-    overflow-x: auto;
-    padding: 2px;
-  }
+  /* Rail keeps the desktop treatment at every width: left edge, vertically
+     centered (the base rule) — no bottom-center horizontal variant. */
   .sc-drawer,
   .sc-drawer.sc-drawer--compact,
   .solid-math {
@@ -888,30 +835,32 @@
     margin: 4px 0 0 calc(10px + env(safe-area-inset-left, 0px));
     z-index: auto;
   }
-  .sc-top-banners {
-    margin-top: 6px;
-  }
-  /* Dock camera preview cleanly at bottom-right above .sc-rail / .sc-params */
+  /* Camera preview hugs the true bottom-left corner (same corner as desktop),
+     just above the .sc-params bar; an open bottom-sheet drawer covers it. */
   .video-dock.sc-viddock {
-    left: auto;
-    top: auto;
-    right: calc(10px + env(safe-area-inset-right, 0px));
-    bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: auto;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     width: 152px;
   }
 }
 
 @media (max-width: 900px) and (pointer: coarse) {
-  .sc-rail {
-    bottom: calc(98px + env(safe-area-inset-bottom, 0px));
-  }
   .sc-drawer,
   .sc-drawer.sc-drawer--compact,
   .solid-math {
     bottom: calc(158px + env(safe-area-inset-bottom, 0px));
   }
   .video-dock.sc-viddock {
-    bottom: calc(158px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Short viewports: nudge the centered rail up so its lower fabs clear the
+   bottom-left video dock (they would collide below ~790px of height). */
+@media (max-height: 790px) {
+  .sc-rail {
+    top: 42%;
   }
 }
 
@@ -930,12 +879,6 @@
     padding: 6px 12px;
     font-size: 11px;
   }
-  .sc-top-banners {
-    align-self: stretch;
-    margin: 6px calc(10px + env(safe-area-inset-right, 0px)) 0 calc(10px + env(safe-area-inset-left, 0px));
-    max-width: none;
-    align-items: flex-start;
-  }
 }
 
 @media (pointer: coarse) {
@@ -943,8 +886,7 @@
   .sc-chip,
   .sc-mode button,
   .sc-shape,
-  .sc-drawer__head button,
-  .sc-fallback-note button {
+  .sc-drawer__head button {
     min-width: 44px;
     min-height: 44px;
   }

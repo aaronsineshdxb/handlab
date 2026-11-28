@@ -26,6 +26,29 @@ describe("static asset cache headers", () => {
     expect(cache?.value).toBe(IMMUTABLE);
   });
 
+  it("serves the precompressed /gz/ payload with Content-Encoding: gzip", async () => {
+    const all = await rules();
+    for (const src of ["/wasm/gz/:path*", "/models/gz/:path*"]) {
+      const rule = all.find((r) => r.source === src);
+      expect(rule, `missing ${src} rule`).toBeDefined();
+      const enc = rule!.headers.find((h) => h.key === "Content-Encoding");
+      expect(enc?.value).toBe("gzip");
+      const cache = rule!.headers.find((h) => h.key === "Cache-Control");
+      expect(cache?.value).toBe(IMMUTABLE);
+    }
+  });
+
+  it("never declares Content-Encoding on the plain vendored assets", async () => {
+    // A Content-Encoding header on un-gzipped bytes makes browsers decode
+    // them into garbage — only the generated /gz/ trees may declare it.
+    const all = await rules();
+    for (const src of ["/wasm/:path*", "/models/:path*", "/ort/:path*"]) {
+      const rule = all.find((r) => r.source === src);
+      expect(rule, `missing ${src} rule`).toBeDefined();
+      expect(rule!.headers.find((h) => h.key === "Content-Encoding")).toBeUndefined();
+    }
+  });
+
   it("keeps the catch-all rule last so it cannot shadow the specific ones", async () => {
     const all = await rules();
     const catchAll = all.findIndex((r) => r.source === "/(.*)");

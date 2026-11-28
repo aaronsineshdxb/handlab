@@ -132,7 +132,7 @@ export class VRHandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: VrShapeName = "cube";
-  private color = "#0D9488";
+  private color = "#2563eb";
   private cursorRest = sceneThemeNow().cursor;
   private geoCache: Partial<Record<VrShapeName, THREE.BufferGeometry>> = {};
   private matCache: Record<string, THREE.MeshStandardMaterial> = {};

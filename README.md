@@ -182,24 +182,47 @@ The toolbar's SCENE section:
   pure palm baseline. Inference pauses while the tab is hidden. It loads only
   when you enable it — the palm-size baseline runs alone otherwise.
   Unavailable in 2D fallback mode.
+- Cursor depth: push your hand toward the camera (palm-size delta) or raise /
+  lower a second un-pinched hand as a depth slider — in both engines. The 2D
+  fallback places solids off the z=0 plane in Rust/WASM 3D mode (the plain
+  top-down canvas path stays 2D by design); mouse placement always lands on
+  the z=0 plane.
 - Hand tracking: MediaPipe HandLandmarker, loaded on demand when you click
-  Enable webcam. Prefers the GPU delegate and silently retries on CPU when GPU
-  creation fails, so a blocklisted GPU degrades to a slower tracker rather than
-  no tracker. Detection is capped at 30Hz. Tip/size EMA filter with
-  motion-adaptive response, palm-normalized pinch thresholds, 4-frame loss
-  hysteresis, handedness-aware control hand, and stabilized fist detection
-  (camera zoom disabled).
+  Enable webcam. MediaPipe inference runs in a dedicated Web Worker
+  (`workers/handDetector.worker.ts`, client `lib/handTracker.ts`) so the main
+  thread never blocks: measured frame p50 went 133.6ms → 16.7ms with 0% jank
+  on the software-GL benchmark profile (`scripts/perf/bench.mjs`). The worker
+  probes its own WebGL renderer — a GPU delegate layered on SwiftShader costs
+  ~16x more per frame than CPU, so software GL goes straight to CPU. Falls
+  back to inline detection when Workers are unavailable. Prefers the GPU
+  delegate and silently retries on CPU when GPU creation fails, so a
+  blocklisted GPU degrades to a slower tracker rather than no tracker.
+  Detection is capped at 30Hz. Tip/size EMA filter with motion-adaptive
+  response, palm-normalized pinch thresholds, 4-frame loss hysteresis,
+  handedness-aware control hand, and stabilized fist detection (camera zoom
+  disabled).
+- Depth AI also runs in a worker (`workers/depth.worker.ts`): on non-WebGPU
+  devices the q8/WASM pipeline used to freeze the UI ~700ms per inference on
+  the main thread; now only a 256px crop crosses to the worker and the packed
+  depth map comes back. (The SIMD capability probe was also fixed — an
+  invalid instruction byte made `supportsWasmSimd()` always false, silently
+  disabling the q8 depth path.)
 - Rendering is optimized: allocation-free hot paths, in-place line updates,
   on-demand shadow maps, shared geometries/materials, a dirty-checked
   imperative HUD, and adaptive pixel ratio that can fall to 0.75x on a device
   which cannot otherwise hold frame rate. Both render loops and the depth loop
-  pause while the tab is hidden.
+  pause while the tab is hidden. The Rust/WASM rasterizer fills its
+  framebuffer with a packed-u32 clear and pushes polylines in one FFI call
+  (bench 3.97 → ~3.5 ms/frame at 1280x720).
 - Bundle: the lab and VR routes are code-split behind `dynamic()` with
   `ssr: false`, so Three.js (and the 1.2k-line 2D fallback engine, which loads
   only when WebGL context creation actually fails) arrive after first paint.
   Eager client JS per route is ~102KB gzip, guarded by
-  `lib/perf-budget.test.ts`. Vendored `/wasm` and `/models` assets (19.6MB) are
-  served `immutable` and cached for a year.
+  `lib/perf-budget.test.ts`. Vendored `/wasm` and `/models` assets (19.6MB)
+  are served `immutable` and cached for a year; `scripts/compress-assets.mjs`
+  (run by `prebuild`/`predev`) generates gzip siblings under `/gz/` that
+  `next.config.ts` serves with `Content-Encoding: gzip` — the hand-tracking
+  payload transfers ~19.9MB → ~9.3MB cold.
 - Scene changes are coalesced to one React update per 100ms
   (`lib/sceneSync.ts`). Reconciling the HUD once per animation frame, with a
   full scene export each time, was the single largest source of drag jank.

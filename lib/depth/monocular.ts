@@ -55,13 +55,15 @@ export const ORT_WASM_PATHS = {
   wasm: "/ort/ort-wasm-simd-threaded.asyncify.wasm",
 };
 
-// Minimal 15-byte WASM module containing a single v128.const instruction.
-// Lets us reject pre-SIMD browsers (Safari < 16.4, older Chromebooks) before
-// downloading 26MB of ort-wasm-simd-threaded.asyncify.wasm.
+// Minimal valid WASM module using a v128 instruction — instantiates iff the
+// engine has wasm SIMD. The bytes must match lib/handAssets.ts SIMD_PROBE
+// (an earlier copy here used 0xfd 0x0f 0x26, an invalid instruction, which
+// made supportsWasmSimd() return false everywhere and quietly disabled the
+// q8 depth path on every non-WebGPU device).
 const WASM_SIMD_PROBE = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x00,
   0x01, 0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x00,
-  0xfd, 0x0f, 0x26, 0x0b,
+  0xfd, 0x0f, 0xfd, 0x62, 0x0b,
 ]);
 
 export function supportsWasmSimd(): boolean {
@@ -89,6 +91,20 @@ async function hasWebGPU(): Promise<boolean> {
 }
 
 export type DepthStatus = "off" | "loading" | "live" | "error";
+
+/** Messages posted back from workers/depth.worker.ts. */
+type WorkerOutMsg =
+  | { type: "ready"; device: "webgpu" | "wasm"; dtype: DepthDtype }
+  | { type: "error"; msg: string }
+  | {
+      type: "map";
+      data: Float32Array;
+      w: number;
+      h: number;
+      median: number;
+      std: number;
+      ms: number;
+    };
 
 interface DepthMap {
   data: Float32Array;
@@ -126,6 +142,10 @@ export class DepthAnythingV2Provider implements DepthProvider {
   private infers = 0;
   private fpsT0 = 0;
   private onStatus: ((s: DepthStatus, detail: string) => void) | null = null;
+  // Worker backend (workers/depth.worker.ts): inference off the main thread.
+  // The q8/WASM path on weak devices otherwise freezes the UI ~700ms per
+  // inference. Falls back to the inline estimator when the worker fails.
+  private worker: Worker | null = null;
 
   setStatusListener(fn: (s: DepthStatus, detail: string) => void): void {
     this.onStatus = fn;
@@ -135,6 +155,69 @@ export class DepthAnythingV2Provider implements DepthProvider {
     this.status = s;
     this.detail = detail;
     this.onStatus?.(s, detail);
+  }
+
+  /** Spawn the worker and wait for pipeline load. false → inline fallback. */
+  private tryWorker(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let w: Worker;
+      try {
+        w = new Worker(
+          new URL("../../workers/depth.worker.ts", import.meta.url),
+        );
+      } catch {
+        resolve(false);
+        return;
+      }
+      const bail = (err: unknown): void => {
+        w.terminate();
+        if (!this.worker) resolve(false);
+        console.warn("depth worker failed, using main thread:", err);
+      };
+      const timeout = setTimeout(
+        () => bail(new Error("depth worker init timed out")),
+        120000,
+      );
+      w.onmessage = (e: MessageEvent) => {
+        const m = e.data as WorkerOutMsg;
+        if (m.type === "ready") {
+          clearTimeout(timeout);
+          this.worker = w;
+          w.onmessage = (e2: MessageEvent) => this.onWorkerMsg(e2);
+          w.onerror = () => {
+            /* already live inline? terminate and fall back */
+            this.worker = null;
+            w.terminate();
+          };
+          resolve(true);
+        } else if (m.type === "error") {
+          clearTimeout(timeout);
+          bail(new Error(m.msg));
+        }
+      };
+      w.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
+      w.postMessage({ type: "init" });
+    });
+  }
+
+  private onWorkerMsg(e: MessageEvent): void {
+    const m = e.data as WorkerOutMsg;
+    if (m.type !== "map") return;
+    this.map = {
+      data: m.data,
+      w: m.w,
+      h: m.h,
+      t: performance.now(),
+      median: m.median,
+      std: m.std,
+    };
+    this.infers++;
+    if (this.infers % 8 === 1) this.fpsT0 = performance.now();
+    else if (this.infers % 8 === 0 && this.fpsT0 > 0)
+      this.fps = 8000 / Math.max(1, performance.now() - this.fpsT0);
   }
 
   async start(video: HTMLVideoElement): Promise<void> {
@@ -156,6 +239,13 @@ export class DepthAnythingV2Provider implements DepthProvider {
       constrained: isConstrainedDevice(readDeviceSignals()),
     });
     this.setStatus("loading", `loading depth model (${DEPTH_BYTES[dtype]})…`);
+    // Worker first: keeps every inference (worse on weak devices, ~700ms q8)
+    // off the main thread. Falls back to the inline loop if it fails.
+    if (await this.tryWorker()) {
+      this.setStatus("live", "depth AI live");
+      void this.loop();
+      return;
+    }
     try {
       const { pipeline, env } = await import("@huggingface/transformers");
       if (env.backends?.onnx?.wasm) {
@@ -205,8 +295,7 @@ export class DepthAnythingV2Provider implements DepthProvider {
 
   private async inferOnce(): Promise<void> {
     const video = this.video;
-    const est = this.estimator;
-    if (!video || !est || video.readyState < 2 || video.videoWidth === 0) return;
+    if (!video || video.readyState < 2 || video.videoWidth === 0) return;
     if (!this.scratch) {
       this.scratch = document.createElement("canvas");
       this.scratchCtx =
@@ -225,6 +314,15 @@ export class DepthAnythingV2Provider implements DepthProvider {
     const g = this.scratchCtx;
     if (!g) return;
     g.drawImage(video, 0, 0, w, h);
+    if (this.worker) {
+      // Worker path: the crop travels as a transferable ImageBitmap; the
+      // reply (packed map + median/std) lands in onWorkerMsg.
+      const bmp = await createImageBitmap(this.scratch);
+      this.worker.postMessage({ type: "infer", bitmap: bmp }, [bmp]);
+      return;
+    }
+    const est = this.estimator;
+    if (!est) return;
     const out = await est(this.scratch);
     const dims = out.predicted_depth.dims; // [H, W]
     const H = dims[0];
@@ -274,6 +372,8 @@ export class DepthAnythingV2Provider implements DepthProvider {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.estimator = null;
+    this.worker?.terminate();
+    this.worker = null;
     this.map = null;
     this.anchorZ = null;
     this.video = null;

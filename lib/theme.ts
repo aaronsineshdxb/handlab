@@ -1,7 +1,7 @@
 /* Shared light/dark + accent-scheme contract. `data-theme` (light/dark)
  * and `data-accent` (colour scheme) on <html> are the single source of
  * truth; CSS tokens key off them and the 3D engines subscribe to them.
- * Stored choices win, else the OS preference / teal default. */
+ * Stored choices win, else the OS preference / standard-blue default. */
 
 export type ThemeName = "light" | "dark";
 
@@ -109,16 +109,16 @@ export const ACCENTS: Record<Exclude<AccentName, "custom">, AccentPreset> = {
   blue: {
     id: "blue",
     label: "blue",
-    swatch: "#2B5FCE",
+    swatch: "#2563eb",
     light: {
-      accent: "oklch(48% 0.13 260)",
-      accent2: "oklch(62% 0.14 260)",
-      scene: 0x2b5fce,
+      accent: "oklch(54.6% 0.215 263)",
+      accent2: "oklch(62% 0.2 258)",
+      scene: 0x2563eb,
     },
     dark: {
-      accent: "oklch(74% 0.11 260)",
-      accent2: "oklch(78% 0.1 260)",
-      scene: 0x6ea8fe,
+      accent: "oklch(70.9% 0.165 254.6)",
+      accent2: "oklch(78.9% 0.14 255)",
+      scene: 0x60a5fa,
     },
   },
 };
@@ -133,8 +133,8 @@ export function accentSwatchFor(
   return `#${ACCENTS[id][theme].scene.toString(16).padStart(6, "0")}`;
 }
 
-export const DEFAULT_SCHEME: AccentName = "teal";
-export const DEFAULT_CUSTOM_HEX = "#016A71";
+export const DEFAULT_SCHEME: AccentName = "blue";
+export const DEFAULT_CUSTOM_HEX = "#2563eb";
 
 export function resolveTheme(
   stored: string | null,
@@ -213,9 +213,9 @@ export function sceneAccentFor(
   customHex: string | null,
 ): number {
   if (scheme === "custom" && isValidCustomHex(customHex)) {
-    return hexToNumber(customHex) ?? ACCENTS.teal[theme].scene;
+    return hexToNumber(customHex) ?? ACCENTS.blue[theme].scene;
   }
-  if (scheme === "custom") return ACCENTS.teal[theme].scene;
+  if (scheme === "custom") return ACCENTS.blue[theme].scene;
   return ACCENTS[scheme][theme].scene;
 }
 

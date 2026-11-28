@@ -7,8 +7,21 @@ import type {
 import { fuseDepth } from "./depth/fusion";
 import { DepthAnythingV2Provider } from "./depth/monocular";
 import { PalmDepthProvider } from "./depth/palm";
-import { MODEL_URL, WASM_URL } from "./handAssets";
+import {
+  MODEL_URL,
+  MODEL_GZ_URL,
+  WASM_URL,
+  WASM_GZ_URL,
+  gzAssetsAvailable,
+} from "./handAssets";
 import { shouldDetect } from "./handRate";
+import { perf } from "./perf/recorder";
+import { createLandmarker, withTimeout } from "./landmarker";
+import type {
+  HandTracker,
+  TrackerFactory,
+  TrackerResult,
+} from "./handTracker";
 import { nextPixelRatio, PR_MAX_CAP } from "./adaptivePr";
 import { isIPadOS } from "./caps";
 import {
@@ -118,7 +131,7 @@ export interface UiState {
 
 export const initialUiState: UiState = {
   shape: "cube",
-  color: "#0D9488",
+  color: "#2563eb",
   lineMode: false,
   snapOn: true,
   spin: false,
@@ -154,6 +167,7 @@ export interface HudNodes {
   "t-count": HTMLElement;
   "t-model": HTMLElement;
   "t-fps": HTMLElement;
+  "t-detect": HTMLElement;
   "t-pr": HTMLElement;
   "t-z": HTMLElement;
   depthi: HTMLElement;
@@ -231,6 +245,10 @@ export interface EngineOpts {
   /** Fired whenever the set of objects or the line geometry changes, so
    *  lesson checks can re-evaluate against the live scene. */
   onScene?: () => void;
+  /** Optional factory for the worker-backed detector. When it returns a
+   *  tracker, MediaPipe inference runs off the main thread; when the worker
+   *  path fails at runtime the engine silently falls back to inline. */
+  trackerFactory?: TrackerFactory;
 }
 
 /* ---------- module-level helpers (no DOM access at import time) ---------- */
@@ -387,55 +405,8 @@ interface Anchor {
 }
 
 // MODEL_URL/WASM_URL and their supply-chain notes live in lib/handAssets.ts.
-
-/**
- * Create the HandLandmarker, preferring the GPU delegate.
- *
- * `delegate: "GPU"` throws outright on blocklisted drivers and some integrated
- * GPUs, which previously killed the whole webcam path and dropped the user to
- * mouse-only. The 2D fallback engine already retries on CPU
- * (lib/fallback2d.ts); do the same here so a weak GPU degrades to a slower
- * tracker instead of no tracker at all.
- */
-async function createLandmarker(
-  files: unknown,
-  Ctor: {
-    createFromOptions(
-      files: unknown,
-      options: {
-        baseOptions: { modelAssetPath: string; delegate: "GPU" | "CPU" };
-        runningMode: "VIDEO";
-        numHands: number;
-        minHandDetectionConfidence: number;
-        minTrackingConfidence: number;
-      },
-    ): Promise<HandLandmarker>;
-  },
-): Promise<{ landmarker: HandLandmarker; usedCpu: boolean }> {
-  const shared = {
-    runningMode: "VIDEO" as const,
-    numHands: 2,
-    minHandDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  };
-  try {
-    return {
-      landmarker: await Ctor.createFromOptions(files, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-        ...shared,
-      }),
-      usedCpu: false,
-    };
-  } catch {
-    return {
-      landmarker: await Ctor.createFromOptions(files, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
-        ...shared,
-      }),
-      usedCpu: true,
-    };
-  }
-}
+// createLandmarker + withTimeout moved to lib/landmarker.ts so the detector
+// worker can share them without importing three.js.
 
 /**
  * Reduce a full scene to the minimal shape lesson checks need.
@@ -457,17 +428,19 @@ export function toCheckSnap(
   };
 }
 
-// ponytail: rejects if the model/camera promises stall, so the UI can't hang on "Loading model…" forever
-function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
-  let t: ReturnType<typeof setTimeout> | undefined;
-  const limit = new Promise<never>(
-    (_, rej) =>
-      (t = setTimeout(
-        () => rej(new Error(`${what} timed out after ${ms / 1000}s`)),
-        ms,
-      )),
-  );
-  return Promise.race([p, limit]).finally(() => clearTimeout(t));
+/**
+ * Unpack a worker landmark buffer (21 x,y,z triplets) back into the
+ * NormalizedLandmark shape the gesture math (drive) and skeleton preview
+ * read. Fresh objects per result: gesture code holds no references across
+ * frames, but the deferred skeleton draw does — a shared pool would tear.
+ */
+export function unpackLandmarks(pts: Float32Array): NormalizedLandmark[] {
+  const n = Math.min(21, Math.floor(pts.length / 3));
+  const out: NormalizedLandmark[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    out[i] = { x: pts[i * 3], y: pts[i * 3 + 1], z: pts[i * 3 + 2], visibility: 1 };
+  }
+  return out;
 }
 
 /* ================= the engine ================= */
@@ -523,7 +496,7 @@ export class HandLabEngine {
 
   private spawnables: THREE.Mesh[] = [];
   private shape: ShapeName = "cube";
-  private color = "#0D9488";
+  private color = "#2563eb";
   /** Scale applied to newly placed meshes (driven by the solid-math panel
    *  sliders). Stored as ratios so defaults keep the exact legacy sizes. */
   private spawnScale: [number, number, number] = [1, 1, 1];
@@ -634,6 +607,12 @@ export class HandLabEngine {
   // hand tracking
   private handActive = false;
   private landmarker: HandLandmarker | null = null;
+  // Worker-backed detector when available (see lib/handTracker.ts): at most
+  // one bitmap is in flight, so a slow worker backpressures naturally.
+  private tracker: HandTracker | null = null;
+  private trackerFactory: TrackerFactory | null = null;
+  private trackerUsedCpu = false;
+  private bmpInFlight = false;
   private stream: MediaStream | null = null;
   private anchor: Anchor | null = null;
   private lastVideoT = -1;
@@ -697,6 +676,30 @@ export class HandLabEngine {
   private toastT: ReturnType<typeof setTimeout> | undefined;
   private frames = 0;
   private fT = 0;
+  // 1s-window detect-cost accumulator for the HUD (perf.detect keeps the
+  // full distribution; this only feeds the "t-detect" readout).
+  private detectAccum = 0;
+  private detectN = 0;
+
+  /**
+   * Consume a packed detection from the worker. Runs on the main thread but
+   * never during inference: by the time results arrive, the frame that paid
+   * for the model has long been rendered.
+   */
+  private onTrackerResult = (r: TrackerResult): void => {
+    this.bmpInFlight = false;
+    if (this.disposed) return;
+    perf.detect.push(r.detectMs, performance.now());
+    this.detectAccum += r.detectMs;
+    this.detectN++;
+    const hands = r.hands.map((h) => unpackLandmarks(h.pts));
+    const handednesses = r.hands.map((h) => [{ categoryName: h.handed }]);
+    this.processHands(hands, handednesses);
+  };
+
+  private onTrackerError = (): void => {
+    this.bmpInFlight = false;
+  };
 
   private tickRaf = 0;
   private handRaf = 0;
@@ -704,6 +707,7 @@ export class HandLabEngine {
 
   constructor(opts: EngineOpts) {
     this.opts = opts;
+    this.trackerFactory = opts.trackerFactory ?? null;
     // iPadOS thermally throttles with camera + WebGL + WASM together, so
     // start cheaper there (no AA, 1024 shadows). Pixel ratio is capped at
     // 1.5x everywhere (PR_MAX_CAP); See lib/caps.ts — iPad is the only
@@ -1070,6 +1074,8 @@ export class HandLabEngine {
     if (this.toastT) clearTimeout(this.toastT);
     this.landmarker?.close();
     this.landmarker = null;
+    this.tracker?.dispose();
+    this.tracker = null;
     this.mono.stop();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
@@ -1558,7 +1564,35 @@ export class HandLabEngine {
         30000,
         "camera",
       );
+      // Preferred path: the detector worker owns MediaPipe entirely, so
+      // inference never blocks the render loop. Created synchronously here so
+      // the model promise below can race it against the camera warm-up; any
+      // failure degrades silently to the inline main-thread path.
+      const nextTracker = this.trackerFactory?.() ?? null;
+      // Precompressed vendored payload when present (~13MB less cold).
+      const gz = await gzAssetsAvailable();
+      if (stale() || this.disposed) return;
+      const wasmUrl = gz ? WASM_GZ_URL : WASM_URL;
+      const modelUrl = gz ? MODEL_GZ_URL : MODEL_URL;
       const modelPromise = (async () => {
+        if (nextTracker) {
+          try {
+            const started = await withTimeout(
+              nextTracker.start(wasmUrl, modelUrl),
+              30000,
+              "model load",
+            );
+            if (stale() || this.disposed) {
+              nextTracker.dispose();
+              return null;
+            }
+            this.trackerUsedCpu = started.usedCpu;
+            return null;
+          } catch {
+            nextTracker.dispose();
+            // fall through to the inline path
+          }
+        }
         const { FilesetResolver, HandLandmarker } = await withTimeout(
           import("@mediapipe/tasks-vision"),
           30000,
@@ -1566,13 +1600,13 @@ export class HandLabEngine {
         );
         if (stale() || this.disposed) return null;
         const files = await withTimeout(
-          FilesetResolver.forVisionTasks(WASM_URL),
+          FilesetResolver.forVisionTasks(wasmUrl),
           30000,
           "wasm backend",
         );
         if (stale() || this.disposed) return null;
         return withTimeout(
-          createLandmarker(files, HandLandmarker),
+          createLandmarker(files, HandLandmarker, modelUrl),
           30000,
           "model load",
         );
@@ -1587,6 +1621,8 @@ export class HandLabEngine {
       if (modelRes.status === "fulfilled" && modelRes.value) {
         nextLandmarker = modelRes.value.landmarker;
         usedCpu = modelRes.value.usedCpu;
+      } else if (nextTracker) {
+        usedCpu = this.trackerUsedCpu;
       }
       if (streamRes.status === "fulfilled") stream = streamRes.value;
       if (modelRes.status === "rejected" || streamRes.status === "rejected") {
@@ -1596,27 +1632,27 @@ export class HandLabEngine {
         } catch {
           /* noop */
         }
+        nextTracker?.dispose();
         throw modelRes.status === "rejected"
           ? modelRes.reason
           : (streamRes as PromiseRejectedResult).reason;
       }
-      if (!nextLandmarker || !stream) {
+      // At least one model path (worker or inline) must have succeeded.
+      const modelReady = !!(nextLandmarker || nextTracker);
+      if (!modelReady) {
         stream?.getTracks().forEach((t) => t.stop());
-        try {
-          nextLandmarker?.close();
-        } catch {
-          /* noop */
-        }
+        return;
+      }
+      if (!stream) {
+        nextLandmarker?.close();
+        nextTracker?.dispose();
         return;
       }
       this.landmarkerUsedCpu = usedCpu;
       if (stale() || this.disposed) {
         stream.getTracks().forEach((t) => t.stop());
-        try {
-          nextLandmarker.close();
-        } catch {
-          /* noop */
-        }
+        nextLandmarker?.close();
+        nextTracker?.dispose();
         return;
       }
       // swap: tear down the previous pipeline before going live on the new one
@@ -1625,6 +1661,13 @@ export class HandLabEngine {
       } catch {
         /* noop */
       }
+      this.tracker?.dispose();
+      this.tracker = nextTracker;
+      if (this.tracker) {
+        this.tracker.onResult(this.onTrackerResult);
+        this.tracker.onError(this.onTrackerError);
+      }
+      this.bmpInFlight = false;
       this.stream?.getTracks().forEach((t) => t.stop());
       this.landmarker = nextLandmarker;
       this.stream = stream;
@@ -1663,6 +1706,9 @@ export class HandLabEngine {
       this.stream = null;
       try { this.landmarker?.close(); } catch {}
       this.landmarker = null;
+      this.tracker?.dispose();
+      this.tracker = null;
+      this.bmpInFlight = false;
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err);
       if (!this.camLive) {
@@ -2791,12 +2837,20 @@ export class HandLabEngine {
     this.frames++;
     if (now - this.fT > 1000) {
       this.setText("t-fps", this.frames + " fps");
+      this.setText(
+        "t-detect",
+        this.detectN
+          ? (this.detectAccum / this.detectN).toFixed(1) + " ms"
+          : "— ms",
+      );
       this.frames = 0;
       this.fT = now;
+      this.detectAccum = 0;
+      this.detectN = 0;
     }
     const video = this.opts.video;
     if (
-      !this.landmarker ||
+      (!this.landmarker && !this.tracker) ||
       video.readyState < 2 ||
       video.currentTime === this.lastVideoT ||
       !shouldDetect(now, this.lastDetectAt)
@@ -2804,16 +2858,45 @@ export class HandLabEngine {
       return;
     this.lastVideoT = video.currentTime;
     this.lastDetectAt = now;
+    if (this.tracker) {
+      // Worker path: inference runs off the main thread. Submit the newest
+      // frame as a transferable ImageBitmap; results land in onTrackerResult.
+      // One bitmap in flight = a slow worker skips frames instead of lagging.
+      if (this.bmpInFlight) return;
+      this.bmpInFlight = true;
+      void createImageBitmap(video)
+        .then((bmp) => this.tracker?.submit(bmp, now))
+        .catch(() => {
+          this.bmpInFlight = false;
+        });
+      return;
+    }
     let res: {
       landmarks?: NormalizedLandmark[][];
       handednesses?: { categoryName?: string }[][];
     };
+    const inferT0 = performance.now();
     try {
-      res = this.landmarker.detectForVideo(video, now) as unknown as typeof res;
+      res = this.landmarker!.detectForVideo(video, now) as unknown as typeof res;
     } catch {
       return;
     }
-    const hands = res.landmarks ?? [];
+    const inferMs = performance.now() - inferT0;
+    perf.detect.push(inferMs, performance.now());
+    this.detectAccum += inferMs;
+    this.detectN++;
+    this.processHands(res.landmarks ?? [], res.handednesses);
+  };
+
+  /**
+   * Shared tail of both detection paths (inline + worker): skeleton preview,
+   * loss hysteresis, gesture processing. hysteresis counts consecutive
+   * no-hand results, so it behaves identically whichever path feeds it.
+   */
+  private processHands(
+    hands: NormalizedLandmark[][],
+    handednesses?: { categoryName?: string }[][],
+  ): void {
     this.queueSkel(hands);
     if (!hands.length) {
       // hysteresis: tolerate a few dropped frames before declaring loss
@@ -2829,8 +2912,8 @@ export class HandLabEngine {
     this.lostFrames = 0;
     this.handActive = true;
     this.setHandUI(true, hands.length);
-    this.drive(hands, res.handednesses);
-  };
+    this.drive(hands, handednesses);
+  }
 
   /**
    * Defer the skeleton redraw out of the detection frame.
@@ -3159,7 +3242,11 @@ export class HandLabEngine {
       this.clock.getDelta();
       this.emaDt = 16;
     }
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    // Record the raw frame delta before the clamp: the clamp exists to
+    // protect the animation EMA, while perf.render must see real jank.
+    const rawDtMs = this.clock.getDelta() * 1000;
+    perf.render.push(rawDtMs, performance.now());
+    const dt = Math.min(rawDtMs / 1000, 0.05);
     const t = this.clock.elapsedTime;
     if (this.reducedMotion) {
       // Follow input exactly (no trailing lerp); the decorative ring spin and
